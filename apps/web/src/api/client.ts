@@ -1,13 +1,15 @@
 import type {
   ApiErrorBody,
   AssetPage,
+  BulkResult,
   FolderCreatePayload,
   FolderNode,
   FolderOut,
   ImportJob,
   Project,
   Settings,
-  Tag
+  Tag,
+  TrashList
 } from "./types";
 
 interface BackendInfo {
@@ -177,10 +179,18 @@ export const api = {
       { method: "POST", json: payload }
     ),
   bulkMove: (payload: { asset_ids: number[]; target_folder_id: number }) =>
-    request<{ ok_count: number; failed_count: number; items: { asset_id: number; ok: boolean; error: string | null }[] }>(
+    request<BulkResult>(
       "/api/v1/assets/bulk-move",
       { method: "POST", json: payload }
     ),
+
+  deleteAsset: (id: number) => request<void>(`/api/v1/assets/${id}`, { method: "DELETE" }),
+  listTrash: () => request<TrashList>("/api/v1/trash"),
+  restoreTrashItem: (id: number) => request<void>(`/api/v1/trash/${id}/restore`, { method: "POST" }),
+  permanentDeleteTrashItem: (id: number) => request<void>(`/api/v1/trash/${id}`, { method: "DELETE" }),
+  emptyTrash: () => request<{ removed: number; failed: number }>("/api/v1/trash/empty", { method: "POST" }),
+  bulkTrash: (assetIds: number[]) =>
+    request<BulkResult>("/api/v1/assets/bulk-trash", { method: "POST", json: { asset_ids: assetIds } }),
 
   getSettings: () => request<Settings>("/api/v1/settings"),
   updateSettings: (managedRoot: string) =>

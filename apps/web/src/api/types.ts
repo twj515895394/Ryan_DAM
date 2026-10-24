@@ -75,6 +75,27 @@ export interface AssetPage {
   items: AssetOut[];
 }
 
+export interface TrashItem {
+  id: number;
+  name: string;
+  asset_type: "image" | "video" | "audio" | "document" | "other";
+  size_bytes: number;
+  source_type: "managed" | "external";
+  deleted_at: string | null;
+  original_folder: string;
+}
+
+export interface TrashList {
+  total: number;
+  items: TrashItem[];
+}
+
+export interface BulkResult {
+  ok_count: number;
+  failed_count: number;
+  items: { asset_id: number; ok: boolean; error: string | null }[];
+}
+
 export interface ImportJobItem {
   id: number;
   source_path: string;

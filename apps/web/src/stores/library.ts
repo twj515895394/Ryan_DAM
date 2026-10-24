@@ -1,7 +1,7 @@
 import { reactive } from "vue";
 
 import { api, ApiRequestError } from "../api/client";
-import type { AssetPage, FolderNode, ImportJob, Project, Settings, Tag } from "../api/types";
+import type { AssetPage, FolderNode, ImportJob, Project, Settings, Tag, TrashItem } from "../api/types";
 
 export type SizeRange = "" | "small" | "medium" | "large";
 export type ModifiedRange = "" | "today" | "week" | "month";
@@ -28,6 +28,7 @@ export interface LibraryState {
   assetQuery: AssetQueryState;
   tags: Tag[];
   selectedAssetIds: number[];
+  trash: TrashItem[];
 }
 
 export const library = reactive<LibraryState>({
@@ -41,7 +42,8 @@ export const library = reactive<LibraryState>({
   assets: null,
   assetQuery: { q: "", assetType: "", sizeRange: "", modifiedRange: "", tagId: null, sort: "created_at", order: "desc" },
   tags: [],
-  selectedAssetIds: []
+  selectedAssetIds: [],
+  trash: []
 });
 
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -429,6 +431,83 @@ export async function bulkMove(targetFolderId: number): Promise<void> {
     clearAssetSelection();
   } catch (error) {
     notify("error", errText(error));
+  }
+}
+
+export async function loadTrash(): Promise<void> {
+  try {
+    library.trash = (await api.listTrash()).items;
+  } catch (error) {
+    notify("error", errText(error));
+  }
+}
+
+// 删除/恢复会同时影响画廊与回收站计数，统一刷新两处
+async function refreshAfterTrashChange(): Promise<void> {
+  await Promise.all([loadTrash(), loadTags(), refreshCurrentAssetsQuiet()]);
+}
+
+export async function deleteAssetToTrash(assetId: number): Promise<boolean> {
+  try {
+    await api.deleteAsset(assetId);
+    await refreshAfterTrashChange();
+    notify("success", "已移入回收站。");
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
+export async function bulkTrashSelected(): Promise<void> {
+  if (library.selectedAssetIds.length === 0) return;
+  try {
+    const result = await api.bulkTrash(library.selectedAssetIds);
+    notify(result.failed_count ? "error" : "success", summarize(result));
+    await refreshAfterTrashChange();
+    clearAssetSelection();
+  } catch (error) {
+    notify("error", errText(error));
+  }
+}
+
+export async function restoreFromTrash(assetId: number): Promise<boolean> {
+  try {
+    await api.restoreTrashItem(assetId);
+    await refreshAfterTrashChange();
+    notify("success", "资产已恢复到原目录。");
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
+export async function permanentlyDeleteTrashItem(assetId: number): Promise<boolean> {
+  try {
+    await api.permanentDeleteTrashItem(assetId);
+    await refreshAfterTrashChange();
+    notify("success", "已永久删除。");
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
+export async function emptyTrashAll(): Promise<boolean> {
+  try {
+    const result = await api.emptyTrash();
+    await loadTrash();
+    if (result.failed > 0) {
+      notify("error", `已删除 ${result.removed} 项；${result.failed} 项文件被占用，未能删除。`);
+    } else {
+      notify("success", `已清空回收站（${result.removed} 项）。`);
+    }
+    return result.failed === 0;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
   }
 }
 

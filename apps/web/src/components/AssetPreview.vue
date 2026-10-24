@@ -12,6 +12,7 @@ const emit = defineEmits<{
   (e: "close"): void;
   (e: "prev"): void;
   (e: "next"): void;
+  (e: "delete", assetId: number): void;
 }>();
 
 const objectUrl = ref<string | null>(null);
@@ -129,6 +130,14 @@ const updatedAtLabel = computed(() => {
   if (Number.isNaN(date.getTime())) return props.asset.updated_at;
   return date.toLocaleString("zh-CN", { hour12: false });
 });
+
+function askDelete(): void {
+  const isExternal = props.asset.source_type === "external";
+  const message = isExternal
+    ? `确定从资产库移除「${props.asset.name}」吗？只删除索引记录，不会删除磁盘上的源文件。`
+    : `确定把「${props.asset.name}」移入回收站吗？之后可以在回收站中恢复或永久删除。`;
+  if (window.confirm(message)) emit("delete", props.asset.id);
+}
 
 function clearContent(): void {
   if (objectUrl.value) {
@@ -397,6 +406,12 @@ onUnmounted(() => {
           <div class="mt-4 border-t border-line pt-3">
             <p class="text-xs text-muted">路径</p>
             <p class="mt-1 break-all font-mono text-[11px] leading-5 text-muted" :title="asset.file_path">{{ asset.file_path }}</p>
+          </div>
+          <div class="mt-4 border-t border-line pt-3">
+            <button
+              class="w-full rounded-lg border border-rose-200 px-3 py-2 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+              @click="askDelete"
+            >{{ asset.source_type === "external" ? "从库中移除（不删源文件）" : "删除到回收站" }}</button>
           </div>
         </aside>
       </div>

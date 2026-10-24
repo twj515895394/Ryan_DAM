@@ -8,11 +8,12 @@ import AssetPreview from "./components/AssetPreview.vue";
 import ImportJobPanel from "./components/ImportJobPanel.vue";
 import NameDialog from "./components/NameDialog.vue";
 import Stage0Panel from "./components/Stage0Panel.vue";
-import type { FolderNode } from "./api/types";
+import type { FolderNode, TrashItem } from "./api/types";
 import {
   bulkAddTags,
   bulkMove,
   bulkRemoveTags,
+  bulkTrashSelected,
   clearAssetFilters,
   clearAssetSelection,
   clearAssets,
@@ -20,18 +21,23 @@ import {
   createProject,
   createProjectFolder,
   createTag,
+  deleteAssetToTrash,
   deleteFolder,
   deleteProject,
   deleteTag,
+  emptyTrashAll,
   fetchAssets,
   importFiles,
   importFolder,
   library,
   loadAll,
   loadTags,
+  loadTrash,
+  permanentlyDeleteTrashItem,
   renameFolder,
   renameProject,
   renameTag,
+  restoreFromTrash,
   toggleAssetSelection,
   updateManagedRoot
 } from "./stores/library";
@@ -52,7 +58,69 @@ const activeProjectId = ref<number | null>(null);
 const activeFolderId = ref<number | null>(null);
 const previewIndex = ref<number | null>(null);
 const galleryScroll = ref<HTMLElement | null>(null);
+const viewMode = ref<"library" | "trash">("library");
 let savedScrollTop = 0;
+
+function selectTrash(): void {
+  viewMode.value = "trash";
+  void loadTrash();
+}
+
+function askEmptyTrash(): void {
+  const count = library.trash.length;
+  if (count === 0) return;
+  if (window.confirm(`确定清空回收站吗？将永久删除 ${count} 项，文件会从磁盘删除，此操作不可恢复。`)) {
+    void emptyTrashAll();
+  }
+}
+
+function askPermanentDeleteTrashItem(item: TrashItem): void {
+  if (window.confirm(`确定永久删除「${item.name}」吗？文件将从磁盘删除，此操作不可恢复。`)) {
+    void permanentlyDeleteTrashItem(item.id);
+  }
+}
+
+function onRestoreTrashItem(item: TrashItem): void {
+  void restoreFromTrash(item.id);
+}
+
+function askBulkTrash(): void {
+  const count = library.selectedAssetIds.length;
+  if (count === 0) return;
+  if (window.confirm(`确定删除选中的 ${count} 项吗？托管资产将移入回收站，可随时恢复；外部资产仅移除索引，不删除源文件。`)) {
+    void bulkTrashSelected();
+  }
+}
+
+async function onDeleteFromPreview(assetId: number): Promise<void> {
+  if (await deleteAssetToTrash(assetId)) closePreview();
+}
+
+const ASSET_TYPE_LABELS: Record<string, string> = {
+  image: "图片",
+  video: "视频",
+  audio: "音频",
+  document: "文档",
+  other: "文件"
+};
+
+function trashTypeLabel(type: string): string {
+  return ASSET_TYPE_LABELS[type] ?? type;
+}
+
+function trashSizeLabel(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+function trashDateLabel(value: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value + (value.endsWith("Z") ? "" : "Z"));
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
 
 function findFolder(nodes: FolderNode[], id: number): FolderNode | null {
   for (const node of nodes) {
@@ -109,18 +177,21 @@ function askDeleteTag(id: number, name: string): void {
 }
 
 function selectGeneral(): void {
+  viewMode.value = "library";
   activeScope.value = "general";
   activeProjectId.value = null;
   activeFolderId.value = null;
 }
 
 function selectProject(id: number): void {
+  viewMode.value = "library";
   activeScope.value = "project";
   activeProjectId.value = id;
   activeFolderId.value = null;
 }
 
 function selectFolder(node: FolderNode): void {
+  viewMode.value = "library";
   activeScope.value = node.scope_type === "project" ? "project" : "general";
   activeProjectId.value = node.project_id;
   activeFolderId.value = node.id;
@@ -222,7 +293,7 @@ function loadMoreAssets(): void {
   void refreshCurrentAssets(true, assets.page + 1);
 }
 
-const showBatchBar = computed(() => library.selectedAssetIds.length > 0);
+const showBatchBar = computed(() => viewMode.value === "library" && library.selectedAssetIds.length > 0);
 const batchPanel = ref<"none" | "add-tag" | "remove-tag" | "move">("none");
 
 function flattenFolders(nodes: FolderNode[], prefix: string, out: { id: number; label: string }[]): void {
@@ -342,6 +413,7 @@ watch(
 onMounted(() => {
   void loadAll().then(() => refreshCurrentAssets());
   void loadTags();
+  void loadTrash();
 });
 </script>
 
@@ -474,6 +546,26 @@ onMounted(() => {
             </div>
           </div>
         </section>
+        <section class="mt-5">
+          <div class="flex items-center justify-between pl-1.5 pr-1 pb-1 pt-2">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted">回收站</p>
+          </div>
+          <button
+            class="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left text-sm transition-colors"
+            :class="viewMode === 'trash' ? 'bg-accent/10 font-medium text-accent' : 'hover:bg-canvas'"
+            @click="selectTrash"
+          >
+            <span class="min-w-0 flex-1">回收站</span>
+            <span
+              v-if="library.trash.length > 0"
+              class="shrink-0 rounded-full px-1.5 text-[10px]"
+              :class="viewMode === 'trash' ? 'bg-accent/15 text-accent' : 'bg-canvas text-muted'"
+            >{{ library.trash.length }}</span>
+          </button>
+          <p v-if="viewMode === 'trash'" class="px-1.5 pt-1 text-[11px] leading-5 text-muted">
+            托管资产删除后在此保留，可恢复；外部资产移除仅删索引，不进回收站。
+          </p>
+        </section>
       </nav>
 
       <div class="border-t border-line px-3.5 py-3">
@@ -499,13 +591,23 @@ onMounted(() => {
     <div class="flex min-w-0 flex-1 flex-col">
       <header class="flex h-14 shrink-0 items-center justify-between border-b border-line bg-white/80 px-6">
         <div class="min-w-0">
-          <h1 class="truncate text-base font-semibold">{{ locationTitle }}</h1>
+          <h1 class="truncate text-base font-semibold">{{ viewMode === "trash" ? "回收站" : locationTitle }}</h1>
           <p class="text-[11px] text-muted">
-            {{ activeScope === "general" ? "通用资产库" : activeProject?.name ?? "项目资产库" }}
-            <template v-if="library.assets">· {{ library.assets.total }} 项</template>
+            <template v-if="viewMode === 'trash'">已删除的资产 · {{ library.trash.length }} 项</template>
+            <template v-else>
+              {{ activeScope === "general" ? "通用资产库" : activeProject?.name ?? "项目资产库" }}
+              <template v-if="library.assets">· {{ library.assets.total }} 项</template>
+            </template>
           </p>
         </div>
-        <div class="flex items-center gap-2">
+        <div v-if="viewMode === 'trash'" class="flex items-center gap-2">
+          <button
+            class="rounded-xl border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+            :disabled="library.trash.length === 0"
+            @click="askEmptyTrash"
+          >清空回收站</button>
+        </div>
+        <div v-else class="flex items-center gap-2">
           <input
             v-model="searchDraft"
             type="text"
@@ -597,7 +699,67 @@ onMounted(() => {
         </div>
       </header>
 
-      <main ref="galleryScroll" class="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-6">
+      <main v-if="viewMode === 'trash'" class="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-6">
+        <div
+          v-if="library.trash.length > 0"
+          class="overflow-hidden rounded-2xl border border-line bg-white"
+        >
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-line bg-canvas/60 text-left text-xs text-muted">
+                <th class="px-4 py-2.5 font-medium">名称</th>
+                <th class="px-4 py-2.5 font-medium">类型</th>
+                <th class="px-4 py-2.5 font-medium">大小</th>
+                <th class="px-4 py-2.5 font-medium">删除时间</th>
+                <th class="px-4 py-2.5 font-medium">原目录</th>
+                <th class="px-4 py-2.5 text-right font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in library.trash" :key="item.id" class="border-b border-line last:border-b-0">
+                <td class="max-w-[280px] px-4 py-2.5">
+                  <div class="flex items-center gap-2">
+                    <AssetIcon :type="item.asset_type" class="h-4 w-4 shrink-0 text-muted" />
+                    <span class="truncate" :title="item.name">{{ item.name }}</span>
+                    <span
+                      v-if="item.source_type === 'external'"
+                      class="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700"
+                    >外部</span>
+                  </div>
+                </td>
+                <td class="px-4 py-2.5 text-muted">{{ trashTypeLabel(item.asset_type) }}</td>
+                <td class="px-4 py-2.5 text-muted">{{ trashSizeLabel(item.size_bytes) }}</td>
+                <td class="px-4 py-2.5 text-muted">{{ trashDateLabel(item.deleted_at) }}</td>
+                <td class="max-w-[180px] truncate px-4 py-2.5 text-muted" :title="item.original_folder">{{ item.original_folder }}</td>
+                <td class="whitespace-nowrap px-4 py-2.5 text-right">
+                  <button
+                    class="rounded-lg px-2.5 py-1.5 text-xs font-medium text-accent transition hover:bg-accent/10"
+                    @click="onRestoreTrashItem(item)"
+                  >恢复</button>
+                  <button
+                    class="ml-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                    @click="askPermanentDeleteTrashItem(item)"
+                  >永久删除</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-else class="flex min-h-full items-center justify-center">
+          <div class="w-full max-w-md rounded-3xl border border-line bg-white p-10 text-center shadow-sm">
+            <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-canvas text-muted/70">
+              <AssetIcon type="other" class="h-7 w-7" />
+            </div>
+            <h2 class="mt-5 text-base font-semibold">回收站是空的</h2>
+            <p class="mt-2 text-sm leading-6 text-muted">
+              删除的托管资产会保留在这里，可随时恢复到原目录；「永久删除」和「清空回收站」才会真正从磁盘移除文件。
+            </p>
+          </div>
+        </div>
+      </main>
+
+      <main v-else ref="galleryScroll" class="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-6">
         <div
           v-if="library.assets && library.assets.items.length > 0"
           class="grid gap-4"
@@ -661,6 +823,7 @@ onMounted(() => {
       @close="closePreview"
       @prev="stepPreview(-1)"
       @next="stepPreview(1)"
+      @delete="onDeleteFromPreview"
     />
 
     <Teleport to="body">
@@ -710,6 +873,10 @@ onMounted(() => {
                 >{{ option.label }}</button>
               </div>
             </div>
+            <button
+              class="rounded-lg px-3 py-1.5 text-sm text-rose-600 transition hover:bg-rose-50"
+              @click="askBulkTrash"
+            >删除</button>
             <button class="rounded-lg px-3 py-1.5 text-sm text-muted transition hover:bg-canvas" @click="clearAssetSelection(); batchPanel = 'none'">取消</button>
           </div>
         </div>

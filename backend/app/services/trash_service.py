@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -22,6 +23,13 @@ from backend.app.models.folder import Folder
 from backend.app.models.tag import AssetTag
 from backend.app.models.import_job import ImportJobItem
 from backend.app.services.settings_service import get_managed_root
+
+
+@dataclass
+class TrashItemResult:
+    asset_id: int
+    ok: bool
+    error: str | None = None
 
 
 def _utcnow() -> datetime:
@@ -51,6 +59,13 @@ def _delete_index_row(db: Session, asset: Asset) -> None:
     db.delete(asset)
 
 
+def _remove_dir_if_empty(path: Path) -> None:
+    try:
+        path.rmdir()
+    except OSError:
+        pass  # not empty or already gone — nothing to clean
+
+
 def trash_asset(db: Session, asset_id: int) -> None:
     asset = get_asset_or_404(db, asset_id)
     if asset.source_type == "external":
@@ -70,6 +85,7 @@ def trash_asset(db: Session, asset_id: int) -> None:
         os.replace(source, destination)
     except OSError as error:
         raise ApiError("trash_failed", f"移入回收站失败：{error}", 400) from error
+    _remove_dir_if_empty(source.parent)
     asset.status = "trashed"
     asset.deleted_at = _utcnow()
     asset.original_folder_id = asset.folder_id
@@ -92,6 +108,7 @@ def restore_asset(db: Session, asset_id: int) -> None:
         os.replace(source, destination)
     except OSError as error:
         raise ApiError("restore_failed", f"恢复失败：{error}", 400) from error
+    _remove_dir_if_empty(source.parent)
     asset.file_path = str(destination)
     asset.status = "active"
     asset.deleted_at = None
@@ -107,16 +124,32 @@ def permanent_delete(db: Session, asset_id: int) -> None:
     managed_root = get_managed_root(db)
     trash_dir = _trash_dir_for(managed_root, asset.id)
     if trash_dir.exists():
-        shutil.rmtree(trash_dir, ignore_errors=True)
+        try:
+            shutil.rmtree(trash_dir)
+        except OSError as error:
+            raise ApiError(
+                "trash_delete_failed",
+                f"文件被占用，无法永久删除：{error}。请关闭正在使用该文件的程序后重试。",
+                409,
+            ) from error
+    if trash_dir.exists():
+        raise ApiError("trash_delete_failed", "磁盘文件未能删除，已保留回收站记录。", 409)
     _delete_index_row(db, asset)
     db.commit()
 
 
-def empty_trash(db: Session) -> int:
+def empty_trash(db: Session) -> tuple[int, int]:
+    """Remove every trashed asset; locked/unavailable items are skipped and reported."""
     trashed = db.scalars(select(Asset).where(Asset.status == "trashed")).all()
+    removed = 0
+    failed = 0
     for asset in trashed:
-        permanent_delete(db, asset.id)
-    return len(trashed)
+        try:
+            permanent_delete(db, asset.id)
+            removed += 1
+        except ApiError:
+            failed += 1
+    return removed, failed
 
 
 def list_trash(db: Session) -> list[dict]:
@@ -139,3 +172,30 @@ def list_trash(db: Session) -> list[dict]:
         }
         for asset, folder_name in rows
     ]
+
+
+def bulk_trash(db: Session, asset_ids: list[int]) -> list[TrashItemResult]:
+    """Delete many assets; per-item results so one bad file never masks the rest.
+
+    Managed assets go to the trash; external ones just leave the index.
+    """
+    unique = list(dict.fromkeys(asset_ids))
+    if not unique:
+        raise ApiError("validation_error", "资产列表不能为空。", 422)
+    if len(unique) > 200:
+        raise ApiError("validation_error", "单次批量操作最多支持 200 个资产。", 422)
+    assets = db.scalars(select(Asset).where(Asset.id.in_(unique), Asset.status == "active")).all()
+    found = {asset.id for asset in assets}
+    missing = [asset_id for asset_id in unique if asset_id not in found]
+    if missing:
+        raise ApiError("not_found", f"部分资产不存在或已被删除：{missing[:5]}", 404)
+
+    results: list[TrashItemResult] = []
+    for asset_id in unique:
+        try:
+            trash_asset(db, asset_id)
+            results.append(TrashItemResult(asset_id, True))
+        except ApiError as error:
+            db.rollback()
+            results.append(TrashItemResult(asset_id, False, error.message))
+    return results
