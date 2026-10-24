@@ -15,16 +15,19 @@
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-24，ZCode 接手 · 已交付至票 8）
+### 0.0 最新迭代摘要（2026-10-24，ZCode 接手 · 本地已交付至票 14，未 push）
 
-- **Git 分支 / 提交：** `main`，最新 `3023b3b`（含 CI 修复）
-- **当前状态一句话：** 阶段 0 自动化全过（GUI 实机项待人工）；阶段 1 数据层/目录/设置完成；按 `docs/ISSUES_BACKLOG.md`（本地拆票）完成票 2–8；全部提交 CI 绿（最新 [run 40091433600](https://github.com/twj515895394/Ryan_DAM/actions/runs/40091433600) success，含 Pillow 打包验证）。
-- **运行验证（最新）：** pytest **66/66**；vue-tsc / build / `node --check` 通过；e2e 真实 HTTP **21/21**；全量测试后 `D:\Ryan_DAM\assets` 保持 0 条目。
-- **已知问题：** 无新增阻塞问题（历史工程注意点见 §6.4 与下方迭代记录）。
-- **下一步第一任务：** 票 9（沉浸式预览框架 + 图片预览 + 位置恢复）；GUI 实机验收（票 1）仍待人工完成（可顺带确认新中文菜单）。
+> **最新会话交接：** [`.handoff/handoff-20261024-213000.md`](./handoff-20261024-213000.md)（票 9–14 详情、票 15 WIP 状态、下会话任务清单）——接手者先读它，再读本文件。
+
+- **Git 分支 / 提交：** `main` **本地**最新 `d98db52`（票 14）；**远端 origin/main 停在 `d3ea899`**——用户要求全部开发票完成并统一自测/审查后再一次性 push。
+- **当前状态一句话：** 阶段 0 自动化全过（GUI 实机项待人工）；阶段 1–2 完成；阶段 3 完成（票 7/8）；阶段 4 完成票 9–14（预览/播放/文档预览/搜索/标签/批量）；**票 15 回收站进行中**（service 层 WIP 未提交，见会话交接 §2）；票 16–20 未开始。
+- **运行验证（最新）：** pytest **83/83**；vue-tsc / build / `node --check` 通过；e2e 21/21；全量测试后 `D:\Ryan_DAM\assets` 保持 0 条目。
+- **已知问题：** 无阻塞问题；票 15 的 WIP（trash_service.py 服务层）已随 `5321554` 提交为检查点，**未接线未测试**。
+- **下一步第一任务：** 继续票 15（路由/测试/前端，从会话交接 §2 开始）；随后票 16–20；全部完成后统一自测 + code review + 交付 push。**每票完成后必须跑 codereview 审查（用户要求）。**
 
 ### 0.0.1 迭代时间线（倒序）
 
+0. **票 9–14（本会话，2026-10-24）**（`9921a82` → `d98db52`，全部仅本地提交）——沉浸式预览与内容端点、Range 播放与系统打开、五类文档预览、搜索/筛选/排序、全局标签、批量操作。详情与逐项验证记录见 `.handoff/handoff-20261024-213000.md`。
 1. **票 8：音视频元数据与代表帧（FFmpeg 打包）**（`70116d3`）——`media_service` 受控定位器（`RYAN_DAM_FFMPEG_DIR` 环境变量 → PyInstaller 包内 `_MEIPASS/ffmpeg` → 仓库 `ffmpeg-bin/` → PATH，校验 PE 头拒绝构建期占位符）；ffprobe 提取时长/宽高、ffmpeg 提取视频代表帧（512px contain、1s 起帧回退）与音频内嵌封面；缩略图管线扩展到视频/音频；卡片新增时长角标（mm:ss）；`scripts/prepare-ffmpeg.mjs` 装载真实二进制或占位符、PyInstaller `--add-binary` 捆绑、CI 下载 BtbN win64 构建并导出环境变量；`docs/THIRD_PARTY_NOTICES.md` 记录 FFmpeg GPL v3 来源；测试 +7（66/66，无 ffmpeg 环境自动跳过）。CI 首轮失败：定位器测试依赖仓库状态（CI 在测试前已把真实 ffmpeg 放入 ffmpeg-bin/），已改为注入候选列表隔离（`3023b3b` 修复）。
    - **本地打包验证**：PyInstaller 产物 129MB（含 FFmpeg），冻结版 exe 端到端通过——视频时长 3000ms 精确、320x240、代表帧 JPEG 200；音频时长 2038ms。
 2. **票 7：图片缩略图管线**（`0e6d909`）——Pillow 后台 worker + 磁盘缓存（`RYAN_DAM_CACHE_DIR`，默认 `<data>/cache/thumbnails`），源文件指纹（大小+mtime）侧车：命中直接返回、源变化自动重生成、重复失败标记 `failed` 不再重试；`GET /api/v1/assets/{id}/thumbnail` 未命中入队并返回 404（`thumbnail_unavailable`）；导入完成自动为图片入队；前端卡片 blob 带 token 加载、`object-contain` 不裁切、失败回退类型图标、画廊有 pending 时 2.5s 自动刷新（上限 8 次）；e2e +2（21 项）；测试 +6（59/59）。
