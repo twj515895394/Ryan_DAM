@@ -15,9 +15,9 @@
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-24，ZCode 接手 · 更新至票 2）
+### 0.0 最新迭代摘要（2026-10-24，ZCode 接手 · 更新至票 3）
 
-- **Git 分支 / 提交：** `main`，最新 `52ee8a2`（票 2 导入管线）；此前 `8f083d4` 阶段 1 数据层、`87c1ecf` 目录树 UI、`46687d5` 拆票文档
+- **Git 分支 / 提交：** `main`，最新 `c2f247d`（票 3 画廊 v1）；此前 `52ee8a2`（票 2 导入管线）、`8f083d4` 阶段 1 数据层、`87c1ecf` 目录树 UI、`46687d5` 拆票文档
 - **开发目标：** 复核阶段 0 未验收事项；按交接文档推进阶段 1。
 - **实际交付：**
   1. **阶段 0 自动化复核（全部通过）：** `.venv` 环境 pytest 31/31（含原有 6 项）、`node --check`、`npm run typecheck`、`npm run build`、后端直启冒烟（READY 随机端口 → token 化 `/health` → 无 token 401 → `/shutdown` 干净退出）、GitHub API 核对 CI run `40077429948` success。**GUI 实机项（安装版启动、拖入 Chrome、多屏窗口状态）仍未人工验收，不可勾选。**
@@ -26,9 +26,10 @@
   4. **阶段 1 UI 纵向切片：** 左侧「通用资产库 / 项目资产库」目录树真实读写 API；新建/重命名/删除（带确认与保护提示）；设置面板显示并编辑托管根目录；画廊为空态占位；阶段 0 诊断（健康检查 + 拖出 PoC）收进弹窗保留。
   5. **工程化：** 生成并提交 `package-lock.json`；CI 改用 `npm ci` + `.venv`；npm 脚本固定走 `.venv\Scripts\python.exe`（用户要求：Python 必须用虚拟环境，禁用全局）；PyInstaller 增加 `--collect-all alembic` 与 `--add-data backend/alembic;alembic`。
   6. **票 2：单文件托管导入**（`docs/ISSUES_BACKLOG.md` 本地拆票，用户确认暂不发布 GitHub Issues）——`POST /api/v1/imports` 创建任务 + 单后台 worker：空间预检（不足同步 400 拒绝，含需用/可用 GB）→ staging 复制 + 流式 SHA-256 → 校验 → 原子落盘 `objects/<asset-id>/<filename>` → 事务写 assets → 清理 staging；内容重复默认跳过（`allow_duplicates` 可强制）；迁移 `0002`（import_jobs.target_folder_id/allow_duplicates）；Electron 受控 `dialog:select-files` IPC；前端导入按钮（需先选目录）+ 轮询任务面板。
-- **运行验证：** pytest **40/40**；vue-tsc / build 通过；`scripts/e2e_smoke.py` 真实 HTTP **18/18**（含导入完成与资产生成、重启持久化）；Electron `node --check` 通过。CI：阶段 1 run `40081295485` success；票 2 提交 CI 待核对回填。
+  7. **票 3：资产画廊 v1**——`GET /api/v1/assets` 分页列表（按 folder_id 或 scope/project 过滤、id 倒序、排除 trashed）；前端卡片网格（类型图标、大小格式化、外部标识预留、auto-fill 列、加载更多）；目录切换联动刷新，导入完成后自动刷新树与画廊。
+- **运行验证：** pytest **45/45**；vue-tsc / build 通过；`scripts/e2e_smoke.py` 真实 HTTP **19/19**；Electron `node --check` 通过。CI：run `40084716845`（含票 2 代码）success；票 3 提交 CI 待核对回填。
 - **已知问题：** 见 §6.4；无新增阻塞问题。
-- **下一步第一任务：** 票 3（资产网格画廊 v1：`GET /api/v1/assets` 分页 + 类型图标卡片 + 目录过滤）；GUI 实机验收（票 1）仍待人工完成。
+- **下一步第一任务：** 票 4（文件夹批量导入 + 多选 + 层级保留）；票 5 的去重逻辑已随票 2 落地，剩余为任务面板去重说明细节；GUI 实机验收（票 1）仍待人工完成。
 
 ### 0.1 推荐接手顺序
 
