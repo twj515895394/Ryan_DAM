@@ -16,3 +16,5 @@ backend/dist/
 .DS_Store
 Thumbs.db
 .env
+.e2e-data/
+.smoke-data/

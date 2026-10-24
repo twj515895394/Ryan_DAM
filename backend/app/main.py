@@ -13,13 +13,37 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from backend.app.api.v1 import api_router
+from backend.app.core.errors import ApiError, api_error_handler
+from backend.app.db.migrations import run_migrations
+from backend.app.db.session import create_session_factory, create_sqlite_engine
+from backend.app.services.settings_service import seed_default_settings
+
 APP_VERSION = "0.1.0"
 READY_PREFIX = "RYAN_DAM_READY "
 ALLOWED_ORIGINS = {"null", "http://127.0.0.1:5173", "http://localhost:5173"}
 ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
-def create_app(api_token: str | None = None) -> FastAPI:
+def default_db_path(data_dir: Path | None = None) -> Path:
+    configured = os.environ.get("RYAN_DAM_DB_PATH")
+    if configured:
+        return Path(configured)
+    base = data_dir or Path(os.environ.get("RYAN_DAM_DATA_DIR", str(Path.home() / ".ryan_dam" / "data")))
+    return base / "ryan_dam.sqlite3"
+
+
+def init_database(db_path: Path | str) -> tuple[Any, Any]:
+    """Run Alembic migrations, then return (engine, session_factory)."""
+    run_migrations(db_path)
+    engine = create_sqlite_engine(db_path)
+    session_factory = create_session_factory(engine)
+    with session_factory() as session:
+        seed_default_settings(session)
+    return engine, session_factory
+
+
+def create_app(api_token: str | None = None, db_path: str | None = None) -> FastAPI:
     expected_token = api_token if api_token is not None else os.environ.get("RYAN_DAM_API_TOKEN", "")
     application = FastAPI(
         title="Ryan_DAM Local API",
@@ -30,14 +54,19 @@ def create_app(api_token: str | None = None) -> FastAPI:
     )
     application.state.api_token = expected_token
     application.state.server = None
+    application.state.session_factory = None
+    if db_path:
+        _engine, application.state.session_factory = init_database(db_path)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=sorted(ALLOWED_ORIGINS),
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "X-Ryan-DAM-Token"],
         allow_credentials=False,
         max_age=300,
     )
+    application.add_exception_handler(ApiError, api_error_handler)
+    application.include_router(api_router)
 
     @application.middleware("http")
     async def local_api_guard(request: Request, call_next: Any):
@@ -83,7 +112,7 @@ def run_server() -> None:
     listener.setblocking(False)
     port = listener.getsockname()[1]
 
-    application = create_app(token)
+    application = create_app(token, db_path=str(default_db_path(data_dir)))
     config = uvicorn.Config(application, host="127.0.0.1", port=port, log_level=os.environ.get("RYAN_DAM_LOG_LEVEL", "info").lower(), access_log=False)
     server = uvicorn.Server(config)
     application.state.server = server

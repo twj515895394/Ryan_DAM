@@ -12,8 +12,8 @@
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "build:web": "vite build --config vite.config.ts",
     "build": "npm run typecheck && npm run build:web",
-    "test:backend": "python -m pytest backend/tests",
-    "build:backend": "python -m PyInstaller --noconfirm --clean --onefile --name ryan-dam-api --paths . --collect-all fastapi --collect-all uvicorn --collect-all pydantic --collect-all starlette --hidden-import uvicorn.logging --hidden-import uvicorn.loops.auto --hidden-import uvicorn.protocols.http.auto --hidden-import uvicorn.lifespan.on --distpath backend/dist --workpath backend/build backend/launcher.py",
+    "test:backend": ".venv\\Scripts\\python.exe -m pytest backend/tests",
+    "build:backend": ".venv\\Scripts\\python.exe -m PyInstaller --noconfirm --clean --onefile --name ryan-dam-api --paths . --collect-all fastapi --collect-all uvicorn --collect-all pydantic --collect-all starlette --collect-all alembic --add-data \"backend/alembic;alembic\" --hidden-import uvicorn.logging --hidden-import uvicorn.loops.auto --hidden-import uvicorn.protocols.http.auto --hidden-import uvicorn.lifespan.on --distpath backend/dist --workpath backend/build backend/launcher.py",
     "package:win": "npm run build:backend && npm run build && electron-builder --win nsis --publish never"
   },
   "devDependencies": {
