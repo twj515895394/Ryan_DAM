@@ -171,7 +171,10 @@ let thumbRefreshCount = 0;
 
 function scheduleThumbnailRefresh(): void {
   const assets = library.assets;
-  if (!assets?.items.some((a) => a.thumbnail_status === "pending")) return;
+  const generating = assets?.items.some(
+    (a) => a.thumbnail_status === "pending" && ["image", "video", "audio"].includes(a.asset_type)
+  );
+  if (!generating) return;
   if (thumbRefreshCount >= 8 || thumbRefreshTimer) return;
   thumbRefreshTimer = setTimeout(() => {
     thumbRefreshTimer = null;

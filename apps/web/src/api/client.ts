@@ -140,6 +140,15 @@ export const api = {
     return URL.createObjectURL(await response.blob());
   },
 
+  fetchContentText: async (assetId: number): Promise<string> => {
+    const info = await getBackendInfo();
+    const response = await fetch(`${info.baseUrl}/api/v1/assets/${assetId}/content`, {
+      headers: { "X-Ryan-DAM-Token": info.token }
+    });
+    if (!response.ok) throw new Error(`content HTTP ${response.status}`);
+    return response.text();
+  },
+
   openExternal: (assetId: number) => request<void>(`/api/v1/assets/${assetId}/open`, { method: "POST" }),
 
   getSettings: () => request<Settings>("/api/v1/settings"),

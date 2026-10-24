@@ -393,6 +393,7 @@ def _process_item(session_factory: sessionmaker, job_id: int, item_id: int) -> N
                 file_path=str(staged),
                 source_type="managed",
                 sha256=sha256,
+                thumbnail_status="ready" if guess_asset_type(source) in ("document", "other") else "pending",
             )
             session.add(asset)
             session.flush()

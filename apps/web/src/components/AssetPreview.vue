@@ -14,11 +14,40 @@ const emit = defineEmits<{
 }>();
 
 const objectUrl = ref<string | null>(null);
+const contentText = ref<string | null>(null);
 const loading = ref(false);
 const errorMessage = ref("");
 const playbackFailed = ref(false);
 const fitWindow = ref(true);
 let loadToken = 0;
+
+const TEXT_PREVIEW_EXTS = new Set(["txt", "md", "json", "csv"]);
+const OFFICE_EXTS = new Set(["doc", "docx", "xls", "xlsx", "ppt", "pptx"]);
+
+const docKind = computed<"none" | "pdf" | "text" | "office" | "other">(() => {
+  const ext = (props.asset.extension ?? "").toLowerCase();
+  if (props.asset.asset_type !== "document") return "none";
+  if (ext === "pdf") return "pdf";
+  if (TEXT_PREVIEW_EXTS.has(ext)) return "text";
+  if (OFFICE_EXTS.has(ext)) return "office";
+  return "other";
+});
+
+const textPreview = computed(() => {
+  if (contentText.value === null) return null;
+  const ext = (props.asset.extension ?? "").toLowerCase();
+  const raw = contentText.value;
+  if (ext === "json") {
+    try {
+      return { kind: "json" as const, body: JSON.stringify(JSON.parse(raw), null, 2) };
+    } catch {
+      return { kind: "plain" as const, body: raw };
+    }
+  }
+  if (ext === "csv") return { kind: "csv" as const, body: raw };
+  if (ext === "md") return { kind: "md" as const, body: raw };
+  return { kind: "plain" as const, body: raw };
+});
 
 async function openInSystemApp(): Promise<void> {
   try {
@@ -74,6 +103,62 @@ function clearContent(): void {
     URL.revokeObjectURL(objectUrl.value);
     objectUrl.value = null;
   }
+  contentText.value = null;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderMarkdownInline(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/`([^`]+)`/g, '<code class="rounded bg-canvas px-1 py-0.5 font-mono text-xs">$1</code>');
+}
+
+// Safe subset renderer: the whole source is HTML-escaped FIRST, so no markup
+// can inject tags; links intentionally stay plain text (no remote loads).
+function renderMarkdown(source: string): string {
+  const escaped = escapeHtml(source);
+  const out: string[] = [];
+  let inCode = false;
+  for (const line of escaped.split(/\r?\n/)) {
+    if (line.trim().startsWith("```")) {
+      out.push(inCode ? "</code></pre>" : '<pre class="overflow-x-auto rounded-xl bg-canvas p-3"><code>');
+      inCode = !inCode;
+      continue;
+    }
+    if (inCode) {
+      out.push(line);
+      continue;
+    }
+    const heading = line.match(/^(#{1,4})\s+(.*)$/);
+    if (heading) {
+      const level = heading[1].length + 1;
+      out.push(`<h${level} class="mt-4 mb-2 font-semibold">` + renderMarkdownInline(heading[2]) + `</h${level}>`);
+      continue;
+    }
+    if (/^\s*[-*]\s+/.test(line)) {
+      out.push('<li class="ml-5 list-disc">' + renderMarkdownInline(line.replace(/^\s*[-*]\s+/, "")) + "</li>");
+      continue;
+    }
+    if (/^\s*&gt;\s?/.test(line)) {
+      out.push('<blockquote class="border-l-2 border-line pl-3 text-muted">' + renderMarkdownInline(line.replace(/^\s*&gt;\s?/, "")) + "</blockquote>");
+      continue;
+    }
+    if (!line.trim()) {
+      out.push("<br>");
+      continue;
+    }
+    out.push("<p>" + renderMarkdownInline(line) + "</p>");
+  }
+  if (inCode) out.push("</code></pre>");
+  return out.join("\n");
 }
 
 async function loadContent(): Promise<void> {
@@ -83,13 +168,21 @@ async function loadContent(): Promise<void> {
   loading.value = true;
   fitWindow.value = true;
   const token = ++loadToken;
+  const wantText = docKind.value === "text";
   try {
-    const url = await api.fetchContentObjectUrl(props.asset.id);
-    if (token !== loadToken) {
-      URL.revokeObjectURL(url);
-      return;
+    if (wantText) {
+      const text = await api.fetchContentText(props.asset.id);
+      if (token !== loadToken) return;
+      // guard against multi-megabyte documents freezing the UI
+      contentText.value = text.length > 2_000_000 ? text.slice(0, 2_000_000) + "\n\n…（文件过大，已截断显示）" : text;
+    } else {
+      const url = await api.fetchContentObjectUrl(props.asset.id);
+      if (token !== loadToken) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      objectUrl.value = url;
     }
-    objectUrl.value = url;
   } catch (error) {
     if (token === loadToken) {
       errorMessage.value = error instanceof Error ? error.message : "内容加载失败";
@@ -154,6 +247,44 @@ onUnmounted(() => {
           <p v-else-if="errorMessage" class="rounded-xl bg-rose-500/20 px-4 py-2.5 text-sm text-rose-100">
             {{ errorMessage }}
           </p>
+          <iframe
+            v-else-if="objectUrl && docKind === 'pdf'"
+            :src="objectUrl"
+            class="h-full w-full rounded-xl bg-white"
+            title="PDF 预览"
+          />
+          <div
+            v-else-if="docKind === 'text' && textPreview"
+            class="h-full w-full overflow-auto rounded-xl bg-white p-6"
+          >
+            <table v-if="textPreview.kind === 'csv'" class="w-full border-collapse text-xs">
+              <tbody>
+                <tr v-for="(row, ri) in textPreview.body.split(/\r?\n/).slice(0, 500)" :key="ri" class="border-b border-line">
+                  <td
+                    v-for="(cell, ci) in row.split(',')"
+                    :key="ci"
+                    class="border-r border-line px-2.5 py-1.5 align-top"
+                    :class="ri === 0 ? 'font-semibold' : ''"
+                  >{{ cell }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <pre v-else-if="textPreview.kind === 'json'" class="whitespace-pre-wrap break-all font-mono text-xs leading-6">{{ textPreview.body }}</pre>
+            <pre v-else-if="textPreview.kind === 'plain'" class="whitespace-pre-wrap break-words text-sm leading-7">{{ textPreview.body }}</pre>
+            <!-- eslint-disable-next-line vue/no-v-html -->
+            <div v-else class="markdown-preview text-sm leading-7" v-html="renderMarkdown(textPreview.body)" />
+          </div>
+          <div
+            v-else-if="docKind === 'office'"
+            class="flex flex-col items-center gap-4 text-white/70"
+          >
+            <AssetIcon type="document" class="h-16 w-16" />
+            <p class="text-sm">Office 文件不做在线预览，可调用系统默认应用打开</p>
+            <button
+              class="rounded-xl bg-white/15 px-4 py-2 text-sm text-white transition hover:bg-white/25"
+              @click="openInSystemApp"
+            >在系统默认应用中打开</button>
+          </div>
           <img
             v-else-if="objectUrl && asset.asset_type === 'image'"
             :src="objectUrl"
