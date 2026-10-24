@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TagBrief(BaseModel):
@@ -22,6 +22,7 @@ class AssetOut(BaseModel):
     size_bytes: int
     source_type: str
     thumbnail_status: str
+    status: str = "active"
     media_width: int | None
     media_height: int | None
     media_duration_ms: int | None
@@ -29,7 +30,6 @@ class AssetOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     tags: list[TagBrief] = []
-    updated_at: datetime
 
 
 class AssetPage(BaseModel):
@@ -37,3 +37,15 @@ class AssetPage(BaseModel):
     page: int
     page_size: int
     items: list[AssetOut]
+
+
+class RenameAssetPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=255)
+
+
+class MoveAssetPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    folder_id: int

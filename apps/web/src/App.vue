@@ -34,8 +34,10 @@ import {
   loadTags,
   loadTrash,
   permanentlyDeleteTrashItem,
+  moveAssetToFolder,
   renameFolder,
   renameProject,
+  renameAssetById,
   renameTag,
   restoreFromTrash,
   toggleAssetSelection,
@@ -49,6 +51,7 @@ type DialogRequest =
   | { kind: "folder-rename"; folderId: number; initial: string }
   | { kind: "tag-create" }
   | { kind: "tag-rename"; tagId: number; initial: string }
+  | { kind: "asset-rename"; assetId: number; initial: string }
   | { kind: "root-edit" };
 
 const dialog = ref<DialogRequest | null>(null);
@@ -95,6 +98,47 @@ function askBulkTrash(): void {
 async function onDeleteFromPreview(assetId: number): Promise<void> {
   if (await deleteAssetToTrash(assetId)) closePreview();
 }
+
+function onRenameFromPreview(): void {
+  const asset = previewAsset.value;
+  if (!asset) return;
+  const base = asset.name.replace(/\.[^.\\/]+$/, "");
+  dialog.value = { kind: "asset-rename", assetId: asset.id, initial: base };
+}
+
+function relocatePreview(assetId: number): void {
+  const assets = library.assets;
+  if (!assets) {
+    closePreview();
+    return;
+  }
+  const index = assets.items.findIndex((a) => a.id === assetId);
+  if (index < 0) closePreview();
+  else previewIndex.value = index;
+}
+
+async function onMoveFromPreview(assetId: number, folderId: number): Promise<void> {
+  if (await moveAssetToFolder(assetId, folderId)) closePreview();
+}
+
+const previewMoveOptions = computed<{ id: number; label: string }[]>(() => {
+  const asset = previewAsset.value;
+  if (!asset) return [];
+  const out: { id: number; label: string }[] = [];
+  // 移动只能在同一 scope 内，先判断资产所在树
+  if (findFolder(library.generalTree, asset.folder_id) !== null) {
+    flattenFolders(library.generalTree, "", out);
+    return out;
+  }
+  for (const nodes of Object.values(library.projectTrees)) {
+    if (findFolder(nodes, asset.folder_id) !== null) {
+      flattenFolders(nodes, "", out);
+      return out;
+    }
+  }
+  flattenFolders(library.generalTree, "", out);
+  return out;
+});
 
 const ASSET_TYPE_LABELS: Record<string, string> = {
   image: "图片",
@@ -159,13 +203,14 @@ const dialogTitle = computed(() => {
     case "folder-rename": return "重命名文件夹";
     case "tag-create": return "新建标签";
     case "tag-rename": return "重命名标签";
+    case "asset-rename": return "重命名资产";
     case "root-edit": return "修改默认托管存储位置";
   }
 });
 
 const dialogInitial = computed(() => {
   const d = dialog.value;
-  if (d?.kind === "project-rename" || d?.kind === "folder-rename" || d?.kind === "tag-rename") return d.initial;
+  if (d?.kind === "project-rename" || d?.kind === "folder-rename" || d?.kind === "tag-rename" || d?.kind === "asset-rename") return d.initial;
   if (d?.kind === "root-edit") return library.settings?.managed_root ?? "";
   return "";
 });
@@ -362,6 +407,10 @@ async function onDialogConfirm(value: string): Promise<void> {
       break;
     case "tag-rename":
       ok = await renameTag(d.tagId, value);
+      break;
+    case "asset-rename":
+      ok = await renameAssetById(d.assetId, value);
+      if (ok) relocatePreview(d.assetId);
       break;
     case "root-edit":
       ok = await updateManagedRoot(value);
@@ -820,10 +869,13 @@ onMounted(() => {
     <AssetPreview
       v-if="previewAsset"
       :asset="previewAsset"
+      :move-options="previewMoveOptions"
       @close="closePreview"
       @prev="stepPreview(-1)"
       @next="stepPreview(1)"
       @delete="onDeleteFromPreview"
+      @rename="onRenameFromPreview"
+      @move="onMoveFromPreview"
     />
 
     <Teleport to="body">
@@ -889,7 +941,7 @@ onMounted(() => {
       :open="dialog !== null"
       :title="dialogTitle"
       :initial="dialogInitial"
-      :placeholder="dialog?.kind === 'root-edit' ? '例如 D:\\Ryan_DAM\\assets' : '输入名称'"
+      :placeholder="dialog?.kind === 'root-edit' ? '例如 D:\\Ryan_DAM\\assets' : dialog?.kind === 'asset-rename' ? '输入新名称（扩展名自动保留）' : '输入名称'"
       :confirm-text="dialog?.kind === 'root-edit' ? '保存' : '确定'"
       @confirm="onDialogConfirm"
       @cancel="dialog = null"

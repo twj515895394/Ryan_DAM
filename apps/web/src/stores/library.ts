@@ -434,6 +434,28 @@ export async function bulkMove(targetFolderId: number): Promise<void> {
   }
 }
 
+export async function renameAssetById(assetId: number, name: string): Promise<boolean> {
+  try {
+    await api.renameAsset(assetId, name);
+    await refreshCurrentAssetsQuiet();
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
+export async function moveAssetToFolder(assetId: number, folderId: number): Promise<boolean> {
+  try {
+    await api.moveAsset(assetId, folderId);
+    await refreshCurrentAssetsQuiet();
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
 export async function loadTrash(): Promise<void> {
   try {
     library.trash = (await api.listTrash()).items;

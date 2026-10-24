@@ -22,6 +22,7 @@ from backend.app.models.asset import Asset
 from backend.app.models.folder import Folder
 from backend.app.models.tag import AssetTag
 from backend.app.models.import_job import ImportJobItem
+from backend.app.services.fs_ops import replace_with_retry
 from backend.app.services.settings_service import get_managed_root
 
 
@@ -81,10 +82,7 @@ def trash_asset(db: Session, asset_id: int) -> None:
     trash_dir = _trash_dir_for(managed_root, asset.id)
     trash_dir.mkdir(parents=True, exist_ok=True)
     destination = trash_dir / source.name
-    try:
-        os.replace(source, destination)
-    except OSError as error:
-        raise ApiError("trash_failed", f"移入回收站失败：{error}", 400) from error
+    replace_with_retry(source, destination, error_code="trash_failed", error_prefix="移入回收站失败")
     _remove_dir_if_empty(source.parent)
     asset.status = "trashed"
     asset.deleted_at = _utcnow()
@@ -104,10 +102,7 @@ def restore_asset(db: Session, asset_id: int) -> None:
     objects_dir = _objects_dir_for(managed_root, asset.id)
     objects_dir.mkdir(parents=True, exist_ok=True)
     destination = objects_dir / source.name
-    try:
-        os.replace(source, destination)
-    except OSError as error:
-        raise ApiError("restore_failed", f"恢复失败：{error}", 400) from error
+    replace_with_retry(source, destination, error_code="restore_failed", error_prefix="恢复失败")
     _remove_dir_if_empty(source.parent)
     asset.file_path = str(destination)
     asset.status = "active"

@@ -9,10 +9,17 @@ from sqlalchemy.orm import Session
 from backend.app.api.v1.deps import get_db
 from backend.app.core.errors import ApiError
 from backend.app.models.asset import Asset
-from backend.app.schemas.asset import AssetOut, AssetPage, TagBrief
-from backend.app.services import asset_query, tag_service, thumbnail_service
+from backend.app.schemas.asset import AssetOut, AssetPage, MoveAssetPayload, RenameAssetPayload, TagBrief
+from backend.app.services import asset_edit_service, asset_query, tag_service, thumbnail_service
 
 router = APIRouter(tags=["assets"])
+
+
+def _asset_out_with_tags(db: Session, asset: Asset) -> AssetOut:
+    out = AssetOut.model_validate(asset)
+    tags = tag_service.tags_for_assets(db, [asset.id]).get(asset.id, [])
+    out.tags = [TagBrief(id=tag.id, name=tag.name, color=tag.color) for tag in tags]
+    return out
 
 
 @router.get("/assets", response_model=AssetPage)
@@ -64,6 +71,18 @@ def list_assets(
     for item in page_out.items:
         item.tags = [TagBrief(id=tag.id, name=tag.name, color=tag.color) for tag in tags_by_asset.get(item.id, [])]
     return page_out
+
+@router.patch("/assets/{asset_id}", response_model=AssetOut)
+def rename_asset(asset_id: int, payload: RenameAssetPayload, db: Session = Depends(get_db)) -> AssetOut:
+    asset = asset_edit_service.rename_asset(db, asset_id, payload.name)
+    return _asset_out_with_tags(db, asset)
+
+
+@router.post("/assets/{asset_id}/move", response_model=AssetOut)
+def move_asset(asset_id: int, payload: MoveAssetPayload, db: Session = Depends(get_db)) -> AssetOut:
+    asset = asset_edit_service.move_asset(db, asset_id, payload.folder_id)
+    return _asset_out_with_tags(db, asset)
+
 
 @router.get("/assets/{asset_id}/thumbnail")
 def get_asset_thumbnail(asset_id: int, db: Session = Depends(get_db)) -> FileResponse:

@@ -1,5 +1,6 @@
 import type {
   ApiErrorBody,
+  AssetOut,
   AssetPage,
   BulkResult,
   FolderCreatePayload,
@@ -165,6 +166,11 @@ export const api = {
   },
 
   openExternal: (assetId: number) => request<void>(`/api/v1/assets/${assetId}/open`, { method: "POST" }),
+
+  renameAsset: (id: number, name: string) =>
+    request<AssetOut>(`/api/v1/assets/${id}`, { method: "PATCH", json: { name } }),
+  moveAsset: (id: number, folderId: number) =>
+    request<AssetOut>(`/api/v1/assets/${id}/move`, { method: "POST", json: { folder_id: folderId } }),
 
   listTags: () => request<Tag[]>("/api/v1/tags"),
   createTag: (name: string) => request<Tag>("/api/v1/tags", { method: "POST", json: { name } }),

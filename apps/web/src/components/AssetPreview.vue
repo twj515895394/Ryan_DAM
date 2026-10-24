@@ -6,13 +6,15 @@ import AssetIcon from "./AssetIcon.vue";
 import { library } from "../stores/library";
 import type { AssetOut } from "../api/types";
 
-const props = defineProps<{ asset: AssetOut }>();
+const props = defineProps<{ asset: AssetOut; moveOptions: { id: number; label: string }[] }>();
 
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "prev"): void;
   (e: "next"): void;
   (e: "delete", assetId: number): void;
+  (e: "rename", assetId: number): void;
+  (e: "move", assetId: number, folderId: number): void;
 }>();
 
 const objectUrl = ref<string | null>(null);
@@ -137,6 +139,19 @@ function askDelete(): void {
     ? `确定从资产库移除「${props.asset.name}」吗？只删除索引记录，不会删除磁盘上的源文件。`
     : `确定把「${props.asset.name}」移入回收站吗？之后可以在回收站中恢复或永久删除。`;
   if (window.confirm(message)) emit("delete", props.asset.id);
+}
+
+const moveTargetId = ref<number | null>(null);
+watch(
+  () => props.asset.id,
+  () => {
+    moveTargetId.value = null;
+  }
+);
+
+function confirmMove(): void {
+  if (moveTargetId.value === null) return;
+  emit("move", props.asset.id, moveTargetId.value);
 }
 
 function clearContent(): void {
@@ -401,6 +416,27 @@ onUnmounted(() => {
                 :disabled="selectedTagId === null"
                 @click="addTag"
               >添加</button>
+            </div>
+          </div>
+          <div v-if="asset.source_type === 'managed'" class="mt-4 border-t border-line pt-3">
+            <p class="text-xs font-medium text-muted">管理</p>
+            <button
+              class="mt-2 w-full rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink transition hover:bg-canvas"
+              @click="emit('rename', asset.id)"
+            >重命名</button>
+            <div class="mt-1.5 flex gap-1.5">
+              <select
+                v-model="moveTargetId"
+                class="min-w-0 flex-1 rounded-lg border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-accent"
+              >
+                <option :value="null">移动到…</option>
+                <option v-for="option in moveOptions" :key="option.id" :value="option.id">{{ option.label }}</option>
+              </select>
+              <button
+                class="shrink-0 rounded-lg bg-accent px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+                :disabled="moveTargetId === null"
+                @click="confirmMove"
+              >移动</button>
             </div>
           </div>
           <div class="mt-4 border-t border-line pt-3">
