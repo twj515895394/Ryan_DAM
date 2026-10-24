@@ -247,7 +247,49 @@ Ryan_DAM 是个人创作者的资产库，不是传统企业后台。UI 应突�
 9. 解除外部目录关联不会删除原文件；转托管不会产生重复资产卡片。
 10. 界面在空数据、错误、加载和超长文件名状态下仍然可用。
 
-## 12. V1 不设计的 UI
+## 12. 桌面组件与交互规范（Apple HIG & Anti-Slop）
+
+为保持现代桌面应用（Native macOS/Windows 现代体验）的高级质感，杜绝低质粗糙 UI（Anti-Slop），前端严禁使用浏览器原生系统弹窗（`window.confirm` / `window.alert` / `window.prompt`）。所有交互组件均需遵循以下组件规范：
+
+### 12.1 确认对话框（ConfirmDialog）
+- **组件位置**：`apps/web/src/components/ConfirmDialog.vue`
+- **使用场景**：删除项目、删除文件夹、移入回收站、清空回收站、解除外部目录关联、转为系统托管等所有二次确认场景。
+- **视觉特征**：
+  - 半透明毛玻璃全屏遮罩：`bg-black/30 backdrop-blur-sm`。
+  - 浮层卡片：`bg-white/95 backdrop-blur-xl rounded-2xl border border-white/40 shadow-2xl`。
+  - 语义化微光徽标（Intent Badges）：
+    - `danger`（危险操作，如彻底删除、清空回收站）：左侧图标 `bg-rose-50 text-rose-600 ring-1 ring-rose-200/60`，操作按钮 `bg-rose-600 hover:bg-rose-700 shadow-rose-500/20`。
+    - `warning`（警告操作，如解除关联）：左侧图标 `bg-amber-50 text-amber-600 ring-1 ring-amber-200/60`，操作按钮 `bg-amber-600 hover:bg-amber-700`。
+    - `default`（常规指引操作）：左侧图标 `bg-blue-50 text-accent ring-1 ring-blue-200/60`，操作按钮 `bg-accent hover:bg-blue-700`。
+- **键盘流规范**：
+  - 弹窗打开后 50ms 自动获取确认按钮焦点。
+  - 全局支持 <kbd>Enter</kbd> 触发确定操作，<kbd>Esc</kbd> 触发取消关闭。
+
+### 12.2 输入命名对话框（NameDialog）
+- **组件位置**：`apps/web/src/components/NameDialog.vue`
+- **使用场景**：新建项目、重命名项目、新建文件夹、重命名文件夹、新建标签、重命名标签、资产重命名、存储目录修改。
+- **交互规范**：
+  - 自动聚焦输入框并选中现有文本（`select()`）。
+  - 按 <kbd>Enter</kbd> 提交（内容非空时生效），按 <kbd>Esc</kbd> 取消。
+  - 防重机制：提交中状态禁用按钮，避免并发竞态。
+
+### 12.3 资产多选与交互分区（Hit Target & Range Selection）
+- **触控与点击靶心（Apple HIG 44×44px）**：卡片左上角勾选框采用透明容器包裹（`h-11 w-11`，内嵌 `h-5 w-5` 指示器），大幅提升点选命中率，避免误触打开大图预览。
+- **双模交互逻辑**：
+  - 常规浏览模式（未开启多选）：点击卡片任意区域打开沉浸式大图预览。
+  - 多选模式（已有资产被勾选，或按住 `Ctrl` / `Cmd` / `Shift` 键）：点击卡片任意区域直接切换当前资产选中态，不再弹出预览。
+- **快捷键**：
+  - <kbd>Ctrl+A</kbd> / <kbd>Cmd+A</kbd>：快速全选当前视图所有资产。
+  - <kbd>Shift + Click</kbd>：范围区间连选。
+  - <kbd>Esc</kbd>：优先退出全屏预览；若处于多选状态则快速清空选择。
+
+### 12.4 内联标签与下拉组件（Combobox & Inline Creation）
+- **使用场景**：详情预览面板（`AssetPreview.vue`）与浮动批量操作栏（`App.vue` 批量加标签）。
+- **交互规范**：
+  - 支持即时模糊搜索标签库已存在的标签。
+  - 支持直接在输入框中输入新标签名，点击或敲击 <kbd>Enter</kbd> 执行「+ 新建并打标」，无缝完成创建与绑定，杜绝跳转到标签管理页的打断式体验。
+
+## 13. V1 不设计的 UI
 
 - AI 自动标签、AI 反推提示词入口。
 - 复杂的自定义工作台/仪表盘。

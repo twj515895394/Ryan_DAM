@@ -59,6 +59,7 @@ npm run package:win
 
 ## 文档
 
+- [开发者与 Agent 规范指南](AGENTS.md)
 - [产品规格说明书](docs/Ryan_DAM_Product_Spec_v1.md)
 - [技术架构](docs/TECHNICAL_ARCHITECTURE_V1.md)
 - [UI/UX 规范](docs/UI_UX_DESIGN_V1.md)
