@@ -13,7 +13,8 @@ defineProps<{
     | "chevron-right"
     | "edit"
     | "close"
-    | "refresh";
+    | "refresh"
+    | "search";
 }>();
 </script>
 
@@ -111,6 +112,12 @@ defineProps<{
       <path d="M3 3v5h5" />
       <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
       <path d="M16 21h5v-5" />
+    </template>
+
+    <!-- 搜索放大镜 -->
+    <template v-else-if="name === 'search'">
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m20 20-4.2-4.2" />
     </template>
   </svg>
 </template>

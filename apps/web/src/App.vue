@@ -555,6 +555,17 @@ watch(searchDraft, (value) => {
   }, 300);
 });
 
+function commitSearchImmediately(): void {
+  if (searchTimer) clearTimeout(searchTimer);
+  library.assetQuery.q = searchDraft.value.trim();
+}
+
+function clearSearch(): void {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchDraft.value = "";
+  library.assetQuery.q = "";
+}
+
 const showFilters = ref(false);
 const activeFilterCount = computed(
   () =>
@@ -565,7 +576,15 @@ const activeFilterCount = computed(
 );
 
 watch(
-  () => [library.assetQuery.assetType, library.assetQuery.sizeRange, library.assetQuery.modifiedRange, library.assetQuery.sort, library.assetQuery.order],
+  () => [
+    library.assetQuery.q,
+    library.assetQuery.tagId,
+    library.assetQuery.assetType,
+    library.assetQuery.sizeRange,
+    library.assetQuery.modifiedRange,
+    library.assetQuery.sort,
+    library.assetQuery.order
+  ],
   () => {
     clearAssets();
     void refreshCurrentAssets();
@@ -863,12 +882,29 @@ onMounted(() => {
           >清空回收站</button>
         </div>
         <div v-else class="flex items-center gap-2">
-          <input
-            v-model="searchDraft"
-            type="text"
-            placeholder="搜索文件名 / 文件夹…"
-            class="w-56 rounded-xl border border-line bg-white px-3.5 py-2 text-sm outline-none transition placeholder:text-muted focus:border-accent"
-          />
+          <div class="relative w-60">
+            <SidebarIcon
+              name="search"
+              class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted/60"
+            />
+            <input
+              v-model="searchDraft"
+              type="text"
+              placeholder="搜索文件名 / 文件夹…"
+              class="w-full rounded-xl border border-line bg-white pl-8 pr-7 py-2 text-sm outline-none transition placeholder:text-muted focus:border-accent"
+              @keydown.enter="commitSearchImmediately"
+              @keydown.esc="clearSearch"
+            />
+            <button
+              v-if="searchDraft"
+              type="button"
+              class="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-muted/60 transition hover:text-ink"
+              title="清空搜索"
+              @click="clearSearch"
+            >
+              <SidebarIcon name="close" class="h-3 w-3" />
+            </button>
+          </div>
           <div class="relative">
             <button
               class="rounded-xl border px-3.5 py-2 text-sm font-medium transition"
