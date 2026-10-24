@@ -492,7 +492,7 @@ async function onDialogConfirm(value: string): Promise<void> {
       ok = await renameFolder(d.folderId, value);
       break;
     case "tag-create":
-      ok = await createTag(value);
+      ok = Boolean(await createTag(value));
       break;
     case "tag-rename":
       ok = await renameTag(d.tagId, value);

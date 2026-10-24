@@ -334,14 +334,14 @@ export async function loadTags(): Promise<void> {
   }
 }
 
-export async function createTag(name: string): Promise<boolean> {
+export async function createTag(name: string): Promise<Tag | null> {
   try {
-    await api.createTag(name);
+    const created = await api.createTag(name);
     await loadTags();
-    return true;
+    return created;
   } catch (error) {
     notify("error", errText(error));
-    return false;
+    return null;
   }
 }
 
