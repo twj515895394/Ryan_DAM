@@ -67,6 +67,7 @@ export interface AssetOut {
   created_at: string;
   updated_at: string;
   tags: TagBrief[];
+  has_prompt: boolean;
 }
 
 export interface AssetPage {

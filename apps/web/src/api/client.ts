@@ -186,6 +186,15 @@ export const api = {
     request<{ removed: number }>(`/api/v1/external-sources/${id}`, { method: "DELETE" }),
   convertToManaged: (id: number) =>
     request<AssetOut>(`/api/v1/assets/${id}/convert-to-managed`, { method: "POST" }),
+  getAssetPrompt: (id: number) =>
+    request<{ asset_id: number; prompt_text: string | null; has_prompt: boolean }>(
+      `/api/v1/assets/${id}/prompt`
+    ),
+  setAssetPrompt: (id: number, promptText: string | null) =>
+    request<{ asset_id: number; prompt_text: string | null; has_prompt: boolean }>(
+      `/api/v1/assets/${id}/prompt`,
+      { method: "PUT", json: { prompt_text: promptText } }
+    ),
 
   listTags: () => request<Tag[]>("/api/v1/tags"),
   createTag: (name: string) => request<Tag>("/api/v1/tags", { method: "POST", json: { name } }),

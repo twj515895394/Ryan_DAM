@@ -7,7 +7,13 @@ import type { AssetOut } from "../api/types";
 
 const props = defineProps<{ asset: AssetOut; selected: boolean }>();
 
-const emit = defineEmits<{ (e: "open", asset: AssetOut): void; (e: "toggle-select", asset: AssetOut): void }>();
+const emit = defineEmits<{
+  (e: "open", asset: AssetOut): void;
+  (e: "toggle-select", asset: AssetOut): void;
+  (e: "prompt", asset: AssetOut): void;
+}>();
+
+const canUsePrompt = computed(() => props.asset.asset_type === "image" || props.asset.asset_type === "video");
 
 const objectUrl = ref<string | null>(null);
 let loadToken = 0;
@@ -113,6 +119,12 @@ onUnmounted(clear);
         class="absolute bottom-1.5 left-2 rounded bg-rose-600/90 px-1.5 py-0.5 text-[10px] font-medium text-white"
         title="源文件缺失，重新扫描外部目录可检测恢复"
       >失效</span>
+      <button
+        v-if="canUsePrompt"
+        class="absolute bottom-1.5 left-1.5 hidden rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-accent group-hover:block"
+        :title="asset.has_prompt ? '查看提示词' : '添加提示词'"
+        @click.stop="emit('prompt', asset)"
+      >{{ asset.has_prompt ? "查看提示词" : "+ 提示词" }}</button>
     </div>
     <div class="px-3 py-2.5">
       <p class="truncate text-sm font-medium" :title="asset.name">{{ asset.name }}</p>

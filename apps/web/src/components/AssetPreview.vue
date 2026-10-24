@@ -6,7 +6,7 @@ import AssetIcon from "./AssetIcon.vue";
 import { library } from "../stores/library";
 import type { AssetOut } from "../api/types";
 
-const props = defineProps<{ asset: AssetOut; moveOptions: { id: number; label: string }[] }>();
+const props = defineProps<{ asset: AssetOut; moveOptions: { id: number; label: string }[]; autoOpenPrompt: boolean }>();
 
 const emit = defineEmits<{
   (e: "close"): void;
@@ -16,6 +16,7 @@ const emit = defineEmits<{
   (e: "rename", assetId: number): void;
   (e: "move", assetId: number, folderId: number): void;
   (e: "convert", assetId: number): void;
+  (e: "prompt-opened"): void;
 }>();
 
 const objectUrl = ref<string | null>(null);
@@ -160,6 +161,96 @@ function askConvert(): void {
     `确定把「${props.asset.name}」转为系统托管吗？\n\n` +
     `文件将复制到托管存储并就地更新这条资产记录（保留目录与标签），外部源文件不会被删除。`;
   if (window.confirm(message)) emit("convert", props.asset.id);
+}
+
+// ── 提示词（票 20）────────────────────────────────────────────
+
+const promptModalOpen = ref(false);
+const promptLoading = ref(false);
+const promptSaving = ref(false);
+const promptEditing = ref(false);
+const promptError = ref("");
+const promptText = ref<string | null>(null);
+const promptDraft = ref("");
+const promptCopied = ref(false);
+let promptCopyTimer: ReturnType<typeof setTimeout> | null = null;
+
+const canUsePrompt = computed(() => props.asset.asset_type === "image" || props.asset.asset_type === "video");
+
+watch(
+  () => props.asset.id,
+  () => {
+    promptModalOpen.value = false;
+    promptEditing.value = false;
+    promptError.value = "";
+    promptText.value = null;
+  }
+);
+
+watch(
+  () => props.autoOpenPrompt,
+  (value) => {
+    if (value && canUsePrompt.value) {
+      void openPromptModal();
+      emit("prompt-opened");
+    }
+  },
+  { immediate: true }
+);
+
+async function openPromptModal(): Promise<void> {
+  promptModalOpen.value = true;
+  promptError.value = "";
+  promptEditing.value = !props.asset.has_prompt;
+  promptDraft.value = "";
+  promptText.value = null;
+  if (!props.asset.has_prompt) return;
+  promptLoading.value = true;
+  try {
+    const result = await api.getAssetPrompt(props.asset.id);
+    promptText.value = result.prompt_text ?? "";
+  } catch (error) {
+    promptError.value = error instanceof Error ? error.message : "提示词加载失败";
+  } finally {
+    promptLoading.value = false;
+  }
+}
+
+function startPromptEdit(): void {
+  promptDraft.value = promptText.value ?? "";
+  promptEditing.value = true;
+  promptError.value = "";
+}
+
+async function savePrompt(): Promise<void> {
+  promptSaving.value = true;
+  promptError.value = "";
+  try {
+    const result = await api.setAssetPrompt(props.asset.id, promptDraft.value || null);
+    promptText.value = result.prompt_text;
+    props.asset.has_prompt = result.has_prompt;
+    promptEditing.value = false;
+    if (!result.has_prompt) promptModalOpen.value = false;
+  } catch (error) {
+    // keep the draft and stay in edit mode so nothing the user typed is lost
+    promptError.value = error instanceof Error ? error.message : "保存失败";
+  } finally {
+    promptSaving.value = false;
+  }
+}
+
+async function copyPrompt(): Promise<void> {
+  const text = promptText.value ?? "";
+  try {
+    await navigator.clipboard.writeText(text);
+    promptCopied.value = true;
+    if (promptCopyTimer) clearTimeout(promptCopyTimer);
+    promptCopyTimer = setTimeout(() => {
+      promptCopied.value = false;
+    }, 2000);
+  } catch {
+    promptError.value = "复制失败，请手动选择文本复制。";
+  }
 }
 
 function clearContent(): void {
@@ -458,6 +549,13 @@ onUnmounted(() => {
               @click="askConvert"
             >转为系统托管</button>
           </div>
+          <div v-if="canUsePrompt" class="mt-4 border-t border-line pt-3">
+            <p class="text-xs font-medium text-muted">提示词</p>
+            <button
+              class="mt-2 w-full rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink transition hover:bg-canvas"
+              @click="openPromptModal"
+            >{{ asset.has_prompt ? "查看提示词" : "添加提示词" }}</button>
+          </div>
           <div class="mt-4 border-t border-line pt-3">
             <p class="text-xs text-muted">路径</p>
             <p class="mt-1 break-all font-mono text-[11px] leading-5 text-muted" :title="asset.file_path">{{ asset.file_path }}</p>
@@ -471,5 +569,59 @@ onUnmounted(() => {
         </aside>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="promptModalOpen"
+        class="fixed inset-0 z-[55] flex items-center justify-center bg-black/40"
+        @click.self="promptModalOpen = false"
+      >
+        <div class="w-[560px] max-w-[92vw] rounded-2xl bg-white p-5 shadow-soft">
+          <div class="flex items-center justify-between">
+            <h3 class="truncate text-sm font-semibold">提示词 · {{ asset.name }}</h3>
+            <button class="rounded-lg px-2 py-1 text-xs text-muted transition hover:bg-canvas" @click="promptModalOpen = false">关闭</button>
+          </div>
+          <p v-if="promptError" class="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{{ promptError }}</p>
+
+          <template v-if="promptEditing">
+            <textarea
+              v-model="promptDraft"
+              rows="12"
+              placeholder="粘贴完整的图片/视频提示词…"
+              class="mt-3 w-full resize-y rounded-xl border border-line bg-white px-3 py-2.5 font-mono text-xs leading-6 outline-none focus:border-accent"
+            ></textarea>
+            <p class="mt-1.5 text-[11px] text-muted">完整多行提示词，保留原始换行与特殊字符，不拆分正负提示词。</p>
+            <div class="mt-3 flex justify-end gap-2">
+              <button
+                v-if="asset.has_prompt"
+                class="rounded-lg px-3 py-1.5 text-sm text-muted transition hover:bg-canvas"
+                @click="promptEditing = false"
+              >取消</button>
+              <button
+                class="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+                :disabled="promptSaving"
+                @click="savePrompt"
+              >{{ promptSaving ? "保存中…" : "保存" }}</button>
+            </div>
+          </template>
+
+          <template v-else>
+            <pre
+              class="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-canvas px-3 py-2.5 font-mono text-xs leading-6"
+            >{{ promptLoading ? "正在加载…" : promptText }}</pre>
+            <div class="mt-3 flex items-center justify-between">
+              <button
+                class="rounded-lg border border-line px-3 py-1.5 text-xs font-medium transition hover:bg-canvas"
+                @click="copyPrompt"
+              >{{ promptCopied ? "已复制 ✓" : "复制全文" }}</button>
+              <div class="flex gap-2">
+                <button class="rounded-lg border border-line px-3 py-1.5 text-xs font-medium transition hover:bg-canvas" @click="startPromptEdit">编辑</button>
+                <button class="rounded-lg px-3 py-1.5 text-xs text-muted transition hover:bg-canvas" @click="promptModalOpen = false">关闭</button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </Teleport>
   </Teleport>
 </template>

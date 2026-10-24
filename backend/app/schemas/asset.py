@@ -30,6 +30,7 @@ class AssetOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     tags: list[TagBrief] = []
+    has_prompt: bool = False
 
 
 class AssetPage(BaseModel):
@@ -49,3 +50,15 @@ class MoveAssetPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     folder_id: int
+
+
+class PromptPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prompt_text: str | None = Field(default=None, max_length=100_000)
+
+
+class AssetPromptOut(BaseModel):
+    asset_id: int
+    prompt_text: str | None
+    has_prompt: bool

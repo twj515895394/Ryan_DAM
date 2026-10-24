@@ -9,17 +9,39 @@ from sqlalchemy.orm import Session
 from backend.app.api.v1.deps import get_db
 from backend.app.core.errors import ApiError
 from backend.app.models.asset import Asset
-from backend.app.schemas.asset import AssetOut, AssetPage, MoveAssetPayload, RenameAssetPayload, TagBrief
+from backend.app.schemas.asset import (
+    AssetOut,
+    AssetPage,
+    AssetPromptOut,
+    MoveAssetPayload,
+    PromptPayload,
+    RenameAssetPayload,
+    TagBrief,
+)
 from backend.app.services import asset_edit_service, asset_query, tag_service, thumbnail_service
 
 router = APIRouter(tags=["assets"])
+
+PROMPT_ASSET_TYPES = ("image", "video")
 
 
 def _asset_out_with_tags(db: Session, asset: Asset) -> AssetOut:
     out = AssetOut.model_validate(asset)
     tags = tag_service.tags_for_assets(db, [asset.id]).get(asset.id, [])
     out.tags = [TagBrief(id=tag.id, name=tag.name, color=tag.color) for tag in tags]
+    out.has_prompt = asset.prompt_text is not None
     return out
+
+
+def _get_prompt_asset_or_404(db: Session, asset_id: int) -> Asset:
+    asset = db.get(Asset, asset_id)
+    # prompt is pure metadata: editing stays possible while an external file
+    # is merely 'missing', but not for trashed records
+    if asset is None or asset.status == "trashed":
+        raise ApiError("not_found", "资产不存在或已被删除。", 404)
+    if asset.asset_type not in PROMPT_ASSET_TYPES:
+        raise ApiError("unsupported_asset_type", "只有图片和视频资产支持提示词。", 422)
+    return asset
 
 
 @router.get("/assets", response_model=AssetPage)
@@ -68,8 +90,11 @@ def list_assets(
         items=[AssetOut.model_validate(item) for item in items],
     )
     tags_by_asset = tag_service.tags_for_assets(db, [item.id for item in items])
-    for item in page_out.items:
-        item.tags = [TagBrief(id=tag.id, name=tag.name, color=tag.color) for tag in tags_by_asset.get(item.id, [])]
+    for out_item, orm_item in zip(page_out.items, items):
+        out_item.tags = [
+            TagBrief(id=tag.id, name=tag.name, color=tag.color) for tag in tags_by_asset.get(out_item.id, [])
+        ]
+        out_item.has_prompt = orm_item.prompt_text is not None
     return page_out
 
 @router.patch("/assets/{asset_id}", response_model=AssetOut)
@@ -145,3 +170,27 @@ def open_asset_externally(asset_id: int, db: Session = Depends(get_db)) -> None:
     if not hasattr(os, "startfile"):
         raise ApiError("unsupported_platform", "当前平台不支持调用系统默认应用。", 400)
     os.startfile(path)  # noqa: S606 - user-initiated open of their own asset
+
+
+@router.get("/assets/{asset_id}/prompt", response_model=AssetPromptOut)
+def get_asset_prompt(asset_id: int, db: Session = Depends(get_db)) -> AssetPromptOut:
+    asset = _get_prompt_asset_or_404(db, asset_id)
+    return AssetPromptOut(
+        asset_id=asset.id,
+        prompt_text=asset.prompt_text,
+        has_prompt=asset.prompt_text is not None,
+    )
+
+
+@router.put("/assets/{asset_id}/prompt", response_model=AssetPromptOut)
+def set_asset_prompt(asset_id: int, payload: PromptPayload, db: Session = Depends(get_db)) -> AssetPromptOut:
+    """Save the full multi-line prompt verbatim (newlines and special chars kept)."""
+    asset = _get_prompt_asset_or_404(db, asset_id)
+    asset.prompt_text = payload.prompt_text if payload.prompt_text else None
+    db.commit()
+    db.refresh(asset)
+    return AssetPromptOut(
+        asset_id=asset.id,
+        prompt_text=asset.prompt_text,
+        has_prompt=asset.prompt_text is not None,
+    )

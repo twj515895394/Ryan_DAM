@@ -411,6 +411,17 @@ const previewAsset = computed(() => {
   return library.assets.items[previewIndex.value] ?? null;
 });
 
+const promptRequested = ref(false);
+
+function onCardPrompt(asset: { id: number }): void {
+  if (!library.assets) return;
+  const index = library.assets.items.findIndex((a) => a.id === asset.id);
+  if (index < 0) return;
+  savedScrollTop = galleryScroll.value?.scrollTop ?? 0;
+  previewIndex.value = index;
+  promptRequested.value = true;
+}
+
 function openPreview(assetId: number): void {
   if (!library.assets) return;
   const index = library.assets.items.findIndex((a) => a.id === assetId);
@@ -911,6 +922,7 @@ onMounted(() => {
             :selected="library.selectedAssetIds.includes(asset.id)"
             @open="openPreview(asset.id)"
             @toggle-select="toggleAssetSelection(asset.id)"
+            @prompt="onCardPrompt"
           />
         </div>
 
@@ -960,6 +972,7 @@ onMounted(() => {
       v-if="previewAsset"
       :asset="previewAsset"
       :move-options="previewMoveOptions"
+      :auto-open-prompt="promptRequested"
       @close="closePreview"
       @prev="stepPreview(-1)"
       @next="stepPreview(1)"
@@ -967,6 +980,7 @@ onMounted(() => {
       @rename="onRenameFromPreview"
       @move="onMoveFromPreview"
       @convert="onConvertFromPreview"
+      @prompt-opened="promptRequested = false"
     />
 
     <Teleport to="body">
