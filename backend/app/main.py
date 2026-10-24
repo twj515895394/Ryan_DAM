@@ -19,6 +19,7 @@ from backend.app.db.migrations import run_migrations
 from backend.app.db.session import create_session_factory, create_sqlite_engine
 from backend.app.services.import_service import bind_worker_factory
 from backend.app.services.settings_service import seed_default_settings
+from backend.app.services.thumbnail_service import bind_thumbnail_worker
 
 APP_VERSION = "0.1.0"
 READY_PREFIX = "RYAN_DAM_READY "
@@ -59,6 +60,8 @@ def create_app(api_token: str | None = None, db_path: str | None = None) -> Fast
     if db_path:
         _engine, application.state.session_factory = init_database(db_path)
         bind_worker_factory(application.state.session_factory)
+        cache_dir = Path(os.environ.get("RYAN_DAM_CACHE_DIR", str(Path(db_path).parent / "cache" / "thumbnails")))
+        bind_thumbnail_worker(application.state.session_factory, cache_dir)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=sorted(ALLOWED_ORIGINS),

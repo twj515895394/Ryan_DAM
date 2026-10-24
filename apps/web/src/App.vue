@@ -151,8 +151,25 @@ async function refreshCurrentAssets(append = false, page = 1): Promise<void> {
 
 watch([activeScope, activeProjectId, activeFolderId], () => {
   clearAssets();
+  thumbRefreshCount = 0;
   void refreshCurrentAssets();
 });
+
+let thumbRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let thumbRefreshCount = 0;
+
+function scheduleThumbnailRefresh(): void {
+  const assets = library.assets;
+  if (!assets?.items.some((a) => a.thumbnail_status === "pending")) return;
+  if (thumbRefreshCount >= 8 || thumbRefreshTimer) return;
+  thumbRefreshTimer = setTimeout(() => {
+    thumbRefreshTimer = null;
+    thumbRefreshCount += 1;
+    void refreshCurrentAssets().then(scheduleThumbnailRefresh);
+  }, 2500);
+}
+
+watch(() => library.assets, scheduleThumbnailRefresh);
 
 watch(
   () => library.importJob?.status,

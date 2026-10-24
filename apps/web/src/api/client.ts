@@ -122,6 +122,15 @@ export const api = {
     return request<AssetPage>(`/api/v1/assets?${query.toString()}`);
   },
 
+  fetchThumbnailObjectUrl: async (assetId: number): Promise<string> => {
+    const info = await getBackendInfo();
+    const response = await fetch(`${info.baseUrl}/api/v1/assets/${assetId}/thumbnail`, {
+      headers: { "X-Ryan-DAM-Token": info.token }
+    });
+    if (!response.ok) throw new Error(`thumbnail HTTP ${response.status}`);
+    return URL.createObjectURL(await response.blob());
+  },
+
   getSettings: () => request<Settings>("/api/v1/settings"),
   updateSettings: (managedRoot: string) =>
     request<Settings>("/api/v1/settings", { method: "PATCH", json: { managed_root: managedRoot } })

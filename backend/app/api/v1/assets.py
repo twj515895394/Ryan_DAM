@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend.app.api.v1.deps import get_db
@@ -10,6 +11,7 @@ from backend.app.core.errors import ApiError
 from backend.app.models.asset import Asset
 from backend.app.models.folder import Folder
 from backend.app.schemas.asset import AssetOut, AssetPage
+from backend.app.services import thumbnail_service
 
 router = APIRouter(tags=["assets"])
 
@@ -50,3 +52,14 @@ def list_assets(
         page_size=page_size,
         items=[AssetOut.model_validate(item) for item in items],
     )
+
+
+@router.get("/assets/{asset_id}/thumbnail")
+def get_asset_thumbnail(asset_id: int, db: Session = Depends(get_db)) -> FileResponse:
+    asset = db.get(Asset, asset_id)
+    if asset is None or asset.status != "active":
+        raise ApiError("not_found", "资产不存在或已被删除。", 404)
+    thumb = thumbnail_service.get_thumbnail(db, asset)
+    if thumb is None or not thumb.exists():
+        raise ApiError("thumbnail_unavailable", "缩略图尚未生成或生成失败。", 404)
+    return FileResponse(thumb, media_type="image/jpeg")

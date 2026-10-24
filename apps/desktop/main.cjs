@@ -110,7 +110,13 @@ function startBackend() {
     cwd: launch.cwd,
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, RYAN_DAM_API_TOKEN: token, RYAN_DAM_DATA_DIR: dataDirectory, PYTHONUNBUFFERED: "1" }
+    env: {
+      ...process.env,
+      RYAN_DAM_API_TOKEN: token,
+      RYAN_DAM_DATA_DIR: dataDirectory,
+      RYAN_DAM_CACHE_DIR: path.join(userDataPath, "cache", "thumbnails"),
+      PYTHONUNBUFFERED: "1"
+    }
   });
 
   const child = backendProcess;

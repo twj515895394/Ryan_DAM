@@ -101,7 +101,21 @@ def main() -> None:
 
             # end-to-end managed import into the general folder
             source = DATA_DIR / "e2e-source.png"
-            source.write_bytes(b"e2e-import-payload")
+            import struct
+            import zlib
+
+            def _chunk(tag: bytes, data: bytes) -> bytes:
+                c = tag + data
+                return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
+
+            w = h = 64
+            raw = b"".join(b"\x00" + bytes((90, 130, 200)) * w for _ in range(h))
+            source.write_bytes(
+                b"\x89PNG\r\n\x1a\n"
+                + _chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+                + _chunk(b"IDAT", zlib.compress(raw))
+                + _chunk(b"IEND", b"")
+            )
             imported = client.post(
                 "/api/v1/imports", json={"paths": [str(source)], "folder_id": general_id}
             )
@@ -130,6 +144,29 @@ def main() -> None:
                 and assets_page["items"][0]["name"] == "e2e-source.png"
                 and assets_page["items"][0]["asset_type"] == "image",
                 str(assets_page),
+            )
+
+            # thumbnail pipeline: poll until the background worker delivers a JPEG
+            asset_id = assets_page["items"][0]["id"]
+            thumb = None
+            for _ in range(100):
+                thumb = client.get(f"/api/v1/assets/{asset_id}/thumbnail")
+                if thumb.status_code == 200:
+                    break
+                time.sleep(0.2)
+            check(
+                "thumbnail generated",
+                thumb is not None
+                and thumb.status_code == 200
+                and thumb.headers.get("content-type") == "image/jpeg"
+                and len(thumb.content) > 0,
+                f"status={getattr(thumb, 'status_code', None)}",
+            )
+            cached = client.get(f"/api/v1/assets/{asset_id}/thumbnail")
+            check(
+                "thumbnail cache hit",
+                cached.status_code == 200 and cached.content == thumb.content,
+                str(cached.status_code),
             )
 
         # restart the backend to prove persistence

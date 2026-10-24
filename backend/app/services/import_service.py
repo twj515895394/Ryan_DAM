@@ -24,6 +24,7 @@ from backend.app.models.folder import Folder
 from backend.app.models.import_job import ImportJob, ImportJobItem
 from backend.app.services.folder_service import ensure_folder_path
 from backend.app.services.settings_service import get_managed_root
+from backend.app.services.thumbnail_service import enqueue_asset
 
 disk_usage = shutil.disk_usage
 
@@ -407,6 +408,8 @@ def _process_item(session_factory: sessionmaker, job_id: int, item_id: int) -> N
             # On commit failure the row rolls back; the except below then removes
             # the already-moved file so no unmanaged object is left behind.
             session.commit()
+            if asset.asset_type == "image":
+                enqueue_asset(asset.id)
     except Exception as error:  # noqa: BLE001 - any failure must not leave half files
         for candidate in cleanup_candidates:
             try:
