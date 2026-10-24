@@ -15,35 +15,26 @@
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-24，ZCode 接手 · 更新至自测/Code Review 轮）
+### 0.0 最新迭代摘要（2026-10-24，ZCode 接手 · 已交付至票 7）
 
-- **Git 分支 / 提交：** `main`，最新 `5a54f47`（自测与 code review 修复）；此前 `e1cb958`（票 5/6）、`fa9e02f`（票 4）、`c2f247d`（票 3）、`52ee8a2`（票 2）、`8f083d4` 阶段 1 数据层、`87c1ecf` 目录树 UI
-- **本轮开发目标：** 对已交付的票 2–6 做自测、code review 与 UI 实测，修复发现的问题。
-- **Code review 发现并修复（commit `5a54f47`）：**
-  1. **数据安全缺口**：资产行落库提交失败时已移动到 objects/ 的文件会成孤儿——重构为统一清理候选列表（staging + 目标路径），并补 `test_move_failure_cleans_staged_and_partial_files` 回归测试。
-  2. **测试污染真实目录（重要）**：导入类测试此前直接写 `D:\Ryan_DAM\assets`（本机 D 盘存在）——新增 `iso_client` 夹具把托管根目录隔离到临时目录，并清理了残留；现在全量测试后真实目录保持为空。
-  3. **票 5 验收遗漏**：后端支持 `allow_duplicates` 但 UI 无入口——任务面板新增「仍要导入重复项」按钮（按 item 目标目录分组重新导入）。
-  4. 文件导入传目录路径现在明确 422 提示改用「导入文件夹」；NameDialog 防双击提交；api client 桥接失败后允许重试；删除当前选中目录/项目后选区自动复位；启动时空画廊立即加载「全部资产」。
-  5. **UI 观感**：默认英文 Electron 菜单替换为精简中文菜单（文件/视图/帮助+关于）；卡片与空态的 emoji 图标替换为统一线性 SVG 图标（AssetIcon 组件，符合 UI 规范 §2.2）。
-  6. 新增 `RYAN_DAM_USER_DATA` 环境变量（应用数据整体隔离，供开发/测试）；DEV 模式浏览器预览桥（localStorage 配置，不影响打包应用）。
-- **真实应用 UI 实测（Electron + 隔离数据目录，computer-use 驱动）：**
-  - 通过：主界面/空态/侧栏渲染；新建项目与文件夹对话框（聚焦、空值禁用、回车）；目录选中后导入按钮启用联动；原生文件对话框多选导入 → 任务面板 3/3 → 画廊 3 卡片（倒序/类型/大小正确）；重复导入跳过 →「仍要导入重复项」→ 第 4 张卡片 + 成功 toast；重启后树与画廊持久化；阶段 0 诊断弹窗；应用退出干净（exit 0，无残留）。
-  - 修复后经浏览器渲染复查：SVG 图标观感符合预期（截图确认）。中文菜单待下次 GUI 启动顺带确认（标准 Menu 模板，风险低）。
-- **运行验证：** pytest **53/53**；typecheck/build/`node --check` 通过；全量测试后 `D:\Ryan_DAM\assets` 保持 0 条目。
-- **开发目标：** 复核阶段 0 未验收事项；按交接文档推进阶段 1。
-- **实际交付：**
-  1. **阶段 0 自动化复核（全部通过）：** `.venv` 环境 pytest 31/31（含原有 6 项）、`node --check`、`npm run typecheck`、`npm run build`、后端直启冒烟（READY 随机端口 → token 化 `/health` → 无 token 401 → `/shutdown` 干净退出）、GitHub API 核对 CI run `40077429948` success。**GUI 实机项（安装版启动、拖入 Chrome、多屏窗口状态）仍未人工验收，不可勾选。**
-  2. **阶段 1 数据层：** SQLAlchemy 2.1 + Alembic 1.20 + SQLite。9 张表（projects/folders/assets/external_sources/tags/asset_tags/import_jobs/import_job_items/app_settings）；启动时程序化执行 Alembic 迁移；WAL + 外键约束；数据库默认位于 `RYAN_DAM_DATA_DIR/ryan_dam.sqlite3`（Electron 已传 `%LOCALAPPDATA%\Ryan_DAM\data`）。
-  3. **阶段 1 API（/api/v1）：** 项目增删改查（重名 409、非空项目禁删）；目录树查询/创建/重命名/移动/删除（校验非法文件名、同级重名 409、循环移动 400、跨作用域/跨项目移动 400、非空目录禁删）；托管根目录设置 GET/PATCH（默认 `D:\Ryan_DAM\assets`，状态 ok/missing/unavailable，仅影响新导入）。统一错误结构 `{"error":{"code","message"}}`。
-  4. **阶段 1 UI 纵向切片：** 左侧「通用资产库 / 项目资产库」目录树真实读写 API；新建/重命名/删除（带确认与保护提示）；设置面板显示并编辑托管根目录；画廊为空态占位；阶段 0 诊断（健康检查 + 拖出 PoC）收进弹窗保留。
-  5. **工程化：** 生成并提交 `package-lock.json`；CI 改用 `npm ci` + `.venv`；npm 脚本固定走 `.venv\Scripts\python.exe`（用户要求：Python 必须用虚拟环境，禁用全局）；PyInstaller 增加 `--collect-all alembic` 与 `--add-data backend/alembic;alembic`。
-  6. **票 2：单文件托管导入**（`docs/ISSUES_BACKLOG.md` 本地拆票，用户确认暂不发布 GitHub Issues）——`POST /api/v1/imports` 创建任务 + 单后台 worker：空间预检（不足同步 400 拒绝，含需用/可用 GB）→ staging 复制 + 流式 SHA-256 → 校验 → 原子落盘 `objects/<asset-id>/<filename>` → 事务写 assets → 清理 staging；内容重复默认跳过（`allow_duplicates` 可强制）；迁移 `0002`（import_jobs.target_folder_id/allow_duplicates）；Electron 受控 `dialog:select-files` IPC；前端导入按钮（需先选目录）+ 轮询任务面板。
-  7. **票 3：资产画廊 v1**——`GET /api/v1/assets` 分页列表（按 folder_id 或 scope/project 过滤、id 倒序、排除 trashed）；前端卡片网格（类型图标、大小格式化、外部标识预留、auto-fill 列、加载更多）；目录切换联动刷新，导入完成后自动刷新树与画廊。
-  8. **票 4：文件夹批量导入 + 层级保留**——`POST /api/v1/imports/folder`：递归扫描源目录、逐文件 find-or-create 逻辑子目录镜像源层级（item 级 target_folder_id，迁移 `0003`）；Electron `dialog:select-folder` IPC；前端「导入文件夹」按钮；同名文件在不同子目录均可入库（物理路径按 asset-id 隔离）。
-  9. **票 5 + 票 6：去重收尾 + 失败重试**——去重（默认跳过/强制导入/同名隔离）已在票 2/4 落地并有测试；新增 `POST /api/v1/imports/{id}/retry-failed`（仅重跑失败项、进行中任务 409、无可重试 409、retry_count 计数）；任务面板加「重试失败项目」按钮。
-- **运行验证：** pytest **51/51**；vue-tsc / build 通过；`scripts/e2e_smoke.py` 真实 HTTP **19/19**；Electron `node --check` 通过。CI：run `40084716845` success（含票 2）；后续提交 CI 见 GitHub Actions。
-- **已知问题：** 见 §6.4；无新增阻塞问题。
-- **下一步第一任务：** 票 7（图片缩略图管线：后台生成 + 缓存 + `GET /api/v1/assets/{id}/thumbnail` + 卡片懒加载）；GUI 实机验收（票 1）仍待人工完成（可顺带确认新中文菜单）。
+- **Git 分支 / 提交：** `main`，最新 `0e6d909`
+- **当前状态一句话：** 阶段 0 自动化全过（GUI 实机项待人工）；阶段 1 数据层/目录/设置完成；按 `docs/ISSUES_BACKLOG.md`（本地拆票）完成票 2–7；全部提交 CI 绿。
+- **运行验证（最新）：** pytest **59/59**；vue-tsc / build / `node --check` 通过；e2e 真实 HTTP **21/21**；全量测试后 `D:\Ryan_DAMssets` 保持 0 条目。
+- **已知问题：** 无新增阻塞问题（历史工程注意点见 §6.4 与下方迭代记录）。
+- **下一步第一任务：** 票 8（视频/音频元数据与代表帧，FFmpeg/ffprobe 打包）；GUI 实机验收（票 1）仍待人工完成（可顺带确认新中文菜单）。
+
+### 0.0.1 迭代时间线（倒序）
+
+1. **票 7：图片缩略图管线**（`0e6d909`）——Pillow 后台 worker + 磁盘缓存（`RYAN_DAM_CACHE_DIR`，默认 `<data>/cache/thumbnails`），源文件指纹（大小+mtime）侧车：命中直接返回、源变化自动重生成、重复失败标记 `failed` 不再重试；`GET /api/v1/assets/{id}/thumbnail` 未命中入队并返回 404（`thumbnail_unavailable`）；导入完成自动为图片入队；前端卡片 blob 带 token 加载、`object-contain` 不裁切、失败回退类型图标、画廊有 pending 时 2.5s 自动刷新（上限 8 次）；e2e +2（21 项）；测试 +6（59/59）。
+2. **自测 + Code Review 轮**（`5a54f47`）——修复：①资产行提交失败时 objects/ 孤儿文件补偿（含回归测试）；②导入类测试曾污染 `D:\Ryan_DAMssets`（新增 `iso_client` 夹具隔离并清理残留）；③票 5 UI 遗漏——任务面板新增「仍要导入重复项」；④目录路径误入文件导入 422、NameDialog 防双击、删除后选区复位、启动加载全部资产；⑤UI：中文菜单替换英文默认菜单、SVG 线性图标替换 emoji（AssetIcon）、`RYAN_DAM_USER_DATA` 隔离、DEV 浏览器预览桥。
+   - **真实应用 UI 实测通过**（Electron + 隔离数据，computer-use 驱动）：新建项目/文件夹对话框、目录选中联动导入按钮、原生对话框多选导入、任务面板、重复跳过→强制导入、重启持久化、阶段 0 诊断弹窗、退出干净。
+3. **票 5 + 票 6**（`e1cb958`）——`POST /api/v1/imports/{id}/retry-failed`（仅重跑失败项、进行中 409、无可重试 409、retry_count 计数）；任务面板「重试失败项目」。
+4. **票 4**（`fa9e02f`）——`POST /api/v1/imports/folder` 层级镜像（item 级 target_folder_id，迁移 `0003`）；`dialog:select-folder` IPC。
+5. **票 3**（`c2f247d`）——`GET /api/v1/assets` 分页画廊 v1（scope/folder 过滤、卡片网格、加载更多、导入后自动刷新）。
+6. **票 2**（`52ee8a2`）——单文件托管导入全链路（空间预检同步拒绝 → staging+SHA-256 → 原子落盘 → 事务落库 → 失败清理；重复跳过/强制；迁移 `0002`；`dialog:select-files` IPC；任务面板轮询）。
+7. **阶段 1**（`8f083d4` + `87c1ecf`）——SQLAlchemy 2.1/Alembic 1.20/SQLite（WAL+外键，启动程序化迁移）9 张表；`/api/v1` 项目与目录 CRUD（循环/跨作用域/非空删除拦截）、托管根目录设置；目录树 UI；`package-lock.json` + CI 改 `npm ci` + venv 固定；PyInstaller 打包 Alembic。
+8. **阶段 0 复核**——自动化全过（pytest/node --check/typecheck/build/后端冒烟/CI `40077429948`）；**GUI 实机项（安装版启动、拖入 Chrome、多屏窗口恢复）仍未人工验收**，`docs/STAGE_0_VALIDATION.md` 保持未勾选。
+9. **拆票**（`46687d5`）——22 票垂直切片写入 `docs/ISSUES_BACKLOG.md`；用户确认本地保存、暂不发布 GitHub Issues。
 
 ### 0.1 推荐接手顺序
 
