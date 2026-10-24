@@ -1,7 +1,7 @@
 import { reactive } from "vue";
 
 import { api, ApiRequestError } from "../api/client";
-import type { AssetPage, FolderNode, ImportJob, Project, Settings } from "../api/types";
+import type { AssetPage, FolderNode, ImportJob, Project, Settings, Tag } from "../api/types";
 
 export type SizeRange = "" | "small" | "medium" | "large";
 export type ModifiedRange = "" | "today" | "week" | "month";
@@ -11,6 +11,7 @@ export interface AssetQueryState {
   assetType: "" | "image" | "video" | "audio" | "document" | "other";
   sizeRange: SizeRange;
   modifiedRange: ModifiedRange;
+  tagId: number | null;
   sort: "created_at" | "name" | "size" | "updated_at";
   order: "asc" | "desc";
 }
@@ -25,6 +26,7 @@ export interface LibraryState {
   importJob: ImportJob | null;
   assets: AssetPage | null;
   assetQuery: AssetQueryState;
+  tags: Tag[];
 }
 
 export const library = reactive<LibraryState>({
@@ -36,7 +38,8 @@ export const library = reactive<LibraryState>({
   notice: null,
   importJob: null,
   assets: null,
-  assetQuery: { q: "", assetType: "", sizeRange: "", modifiedRange: "", sort: "created_at", order: "desc" }
+  assetQuery: { q: "", assetType: "", sizeRange: "", modifiedRange: "", tagId: null, sort: "created_at", order: "desc" },
+  tags: []
 });
 
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -262,6 +265,7 @@ export async function fetchAssets(
   params: { scope: string; projectId?: number | null; folderId?: number | null },
   options: { page?: number; append?: boolean } = {}
 ): Promise<void> {
+  currentAssetScope = params;
   try {
     const page = options.page ?? 1;
     const query = library.assetQuery;
@@ -273,6 +277,7 @@ export async function fetchAssets(
       page_size: 50,
       q: query.q || undefined,
       asset_type: query.assetType || undefined,
+      tag_id: query.tagId ?? undefined,
       sort: query.sort,
       order: query.order
     };
@@ -303,6 +308,72 @@ export function clearAssetFilters(): void {
   library.assetQuery.assetType = "";
   library.assetQuery.sizeRange = "";
   library.assetQuery.modifiedRange = "";
+  library.assetQuery.tagId = null;
+}
+
+export async function loadTags(): Promise<void> {
+  try {
+    library.tags = await api.listTags();
+  } catch (error) {
+    notify("error", errText(error));
+  }
+}
+
+export async function createTag(name: string): Promise<boolean> {
+  try {
+    await api.createTag(name);
+    await loadTags();
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
+export async function renameTag(id: number, name: string): Promise<boolean> {
+  try {
+    await api.renameTag(id, name);
+    await loadTags();
+    await refreshCurrentAssetsQuiet();
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
+export async function deleteTag(id: number): Promise<boolean> {
+  try {
+    await api.deleteTag(id);
+    if (library.assetQuery.tagId === id) library.assetQuery.tagId = null;
+    await loadTags();
+    await refreshCurrentAssetsQuiet();
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
+async function refreshCurrentAssetsQuiet(): Promise<void> {
+  if (currentAssetScope) {
+    await fetchAssets(currentAssetScope);
+  }
+}
+
+// 最近一次资产查询的范围参数（供标签变更后静默刷新复用）
+let currentAssetScope: { scope: string; projectId?: number | null; folderId?: number | null } | null = null;
+
+export async function updateAssetTags(assetId: number, tagIds: number[]): Promise<boolean> {
+  try {
+    await api.setAssetTags(assetId, tagIds);
+    await loadTags();
+    await refreshCurrentAssetsQuiet();
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
 }
 
 export function clearAssets(): void {

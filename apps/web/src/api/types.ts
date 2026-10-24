@@ -38,6 +38,18 @@ export interface Settings {
   managed_root_state: "ok" | "missing" | "unavailable";
 }
 
+export interface TagBrief {
+  id: number;
+  name: string;
+  color: string | null;
+}
+
+export interface Tag extends TagBrief {
+  asset_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AssetOut {
   id: number;
   folder_id: number;
@@ -53,6 +65,7 @@ export interface AssetOut {
   file_path: string;
   created_at: string;
   updated_at: string;
+  tags: TagBrief[];
 }
 
 export interface AssetPage {

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.errors import ApiError
 from backend.app.models.asset import Asset
 from backend.app.models.folder import Folder
+from backend.app.models.tag import AssetTag
 
 SORT_FIELDS = {
     "created_at": Asset.created_at,
@@ -32,6 +33,7 @@ class AssetQuery:
     size_max: int | None = None
     modified_after: datetime | None = None
     modified_before: datetime | None = None
+    tag_id: int | None = None
     sort: str = "created_at"
     order: str = "desc"
 
@@ -95,6 +97,8 @@ def build_query(db: Session, args: AssetQuery):
         query = query.filter(Asset.updated_at >= args.modified_after)
     if args.modified_before is not None:
         query = query.filter(Asset.updated_at <= args.modified_before)
+    if args.tag_id is not None:
+        query = query.join(AssetTag, AssetTag.asset_id == Asset.id).filter(AssetTag.tag_id == args.tag_id)
 
     column = SORT_FIELDS.get(args.sort, Asset.created_at)
     direction = args.order if args.order in ("asc", "desc") else "desc"

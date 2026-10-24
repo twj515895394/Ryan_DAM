@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from backend.app.api.v1.deps import get_db
 from backend.app.core.errors import ApiError
 from backend.app.models.asset import Asset
-from backend.app.schemas.asset import AssetOut, AssetPage
-from backend.app.services import asset_query, thumbnail_service
+from backend.app.schemas.asset import AssetOut, AssetPage, TagBrief
+from backend.app.services import asset_query, tag_service, thumbnail_service
 
 router = APIRouter(tags=["assets"])
 
@@ -26,6 +26,7 @@ def list_assets(
     size_max: int | None = Query(default=None, ge=0),
     modified_after: str | None = Query(default=None),
     modified_before: str | None = Query(default=None),
+    tag_id: int | None = Query(default=None),
     sort: Literal["created_at", "updated_at", "name", "size"] = Query(default="created_at"),
     order: Literal["asc", "desc"] = Query(default="desc"),
     page: int = Query(default=1, ge=1),
@@ -42,6 +43,7 @@ def list_assets(
         size_max=size_max,
         modified_after=asset_query.parse_datetime(modified_after, "modified_after"),
         modified_before=asset_query.parse_datetime(modified_before, "modified_before"),
+        tag_id=tag_id,
         sort=sort,
         order=order,
     )
@@ -52,12 +54,16 @@ def list_assets(
         .limit(page_size)
         .all()
     )
-    return AssetPage(
+    page_out = AssetPage(
         total=total,
         page=page,
         page_size=page_size,
         items=[AssetOut.model_validate(item) for item in items],
     )
+    tags_by_asset = tag_service.tags_for_assets(db, [item.id for item in items])
+    for item in page_out.items:
+        item.tags = [TagBrief(id=tag.id, name=tag.name, color=tag.color) for tag in tags_by_asset.get(item.id, [])]
+    return page_out
 
 @router.get("/assets/{asset_id}/thumbnail")
 def get_asset_thumbnail(asset_id: int, db: Session = Depends(get_db)) -> FileResponse:

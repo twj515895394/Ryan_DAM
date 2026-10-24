@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref, watch } from "vue";
 
 import { api } from "../api/client";
 import AssetIcon from "./AssetIcon.vue";
+import { library } from "../stores/library";
 import type { AssetOut } from "../api/types";
 
 const props = defineProps<{ asset: AssetOut }>();
@@ -54,6 +55,37 @@ async function openInSystemApp(): Promise<void> {
     await api.openExternal(props.asset.id);
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "调用系统应用失败";
+  }
+}
+
+const selectedTagId = ref<number | null>(null);
+
+const availableTags = computed(() =>
+  library.tags.filter((tag) => !props.asset.tags.some((t) => t.id === tag.id))
+);
+
+async function addTag(): Promise<void> {
+  if (selectedTagId.value === null) return;
+  const next = props.asset.tags.map((t) => t.id);
+  next.push(selectedTagId.value);
+  if (await libraryUpdateTags(next)) selectedTagId.value = null;
+}
+
+async function removeTag(tagId: number): Promise<void> {
+  await libraryUpdateTags(props.asset.tags.filter((t) => t.id !== tagId).map((t) => t.id));
+}
+
+async function libraryUpdateTags(tagIds: number[]): Promise<boolean> {
+  try {
+    await api.setAssetTags(props.asset.id, tagIds);
+    // reflect locally; the gallery refresh happens via store on tag ops
+    props.asset.tags = tagIds
+      .map((id) => library.tags.find((t) => t.id === id))
+      .filter((t): t is NonNullable<typeof t> => Boolean(t))
+      .map((t) => ({ id: t.id, name: t.name, color: t.color }));
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -334,6 +366,34 @@ onUnmounted(() => {
             <div v-if="durationLabel" class="flex justify-between gap-3"><dt class="shrink-0 text-muted">时长</dt><dd>{{ durationLabel }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="shrink-0 text-muted">修改时间</dt><dd class="text-right">{{ updatedAtLabel }}</dd></div>
           </dl>
+          <div class="mt-4 border-t border-line pt-3">
+            <p class="text-xs font-medium text-muted">标签</p>
+            <div v-if="asset.tags.length > 0" class="mt-1.5 flex flex-wrap gap-1">
+              <span
+                v-for="tag in asset.tags"
+                :key="tag.id"
+                class="flex items-center gap-1 rounded bg-accent/10 px-2 py-0.5 text-xs text-accent"
+              >
+                {{ tag.name }}
+                <button class="text-accent/60 hover:text-rose-600" title="移除标签" @click="removeTag(tag.id)">×</button>
+              </span>
+            </div>
+            <p v-else class="mt-1 text-xs text-muted">暂无标签</p>
+            <div class="mt-2 flex gap-1.5">
+              <select
+                v-model="selectedTagId"
+                class="min-w-0 flex-1 rounded-lg border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-accent"
+              >
+                <option :value="null">添加标签…</option>
+                <option v-for="tag in availableTags" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
+              </select>
+              <button
+                class="shrink-0 rounded-lg bg-accent px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+                :disabled="selectedTagId === null"
+                @click="addTag"
+              >添加</button>
+            </div>
+          </div>
           <div class="mt-4 border-t border-line pt-3">
             <p class="text-xs text-muted">路径</p>
             <p class="mt-1 break-all font-mono text-[11px] leading-5 text-muted" :title="asset.file_path">{{ asset.file_path }}</p>

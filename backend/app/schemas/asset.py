@@ -5,6 +5,12 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+class TagBrief(BaseModel):
+    id: int
+    name: str
+    color: str | None
+
+
 class AssetOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,6 +27,8 @@ class AssetOut(BaseModel):
     media_duration_ms: int | None
     file_path: str
     created_at: datetime
+    updated_at: datetime
+    tags: list[TagBrief] = []
     updated_at: datetime
 
 

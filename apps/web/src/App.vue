@@ -15,15 +15,19 @@ import {
   createGeneralFolder,
   createProject,
   createProjectFolder,
+  createTag,
   deleteFolder,
   deleteProject,
+  deleteTag,
   fetchAssets,
   importFiles,
   importFolder,
   library,
   loadAll,
+  loadTags,
   renameFolder,
   renameProject,
+  renameTag,
   updateManagedRoot
 } from "./stores/library";
 
@@ -32,6 +36,8 @@ type DialogRequest =
   | { kind: "project-rename"; projectId: number; initial: string }
   | { kind: "folder-create"; scope: "general" | "project"; projectId: number | null; parentId: number | null }
   | { kind: "folder-rename"; folderId: number; initial: string }
+  | { kind: "tag-create" }
+  | { kind: "tag-rename"; tagId: number; initial: string }
   | { kind: "root-edit" };
 
 const dialog = ref<DialogRequest | null>(null);
@@ -78,16 +84,24 @@ const dialogTitle = computed(() => {
     case "project-rename": return "重命名项目";
     case "folder-create": return d.parentId === null ? "新建顶层文件夹" : "新建子文件夹";
     case "folder-rename": return "重命名文件夹";
+    case "tag-create": return "新建标签";
+    case "tag-rename": return "重命名标签";
     case "root-edit": return "修改默认托管存储位置";
   }
 });
 
 const dialogInitial = computed(() => {
   const d = dialog.value;
-  if (d?.kind === "project-rename" || d?.kind === "folder-rename") return d.initial;
+  if (d?.kind === "project-rename" || d?.kind === "folder-rename" || d?.kind === "tag-rename") return d.initial;
   if (d?.kind === "root-edit") return library.settings?.managed_root ?? "";
   return "";
 });
+
+function askDeleteTag(id: number, name: string): void {
+  if (window.confirm(`确定删除标签「${name}」吗？只有未被任何资产使用的标签可以删除。`)) {
+    void deleteTag(id);
+  }
+}
 
 function selectGeneral(): void {
   activeScope.value = "general";
@@ -249,6 +263,12 @@ async function onDialogConfirm(value: string): Promise<void> {
     case "folder-rename":
       ok = await renameFolder(d.folderId, value);
       break;
+    case "tag-create":
+      ok = await createTag(value);
+      break;
+    case "tag-rename":
+      ok = await renameTag(d.tagId, value);
+      break;
     case "root-edit":
       ok = await updateManagedRoot(value);
       break;
@@ -284,7 +304,8 @@ const activeFilterCount = computed(
   () =>
     (library.assetQuery.assetType ? 1 : 0) +
     (library.assetQuery.sizeRange ? 1 : 0) +
-    (library.assetQuery.modifiedRange ? 1 : 0)
+    (library.assetQuery.modifiedRange ? 1 : 0) +
+    (library.assetQuery.tagId !== null ? 1 : 0)
 );
 
 watch(
@@ -297,6 +318,7 @@ watch(
 
 onMounted(() => {
   void loadAll().then(() => refreshCurrentAssets());
+  void loadTags();
 });
 </script>
 
@@ -334,6 +356,47 @@ onMounted(() => {
             @rename="(n) => (dialog = { kind: 'folder-rename', folderId: n.id, initial: n.name })"
             @remove="askDeleteFolder"
           />
+        </section>
+
+        <section class="mt-5">
+          <div class="flex items-center justify-between pl-1.5 pr-1 pb-1 pt-2">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted">标签管理</p>
+            <button
+              class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-canvas hover:text-accent"
+              title="新建标签"
+              @click="dialog = { kind: 'tag-create' }"
+            >＋</button>
+          </div>
+          <p v-if="library.tags.length === 0" class="px-1.5 py-1 text-xs leading-5 text-muted">
+            还没有标签。创建全局标签后可打在任意资产上。
+          </p>
+          <div v-for="tag in library.tags" :key="tag.id" class="group/tag">
+            <div
+              class="flex items-center gap-1 rounded-lg px-1.5 py-1.5 text-sm transition-colors"
+              :class="library.assetQuery.tagId === tag.id ? 'bg-accent/10 font-medium text-accent' : 'hover:bg-canvas'"
+              role="button"
+              tabindex="0"
+              @click="library.assetQuery.tagId = library.assetQuery.tagId === tag.id ? null : tag.id"
+              @keydown.enter="library.assetQuery.tagId = library.assetQuery.tagId === tag.id ? null : tag.id"
+            >
+              <span class="min-w-0 flex-1 truncate">
+                {{ tag.name }}
+                <span class="text-[10px] text-muted">{{ tag.asset_count }}</span>
+              </span>
+              <span class="hidden shrink-0 items-center gap-0.5 group-hover/tag:flex">
+                <button
+                  class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-ink"
+                  title="重命名标签"
+                  @click.stop="dialog = { kind: 'tag-rename', tagId: tag.id, initial: tag.name }"
+                >✎</button>
+                <button
+                  class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-rose-600"
+                  title="删除标签（仅允许删除未被使用的标签）"
+                  @click.stop="askDeleteTag(tag.id, tag.name)"
+                >×</button>
+              </span>
+            </div>
+          </div>
         </section>
 
         <section class="mt-5">
@@ -467,6 +530,14 @@ onMounted(() => {
                 <option value="today">今天</option>
                 <option value="week">最近 7 天</option>
                 <option value="month">最近 30 天</option>
+              </select>
+              <label class="mt-3 block text-xs font-medium text-muted">标签</label>
+              <select
+                v-model="library.assetQuery.tagId"
+                class="mt-1 w-full rounded-lg border border-line bg-white px-2.5 py-2 text-sm outline-none focus:border-accent"
+              >
+                <option :value="null">全部标签</option>
+                <option v-for="tag in library.tags" :key="tag.id" :value="tag.id">{{ tag.name }}（{{ tag.asset_count }}）</option>
               </select>
               <div class="mt-4 flex justify-end">
                 <button class="rounded-lg px-3 py-1.5 text-xs text-accent transition hover:bg-canvas" @click="clearAssetFilters">清除筛选</button>

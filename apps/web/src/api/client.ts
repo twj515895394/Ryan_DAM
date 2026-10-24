@@ -6,7 +6,8 @@ import type {
   FolderOut,
   ImportJob,
   Project,
-  Settings
+  Settings,
+  Tag
 } from "./types";
 
 interface BackendInfo {
@@ -162,6 +163,14 @@ export const api = {
   },
 
   openExternal: (assetId: number) => request<void>(`/api/v1/assets/${assetId}/open`, { method: "POST" }),
+
+  listTags: () => request<Tag[]>("/api/v1/tags"),
+  createTag: (name: string) => request<Tag>("/api/v1/tags", { method: "POST", json: { name } }),
+  renameTag: (id: number, name: string) =>
+    request<Tag>(`/api/v1/tags/${id}`, { method: "PATCH", json: { name } }),
+  deleteTag: (id: number) => request<void>(`/api/v1/tags/${id}`, { method: "DELETE" }),
+  setAssetTags: (assetId: number, tagIds: number[]) =>
+    request<Tag[]>(`/api/v1/assets/${assetId}/tags`, { method: "PUT", json: { tag_ids: tagIds } }),
 
   getSettings: () => request<Settings>("/api/v1/settings"),
   updateSettings: (managedRoot: string) =>

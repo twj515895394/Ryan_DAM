@@ -109,6 +109,15 @@ onUnmounted(clear);
         <span>·</span>
         <span>{{ sizeLabel }}</span>
       </div>
+      <div v-if="asset.tags.length > 0" class="mt-1.5 flex flex-wrap gap-1">
+        <span
+          v-for="tag in asset.tags.slice(0, 2)"
+          :key="tag.id"
+          class="max-w-[80px] truncate rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent"
+          :title="tag.name"
+        >{{ tag.name }}</span>
+        <span v-if="asset.tags.length > 2" class="rounded bg-canvas px-1.5 py-0.5 text-[10px] text-muted">+{{ asset.tags.length - 2 }}</span>
+      </div>
     </div>
   </div>
 </template>
