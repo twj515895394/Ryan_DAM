@@ -23,10 +23,10 @@ async function checkBackend() {
   try {
     const info = backendInfo.value ?? (await window.ryanDam.getBackendInfo());
     backendInfo.value = info;
-    const response = await fetch(${info.baseUrl}/health`, {
+    const response = await fetch(`${info.baseUrl}/health`, {
       headers: { "X-Ryan-DAM-Token": info.token }
     });
-    if (!response.ok) throw new Error(§本地服务返回 HTTP ${response.status}`);
+    if (!response.ok) throw new Error(`本地服务返回 HTTP ${response.status}`);
     const health = (await response.json()) as { version: string };
     apiVersion.value = health.version;
     backendState.value = "online";
