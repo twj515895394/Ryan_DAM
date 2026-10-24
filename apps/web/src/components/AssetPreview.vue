@@ -2,6 +2,7 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 
 import { api } from "../api/client";
+import AssetIcon from "./AssetIcon.vue";
 import type { AssetOut } from "../api/types";
 
 const props = defineProps<{ asset: AssetOut }>();
@@ -15,8 +16,17 @@ const emit = defineEmits<{
 const objectUrl = ref<string | null>(null);
 const loading = ref(false);
 const errorMessage = ref("");
+const playbackFailed = ref(false);
 const fitWindow = ref(true);
 let loadToken = 0;
+
+async function openInSystemApp(): Promise<void> {
+  try {
+    await api.openExternal(props.asset.id);
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "调用系统应用失败";
+  }
+}
 
 const typeLabel = computed(() => {
   switch (props.asset.asset_type) {
@@ -69,6 +79,7 @@ function clearContent(): void {
 async function loadContent(): Promise<void> {
   clearContent();
   errorMessage.value = "";
+  playbackFailed.value = false;
   loading.value = true;
   fitWindow.value = true;
   const token = ++loadToken;
@@ -150,6 +161,28 @@ onUnmounted(() => {
             class="select-none"
             alt=""
           />
+          <video
+            v-else-if="objectUrl && asset.asset_type === 'video' && !playbackFailed"
+            :src="objectUrl"
+            class="max-h-full max-w-full"
+            controls
+            @error="playbackFailed = true"
+          />
+          <div
+            v-else-if="objectUrl && asset.asset_type === 'audio' && !playbackFailed"
+            class="flex w-full max-w-md flex-col items-center gap-6 px-6"
+          >
+            <AssetIcon type="audio" class="h-24 w-24 text-white/60" />
+            <audio :src="objectUrl" class="w-full" controls @error="playbackFailed = true" />
+          </div>
+          <div v-else-if="objectUrl" class="flex flex-col items-center gap-4 text-white/70">
+            <span class="text-4xl">⚠️</span>
+            <p class="text-sm">浏览器无法直接播放该格式</p>
+            <button
+              class="rounded-xl bg-white/15 px-4 py-2 text-sm text-white transition hover:bg-white/25"
+              @click="openInSystemApp"
+            >在系统默认应用中打开</button>
+          </div>
           <div v-else class="flex flex-col items-center gap-3 text-white/70">
             <span class="text-4xl">{{ asset.asset_type === 'audio' ? '🎵' : asset.asset_type === 'video' ? '🎬' : '📄' }}</span>
             <p class="text-sm">该类型预览将在后续阶段接入</p>

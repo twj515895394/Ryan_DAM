@@ -75,3 +75,39 @@ def test_content_missing_file_404(iso_client, headers, app, tmp_path) -> None:
     response = iso_client.get(f"/api/v1/assets/{asset_id}/content", headers=headers)
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "content_unavailable"
+
+
+def test_content_supports_range_requests(iso_client, headers, tmp_path) -> None:
+    payload = bytes(range(256)) * 4  # 1024 bytes with known content
+    asset_id = import_bytes(iso_client, headers, "range.bin", payload, tmp_path)
+
+    response = iso_client.get(f"/api/v1/assets/{asset_id}/content", headers={**headers, "Range": "bytes=100-199"})
+    assert response.status_code == 206
+    assert response.content == payload[100:200]
+    assert response.headers["content-range"] == f"bytes 100-199/{len(payload)}"
+
+    suffix = iso_client.get(f"/api/v1/assets/{asset_id}/content", headers={**headers, "Range": "bytes=-16"})
+    assert suffix.status_code == 206
+    assert suffix.content == payload[-16:]
+
+    full = iso_client.get(f"/api/v1/assets/{asset_id}/content", headers=headers)
+    assert full.status_code == 200
+    assert full.content == payload
+
+
+def test_open_asset_externally_requires_registered_file(iso_client, headers, app, tmp_path, monkeypatch) -> None:
+    import os
+
+    opened: list[str] = []
+    monkeypatch.setattr(os, "startfile", lambda path: opened.append(path), raising=False)
+
+    asset_id = import_bytes(iso_client, headers, "openme.txt", b"open me", tmp_path)
+    response = iso_client.post(f"/api/v1/assets/{asset_id}/open", headers=headers)
+    assert response.status_code == 204
+    assert len(opened) == 1 and opened[0].endswith("openme.txt")
+
+    missing = iso_client.post("/api/v1/assets/9999/open", headers=headers)
+    assert missing.status_code == 404
+
+    no_token = iso_client.post("/api/v1/assets/1/open", headers={"Host": "127.0.0.1"})
+    assert no_token.status_code == 401

@@ -67,7 +67,10 @@ def get_asset_thumbnail(asset_id: int, db: Session = Depends(get_db)) -> FileRes
 
 @router.get("/assets/{asset_id}/content")
 def get_asset_content(asset_id: int, db: Session = Depends(get_db)) -> FileResponse:
-    """Serve the original file of a registered asset (path comes from the DB only)."""
+    """Serve the original file of a registered asset (path comes from the DB only).
+
+    Starlette's FileResponse honours Range requests (206) so players can seek.
+    """
     import mimetypes
     from pathlib import Path as FsPath
 
@@ -79,3 +82,19 @@ def get_asset_content(asset_id: int, db: Session = Depends(get_db)) -> FileRespo
         raise ApiError("content_unavailable", "资产文件缺失或不可访问。", 404)
     media_type = asset.mime_type or mimetypes.guess_type(asset.name)[0] or "application/octet-stream"
     return FileResponse(path, media_type=media_type, filename=asset.name)
+
+
+@router.post("/assets/{asset_id}/open", status_code=204, response_model=None)
+def open_asset_externally(asset_id: int, db: Session = Depends(get_db)) -> None:
+    """Open the asset with the OS default application (Windows: os.startfile)."""
+    import os
+
+    asset = db.get(Asset, asset_id)
+    if asset is None or asset.status != "active":
+        raise ApiError("not_found", "资产不存在或已被删除。", 404)
+    path = asset.file_path
+    if not os.path.isfile(path):
+        raise ApiError("content_unavailable", "资产文件缺失或不可访问。", 404)
+    if not hasattr(os, "startfile"):
+        raise ApiError("unsupported_platform", "当前平台不支持调用系统默认应用。", 400)
+    os.startfile(path)  # noqa: S606 - user-initiated open of their own asset

@@ -140,6 +140,8 @@ export const api = {
     return URL.createObjectURL(await response.blob());
   },
 
+  openExternal: (assetId: number) => request<void>(`/api/v1/assets/${assetId}/open`, { method: "POST" }),
+
   getSettings: () => request<Settings>("/api/v1/settings"),
   updateSettings: (managedRoot: string) =>
     request<Settings>("/api/v1/settings", { method: "PATCH", json: { managed_root: managedRoot } })
