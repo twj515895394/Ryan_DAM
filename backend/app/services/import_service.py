@@ -408,7 +408,7 @@ def _process_item(session_factory: sessionmaker, job_id: int, item_id: int) -> N
             # On commit failure the row rolls back; the except below then removes
             # the already-moved file so no unmanaged object is left behind.
             session.commit()
-            if asset.asset_type == "image":
+            if asset.asset_type in ("image", "video", "audio"):
                 enqueue_asset(asset.id)
     except Exception as error:  # noqa: BLE001 - any failure must not leave half files
         for candidate in cleanup_candidates:

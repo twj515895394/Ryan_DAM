@@ -28,6 +28,18 @@ const sizeLabel = computed(() => {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 });
 
+const durationLabel = computed(() => {
+  const ms = props.asset.media_duration_ms;
+  if (ms === null || ms < 0) return null;
+  const totalSeconds = Math.round(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+});
+
 function clear(): void {
   if (objectUrl.value) {
     URL.revokeObjectURL(objectUrl.value);
@@ -37,7 +49,10 @@ function clear(): void {
 
 async function loadThumbnail(): Promise<void> {
   clear();
-  if (props.asset.asset_type !== "image") return;
+  const type = props.asset.asset_type;
+  const fetchable =
+    type === "image" || type === "video" || (type === "audio" && props.asset.thumbnail_status === "ready");
+  if (!fetchable) return;
   const token = ++loadToken;
   try {
     const url = await api.fetchThumbnailObjectUrl(props.asset.id);
@@ -70,6 +85,10 @@ onUnmounted(clear);
         alt=""
       />
       <AssetIcon v-else :type="asset.asset_type" class="h-12 w-12 text-muted/70" />
+      <span
+        v-if="durationLabel"
+        class="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] leading-none text-white"
+      >{{ durationLabel }}</span>
       <span
         v-if="asset.source_type === 'external'"
         class="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"

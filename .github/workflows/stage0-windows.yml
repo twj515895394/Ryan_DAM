@@ -51,6 +51,19 @@ jobs:
         run: python -m venv .venv
       - name: Install Python dependencies
         run: .venv\Scripts\python.exe -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - name: Download FFmpeg bundle
+        shell: pwsh
+        run: |
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip"
+          Invoke-WebRequest -Uri $url -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-tmp
+          $bin = Get-ChildItem -Path ffmpeg-tmp -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+          if (-not $bin) { throw "ffmpeg.exe not found in downloaded archive." }
+          $dir = $bin.DirectoryName
+          New-Item -ItemType Directory -Force -Path ffmpeg-bin | Out-Null
+          Copy-Item "$dir\ffmpeg.exe" -Destination ffmpeg-bin\
+          Copy-Item "$dir\ffprobe.exe" -Destination ffmpeg-bin\
+          "RYAN_DAM_FFMPEG_DIR=$pwd\ffmpeg-bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Check Electron entry points
         run: |
           node --check apps/desktop/main.cjs

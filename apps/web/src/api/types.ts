@@ -47,6 +47,9 @@ export interface AssetOut {
   size_bytes: number;
   source_type: "managed" | "external";
   thumbnail_status: string;
+  media_width: number | null;
+  media_height: number | null;
+  media_duration_ms: number | null;
   created_at: string;
 }
 

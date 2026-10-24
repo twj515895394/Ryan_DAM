@@ -19,6 +19,7 @@ from PIL import Image, ImageOps
 from sqlalchemy.orm import Session, sessionmaker
 
 from backend.app.models.asset import Asset
+from backend.app.services import media_service
 
 THUMBNAIL_BOX = (512, 512)
 JPEG_QUALITY = 85
@@ -65,7 +66,7 @@ def _read_meta(path: Path) -> dict | None:
 
 def get_thumbnail(db: Session, asset: Asset) -> Path | None:
     """Return a valid cached thumbnail, or None after (re-)enqueuing generation."""
-    if asset.asset_type != "image" or not asset.file_path:
+    if asset.asset_type not in ("image", "video", "audio") or not asset.file_path:
         return None
     factory, worker, directory = _parts()
     thumb_path = directory / f"{asset.id}.jpg"
@@ -75,18 +76,21 @@ def get_thumbnail(db: Session, asset: Asset) -> Path | None:
     except OSError:
         return None
     fingerprint = {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
-    if thumb_path.exists() and meta and meta.get("size") == fingerprint["size"] and meta.get("mtime_ns") == fingerprint["mtime_ns"]:
+    matches = bool(
+        meta
+        and meta.get("size") == fingerprint["size"]
+        and meta.get("mtime_ns") == fingerprint["mtime_ns"]
+    )
+    if matches and thumb_path.exists():
         if asset.thumbnail_status != "ready":
             asset.thumbnail_status = "ready"
             db.commit()
         return thumb_path
-    if (
-        meta
-        and meta.get("size") == fingerprint["size"]
-        and meta.get("mtime_ns") == fingerprint["mtime_ns"]
-        and meta.get("failed")
-    ):
-        return None  # already failed for this exact source; wait for source change
+    if matches and (meta.get("failed") or meta.get("no_cover")):
+        if asset.thumbnail_status != "ready" and meta.get("no_cover"):
+            asset.thumbnail_status = "ready"
+            db.commit()
+        return None  # terminal for this source version; wait for a source change
 
     worker.submit(asset.id)
     return None
@@ -135,7 +139,7 @@ class ThumbnailWorker:
 def _process_asset(factory: sessionmaker, directory: Path, asset_id: int) -> None:
     with factory() as session:
         asset = session.get(Asset, asset_id)
-        if asset is None or asset.asset_type != "image" or not asset.file_path:
+        if asset is None or asset.asset_type not in ("image", "video", "audio") or not asset.file_path:
             return
         try:
             stat = os.stat(asset.file_path)
@@ -145,16 +149,43 @@ def _process_asset(factory: sessionmaker, directory: Path, asset_id: int) -> Non
             session.commit()
             return
         fingerprint = {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+        destination = directory / f"{asset_id}.jpg"
         try:
-            _render(asset.file_path, directory / f"{asset_id}.jpg")
+            if asset.asset_type == "image":
+                _render_image(asset.file_path, destination)
+                meta = dict(fingerprint)
+            else:
+                meta = _render_media(asset, destination)
+                meta.update(fingerprint)
         except Exception:  # noqa: BLE001 - any decode/save error marks failure
             asset.thumbnail_status = "failed"
             _write_meta(directory, asset_id, {**fingerprint, "failed": True})
             session.commit()
             return
         asset.thumbnail_status = "ready"
-        _write_meta(directory, asset_id, fingerprint)
+        _write_meta(directory, asset_id, meta)
         session.commit()
+
+
+def _render_media(asset: Asset, destination: Path) -> dict:
+    """Video: representative frame + duration/size. Audio: duration + optional cover."""
+    probe = media_service.probe(asset.file_path)
+    if probe is None:
+        raise RuntimeError("ffprobe unavailable or media unreadable")
+    if probe.get("duration_ms") is not None:
+        asset.media_duration_ms = probe["duration_ms"]
+    meta: dict = {}
+    if asset.asset_type == "video":
+        if not media_service.extract_frame(asset.file_path, destination):
+            raise RuntimeError("frame extraction failed")
+        asset.media_width = probe.get("width")
+        asset.media_height = probe.get("height")
+    else:
+        if media_service.extract_cover(asset.file_path, destination):
+            meta["cover"] = True
+        else:
+            meta["no_cover"] = True
+    return meta
 
 
 def _write_meta(directory: Path, asset_id: int, payload: dict) -> None:
@@ -166,7 +197,7 @@ def _write_meta(directory: Path, asset_id: int, payload: dict) -> None:
         pass
 
 
-def _render(source_path: str, destination: Path) -> None:
+def _render_image(source_path: str, destination: Path) -> None:
     with Image.open(source_path) as image:
         image = ImageOps.exif_transpose(image)
         image.thumbnail(THUMBNAIL_BOX)

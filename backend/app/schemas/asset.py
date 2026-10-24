@@ -16,6 +16,9 @@ class AssetOut(BaseModel):
     size_bytes: int
     source_type: str
     thumbnail_status: str
+    media_width: int | None
+    media_height: int | None
+    media_duration_ms: int | None
     created_at: datetime
 
 

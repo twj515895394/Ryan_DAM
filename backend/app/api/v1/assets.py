@@ -61,5 +61,5 @@ def get_asset_thumbnail(asset_id: int, db: Session = Depends(get_db)) -> FileRes
         raise ApiError("not_found", "资产不存在或已被删除。", 404)
     thumb = thumbnail_service.get_thumbnail(db, asset)
     if thumb is None or not thumb.exists():
-        raise ApiError("thumbnail_unavailable", "缩略图尚未生成或生成失败。", 404)
+        raise ApiError("thumbnail_unavailable", "缩略图尚未生成、生成失败或该资产没有可用封面。", 404)
     return FileResponse(thumb, media_type="image/jpeg")
