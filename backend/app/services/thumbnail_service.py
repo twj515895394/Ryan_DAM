@@ -152,7 +152,9 @@ def _process_asset(factory: sessionmaker, directory: Path, asset_id: int) -> Non
         destination = directory / f"{asset_id}.jpg"
         try:
             if asset.asset_type == "image":
-                _render_image(asset.file_path, destination)
+                width, height = _render_image(asset.file_path, destination)
+                asset.media_width = width
+                asset.media_height = height
                 meta = dict(fingerprint)
             else:
                 meta = _render_media(asset, destination)
@@ -197,9 +199,11 @@ def _write_meta(directory: Path, asset_id: int, payload: dict) -> None:
         pass
 
 
-def _render_image(source_path: str, destination: Path) -> None:
+def _render_image(source_path: str, destination: Path) -> tuple[int, int]:
+    """Render the thumbnail; return the original image dimensions for the asset row."""
     with Image.open(source_path) as image:
         image = ImageOps.exif_transpose(image)
+        original_size = image.size
         image.thumbnail(THUMBNAIL_BOX)
         if image.mode in ("RGBA", "LA", "P"):
             rgba = image.convert("RGBA")
@@ -209,3 +213,4 @@ def _render_image(source_path: str, destination: Path) -> None:
         elif image.mode != "RGB":
             image = image.convert("RGB")
         image.save(destination, "JPEG", quality=JPEG_QUALITY)
+    return original_size

@@ -131,6 +131,15 @@ export const api = {
     return URL.createObjectURL(await response.blob());
   },
 
+  fetchContentObjectUrl: async (assetId: number): Promise<string> => {
+    const info = await getBackendInfo();
+    const response = await fetch(`${info.baseUrl}/api/v1/assets/${assetId}/content`, {
+      headers: { "X-Ryan-DAM-Token": info.token }
+    });
+    if (!response.ok) throw new Error(`content HTTP ${response.status}`);
+    return URL.createObjectURL(await response.blob());
+  },
+
   getSettings: () => request<Settings>("/api/v1/settings"),
   updateSettings: (managedRoot: string) =>
     request<Settings>("/api/v1/settings", { method: "PATCH", json: { managed_root: managedRoot } })

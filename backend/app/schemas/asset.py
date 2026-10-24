@@ -19,7 +19,9 @@ class AssetOut(BaseModel):
     media_width: int | None
     media_height: int | None
     media_duration_ms: int | None
+    file_path: str
     created_at: datetime
+    updated_at: datetime
 
 
 class AssetPage(BaseModel):

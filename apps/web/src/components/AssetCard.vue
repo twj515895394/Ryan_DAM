@@ -7,6 +7,8 @@ import type { AssetOut } from "../api/types";
 
 const props = defineProps<{ asset: AssetOut }>();
 
+const emit = defineEmits<{ (e: "open", asset: AssetOut): void }>();
+
 const objectUrl = ref<string | null>(null);
 let loadToken = 0;
 
@@ -76,7 +78,13 @@ onUnmounted(clear);
 </script>
 
 <template>
-  <div class="group overflow-hidden rounded-2xl border border-line bg-white transition-shadow hover:shadow-soft">
+  <div
+    class="group cursor-zoom-in overflow-hidden rounded-2xl border border-line bg-white transition-shadow hover:shadow-soft"
+    role="button"
+    tabindex="0"
+    @click="emit('open', asset)"
+    @keydown.enter="emit('open', asset)"
+  >
     <div class="relative flex aspect-square items-center justify-center overflow-hidden bg-canvas">
       <img
         v-if="objectUrl"

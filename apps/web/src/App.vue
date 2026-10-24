@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 
 import FolderTree from "./components/FolderTree.vue";
 import AssetCard from "./components/AssetCard.vue";
 import AssetIcon from "./components/AssetIcon.vue";
+import AssetPreview from "./components/AssetPreview.vue";
 import ImportJobPanel from "./components/ImportJobPanel.vue";
 import NameDialog from "./components/NameDialog.vue";
 import Stage0Panel from "./components/Stage0Panel.vue";
@@ -37,6 +38,9 @@ const showStage0 = ref(false);
 const activeScope = ref<"general" | "project">("general");
 const activeProjectId = ref<number | null>(null);
 const activeFolderId = ref<number | null>(null);
+const previewIndex = ref<number | null>(null);
+const galleryScroll = ref<HTMLElement | null>(null);
+let savedScrollTop = 0;
 
 function findFolder(nodes: FolderNode[], id: number): FolderNode | null {
   for (const node of nodes) {
@@ -143,10 +147,17 @@ async function startFolderImport(): Promise<void> {
 }
 
 async function refreshCurrentAssets(append = false, page = 1): Promise<void> {
+  const scrollEl = galleryScroll.value;
+  const keepScroll = !append ? scrollEl?.scrollTop ?? 0 : null;
   await fetchAssets(
     { scope: activeScope.value, projectId: activeProjectId.value, folderId: activeFolderId.value },
     { page, append }
   );
+  if (keepScroll !== null && galleryScroll.value) {
+    void nextTick(() => {
+      if (galleryScroll.value) galleryScroll.value.scrollTop = keepScroll;
+    });
+  }
 }
 
 watch([activeScope, activeProjectId, activeFolderId], () => {
@@ -186,6 +197,33 @@ function loadMoreAssets(): void {
   const assets = library.assets;
   if (!assets) return;
   void refreshCurrentAssets(true, assets.page + 1);
+}
+
+const previewAsset = computed(() => {
+  if (previewIndex.value === null || !library.assets) return null;
+  return library.assets.items[previewIndex.value] ?? null;
+});
+
+function openPreview(assetId: number): void {
+  if (!library.assets) return;
+  const index = library.assets.items.findIndex((a) => a.id === assetId);
+  if (index < 0) return;
+  savedScrollTop = galleryScroll.value?.scrollTop ?? 0;
+  previewIndex.value = index;
+}
+
+function closePreview(): void {
+  previewIndex.value = null;
+  void nextTick(() => {
+    if (galleryScroll.value) galleryScroll.value.scrollTop = savedScrollTop;
+  });
+}
+
+function stepPreview(delta: number): void {
+  const assets = library.assets;
+  if (previewIndex.value === null || !assets || assets.items.length === 0) return;
+  const count = assets.items.length;
+  previewIndex.value = ((previewIndex.value + delta) % count + count) % count;
 }
 
 async function onDialogConfirm(value: string): Promise<void> {
@@ -367,13 +405,18 @@ onMounted(() => {
         </div>
       </header>
 
-      <main class="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-6">
+      <main ref="galleryScroll" class="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-6">
         <div
           v-if="library.assets && library.assets.items.length > 0"
           class="grid gap-4"
           style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr))"
         >
-          <AssetCard v-for="asset in library.assets.items" :key="asset.id" :asset="asset" />
+          <AssetCard
+            v-for="asset in library.assets.items"
+            :key="asset.id"
+            :asset="asset"
+            @open="openPreview(asset.id)"
+          />
         </div>
 
         <div v-if="library.assets && library.assets.items.length < library.assets.total" class="mt-6 flex justify-center">
@@ -417,6 +460,14 @@ onMounted(() => {
         </div>
       </Transition>
     </Teleport>
+
+    <AssetPreview
+      v-if="previewAsset"
+      :asset="previewAsset"
+      @close="closePreview"
+      @prev="stepPreview(-1)"
+      @next="stepPreview(1)"
+    />
 
     <ImportJobPanel />
 

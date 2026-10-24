@@ -50,7 +50,9 @@ export interface AssetOut {
   media_width: number | null;
   media_height: number | null;
   media_duration_ms: number | null;
+  file_path: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface AssetPage {
