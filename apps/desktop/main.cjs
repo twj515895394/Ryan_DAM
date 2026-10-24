@@ -24,7 +24,7 @@ let lastWindowBounds = { width: 1440, height: 900 };
 let saveWindowTimer = null;
 
 function log(level, message) {
-  const line = ${new Date().toISOString()} [${level}] ${message}§n`;
+  const line = `${new Date().toISOString()} [${level}] ${message}\n`;
   try {
     fs.mkdirSync(logDirectory, { recursive: true });
     fs.appendFileSync(logFile, line, "utf8");
@@ -72,7 +72,7 @@ function persistWindowState() {
     fs.mkdirSync(userDataPath, { recursive: true });
     fs.writeFileSync(windowStateFile, JSON.stringify(state, null, 2), "utf8");
   } catch (error) {
-    log("ERROR", §Could not persist window state: ${error.message}`);
+    log("ERROR", `Could not persist window state: ${error.message}`);
   }
 }
 
@@ -88,7 +88,7 @@ function getBackendCommand() {
   if (app.isPackaged) {
     const executable = path.join(process.resourcesPath, "backend", "ryan-dam-api.exe");
     if (!fs.existsSync(executable)) {
-      throw new Error(§Bundled Python backend was not found: ${executable}`nRun the Windows package command after installing backend requirements.`);
+      throw new Error(`Bundled Python backend was not found: ${executable}\nRun the Windows package command after installing backend requirements.`);
     }
     return { command: executable, args: [], cwd: userDataPath };
   }
@@ -104,7 +104,7 @@ function startBackend() {
   const dataDirectory = path.join(userDataPath, "data");
   fs.mkdirSync(dataDirectory, { recursive: true });
   const launch = getBackendCommand();
-  log("INFO", §Starting backend command: ${path.basename(launch.command)}`);
+  log("INFO", `Starting backend command: ${path.basename(launch.command)}`);
   backendProcess = spawn(launch.command, launch.args, {
     cwd: launch.cwd,
     windowsHide: true,
@@ -133,19 +133,19 @@ function startBackend() {
       if (line.startsWith(readyPrefix)) {
         try {
           const ready = JSON.parse(line.slice(readyPrefix.length));
-          backendInfo = { baseUrl: §http://127.0.0.1:${ready.port}`, token, version: ready.version || "0.1.0" };
+          backendInfo = { baseUrl: `http://127.0.0.1:${ready.port}`, token, version: ready.version || "0.1.0" };
           if (!settled) {
             settled = true;
             clearTimeout(timeout);
-            log("INFO", §Backend ready on 127.0.0.1:${ready.port}`);
+            log("INFO", `Backend ready on 127.0.0.1:${ready.port}`);
             resolve(backendInfo);
           }
         } catch (error) {
-          fail(new Error(§Invalid backend readiness payload: ${error.message}`));
+          fail(new Error(`Invalid backend readiness payload: ${error.message}`));
         }
         return;
       }
-      log("INFO", §[backend stdout] ${line}`);
+      log("INFO", `[backend stdout] ${line}`);
     }
 
     child.stdout.on("data", (chunk) => {
@@ -154,15 +154,15 @@ function startBackend() {
       stdoutBuffer = lines.pop() || "";
       lines.forEach(handleLine);
     });
-    child.stderr.on("data", (chunk) => log("INFO", §[backend stderr] ${chunk.toString("utf8").trimEnd()}`));
-    child.on("error", (error) => fail(new Error(§Failed to start Python backend: ${error.message}`));
+    child.stderr.on("data", (chunk) => log("INFO", `[backend stderr] ${chunk.toString("utf8").trimEnd()}`));
+    child.on("error", (error) => fail(new Error(`Failed to start Python backend: ${error.message}`));
     child.on("close", (code) => {
       if (!settled) {
-        fail(new Error(§Python backend exited before becoming ready (code ${code}).`));
+        fail(new Error(`Python backend exited before becoming ready (code ${code}).`));
         return;
       }
       if (!isQuitting && mainWindow) {
-        log("ERROR", §Python backend exited unexpectedly (code ${code}).`);
+        log("ERROR", `Python backend exited unexpectedly (code ${code}).`);
         dialog.showErrorBox("Ryan_DAM 本地服务已停止", "本地 Python 服务意外退出。请查看 %LOCALAPPDATA%\\\\Ryan_DAM\\\\logs\\\\desktop.log 后重新启动应用。");
         app.quit();
       }
@@ -176,7 +176,7 @@ async function stopBackend() {
   if (!child || child.exitCode !== null || child.signalCode !== null) return;
   if (backendInfo) {
     try {
-      await fetch(${backendInfo.baseUrl}/shutdown`, { method: "POST", headers: { "X-Ryan-DAM-Token": backendInfo.token } });
+      await fetch(`${backendInfo.baseUrl}/shutdown`, { method: "POST", headers: { "X-Ryan-DAM-Token": backendInfo.token } });
     } catch (_) {}
   }
   await Promise.race([
@@ -227,7 +227,7 @@ ipcMain.handle("backend:get-info", () => {
 
 ipcMain.handle("drag:create-sample", async () => {
   await fs.promises.mkdir(sampleDirectory, { recursive: true });
-  const content = ["Ryan_DAM stage-0 native file drag test", "This is a generated test file. It is safe to delete.", §Created at: ${new Date().toISOString()}`].join("\\r\\n");
+  const content = ["Ryan_DAM stage-0 native file drag test", "This is a generated test file. It is safe to delete.", `Created at: ${new Date().toISOString()}`].join("\r\n");
   await fs.promises.writeFile(samplePath, content, "utf8");
   dragSamplePath = samplePath;
   log("INFO", "Created the stage-0 drag sample.");
@@ -262,7 +262,7 @@ app.whenReady().then(async () => {
     createWindow();
   } catch (error) {
     log("ERROR", error instanceof Error ? error.stack || error.message : String(error));
-    dialog.showErrorBox("Ryan_DAM 启动失败", §无法启动本地 Python 服务。请安装 backend/requirements.txt 中的依赖，或查看日志：${logFile}`n`n${error instanceof Error ? error.message : String(error)}`);
+    dialog.showErrorBox("Ryan_DAM 启动失败", `无法启动本地 Python 服务。请安装 backend/requirements.txt 中的依赖，或查看日志：${logFile}\n\n${error instanceof Error ? error.message : String(error)}`);
     app.quit();
   }
 });
