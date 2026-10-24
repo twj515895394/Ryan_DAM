@@ -1,19 +1,33 @@
 # Ryan_DAM 开发交接文档（Codex 接手入口）
 
-> **必读：** 这是 Ryan_DAM 项目根目录 `.handoff/current.md` 的首份详细交接文档。接手者应先读本文件，再读 `docs/` 下的需求与设计；不要依赖聊天记录来判断实际代码状态。
+> **必读：** 这是 Ryan_DAM 项目根目录 `.handoff/current.md` 的详细交接文档。接手者应先读本文件，再读 `docs/` 下的需求与设计；不要依赖聊天记录来判断实际代码状态。
 >
-> **交接日期：** 2026-10-24  
-> **交接版本：** Handoff v1（首次完整交接）  
+> **最近核实时间：** 2026-10-24（ZCode 会话）  
+> **交接版本：** Handoff v2（阶段 0 复核 + 阶段 1 数据层与目录树已交付）  
 > **目标仓库：** https://github.com/twj515895394/Ryan_DAM  
 > **主分支：** `main`  
-> **本次交接前已核对的 main 基线：** `1d70a6950e932f4f5933868255515854afc1fa34`  
-> **当前阶段：** 阶段 0 代码骨架 + Windows CI 构建已完成；仍待真实 Windows 桌面人工交互验收；随后进入阶段 1  
-> **最新已核对 CI：** [Stage 0 Windows verification #40077429948](https://github.com/twj515895394/Ryan_DAM/actions/runs/40077429948) — `success`；包含安装包 Artifact。  
-> **不要误读：** GitHub Actions 构建成功 ≠ 实际用户电脑上所有桌面交互已验收，也 ≠ 第一版产品已完成。
+> **本次交接前已核对的 main 基线：** `87c1ecf`（stage 1 数据层 + 目录树 UI 两个提交，详见文末迭代记录）  
+> **当前阶段：** 阶段 0 自动化核对全部通过、GUI 实机项仍待人工验收；阶段 1（SQLite 数据层 + 目录 API + 目录树 UI）代码已落地并有测试；下一步按票推进阶段 2  
+> **最新已核对 CI：** [Stage 0 Windows verification #40077429948](https://github.com/twj515895394/Ryan_DAM/actions/runs/40077429948) — `success`（commit `1d70a69`）；阶段 1 提交后的 CI 结果见迭代记录。  
+> **不要误读：** GitHub Actions 构建成功 ≠ 实际用户电脑上所有桌面交互已验收；代码存在 ≠ 功能通过用户场景验收。
 
 ---
 
 ## 0. Codex 启动必读与执行原则
+
+### 0.0 最新迭代摘要（2026-10-24，ZCode 接手）
+
+- **Git 分支 / 提交：** `main`，`87c1ecf`（`8f083d4` 阶段 1 数据层 + `87c1ecf` 目录树 UI；基线 `f79b797`）
+- **开发目标：** 复核阶段 0 未验收事项；按交接文档推进阶段 1。
+- **实际交付：**
+  1. **阶段 0 自动化复核（全部通过）：** `.venv` 环境 pytest 31/31（含原有 6 项）、`node --check`、`npm run typecheck`、`npm run build`、后端直启冒烟（READY 随机端口 → token 化 `/health` → 无 token 401 → `/shutdown` 干净退出）、GitHub API 核对 CI run `40077429948` success。**GUI 实机项（安装版启动、拖入 Chrome、多屏窗口状态）仍未人工验收，不可勾选。**
+  2. **阶段 1 数据层：** SQLAlchemy 2.1 + Alembic 1.20 + SQLite。9 张表（projects/folders/assets/external_sources/tags/asset_tags/import_jobs/import_job_items/app_settings）；启动时程序化执行 Alembic 迁移；WAL + 外键约束；数据库默认位于 `RYAN_DAM_DATA_DIR/ryan_dam.sqlite3`（Electron 已传 `%LOCALAPPDATA%\Ryan_DAM\data`）。
+  3. **阶段 1 API（/api/v1）：** 项目增删改查（重名 409、非空项目禁删）；目录树查询/创建/重命名/移动/删除（校验非法文件名、同级重名 409、循环移动 400、跨作用域/跨项目移动 400、非空目录禁删）；托管根目录设置 GET/PATCH（默认 `D:\Ryan_DAM\assets`，状态 ok/missing/unavailable，仅影响新导入）。统一错误结构 `{"error":{"code","message"}}`。
+  4. **阶段 1 UI 纵向切片：** 左侧「通用资产库 / 项目资产库」目录树真实读写 API；新建/重命名/删除（带确认与保护提示）；设置面板显示并编辑托管根目录；画廊为空态占位；阶段 0 诊断（健康检查 + 拖出 PoC）收进弹窗保留。
+  5. **工程化：** 生成并提交 `package-lock.json`；CI 改用 `npm ci` + `.venv`；npm 脚本固定走 `.venv\Scripts\python.exe`（用户要求：Python 必须用虚拟环境，禁用全局）；PyInstaller 增加 `--collect-all alembic` 与 `--add-data backend/alembic;alembic`。
+- **运行验证：** pytest 31/31；vue-tsc 通过；vite build 通过；`scripts/e2e_smoke.py` 真实 HTTP 端到端 15/15（含**重启后项目/目录/设置持久化**）。阶段 1 提交的 CI 结果待推送后核对（run 链接见文末迭代记录）。
+- **已知问题：** 见 §6.4；无新增阻塞问题。
+- **下一步第一任务：** 核对阶段 1 提交的 CI；完成 Windows GUI 人工验收（拖入 Chrome）；然后按拆票顺序进入阶段 2（托管导入）。
 
 ### 0.1 推荐接手顺序
 
@@ -92,15 +106,15 @@
 | 层 | 确定方案 | 2026-10-24 实际代码状态 |
 |---|---|---|
 | 客户端 | Electron | **已搭骨架**，可打包 |
-| Renderer | Vue 3 + TypeScript + Vite | **已搭骨架**，有阶段 0 状态与拖出测试页 |
-| UI 样式 | Tailwind CSS + shadcn-vue | Tailwind **已接入**；`shadcn-vue` **尚未实际配置或引入组件** |
-| 后端 API | Python + FastAPI + Pydantic | FastAPI **已运行**；Pydantic 随 FastAPI 安装，但**尚无业务 schema** |
-| ORM | SQLAlchemy | **尚未安装/建模**，属于阶段 1 |
-| 数据库迁移 | Alembic | **尚未安装/配置**，属于阶段 1 |
-| 数据库 | SQLite | **尚未创建真实应用数据库**，属于阶段 1 |
-| 后台任务 | 进程内有限 worker + SQLite 持久化任务 | **未实现**，留到导入任务阶段 |
-| 缩略图/媒体探测 | 图片处理 + FFmpeg/ffprobe | **未实现**，属于后续阶段 |
-| Windows 包 | PyInstaller + electron-builder/NSIS | **CI 已成功构建安装包**，尚缺实际用户桌面安装运行验收 |
+| Renderer | Vue 3 + TypeScript + Vite | **已搭骨架**；阶段 1 目录树 UI 已落地 |
+| UI 样式 | Tailwind CSS + shadcn-vue | Tailwind **已接入**；`shadcn-vue` **尚未配置**（阶段 4 前按需引入） |
+| 后端 API | Python + FastAPI + Pydantic | FastAPI **已运行**；阶段 1 已有 `/api/v1` 业务路由与 Pydantic schema |
+| ORM | SQLAlchemy | **已落地**（2.1.6，9 张表模型 + 约束/索引） |
+| 数据库迁移 | Alembic | **已落地**（1.20.1，初始迁移 `0001`，启动时程序化执行） |
+| 数据库 | SQLite | **已接入**（WAL + 外键，userData/data 下） |
+| 后台任务 | 进程内有限 worker + SQLite 持久化任务 | 表模型已建；**执行器未实现**（阶段 2 导入任务） |
+| 缩略图/媒体探测 | 图片处理 + FFmpeg/ffprobe | **未实现**，属于阶段 3 |
+| Windows 包 | PyInstaller + electron-builder/NSIS | **CI 已成功构建安装包**（含 Alembic 打包）；尚缺实际用户桌面安装运行验收 |
 
 ### 2.2 目标架构（已确认方向）
 
@@ -154,12 +168,21 @@ Ryan_DAM/
 │  ├─ __init__.py
 │  ├─ app/
 │  │  ├─ __init__.py
-│  │  └─ main.py                  # FastAPI、健康检查、关闭、令牌与 Host/Origin 限制
+│  │  ├─ main.py                  # FastAPI、健康检查、关闭、令牌与 Host/Origin 限制、DB 装配
+│  │  ├─ api/v1/                  # /api/v1 路由：projects、folders、settings
+│  │  ├─ core/                    # ApiError 与统一错误处理
+│  │  ├─ db/                      # Base、session（WAL/外键）、程序化 Alembic 迁移
+│  │  ├─ models/                  # 9 张表 ORM 模型
+│  │  ├─ schemas/                 # Pydantic 请求/响应
+│  │  └─ services/                # project/folder/settings 业务规则
+│  ├─ alembic/                    # 迁移环境与 versions/0001_initial_schema.py
 │  ├─ launcher.py                 # PyInstaller 后端入口
-│  ├─ requirements.txt           # FastAPI、Uvicorn
+│  ├─ alembic.ini
+│  ├─ requirements.txt           # FastAPI、Uvicorn、SQLAlchemy、Alembic
 │  ├─ requirements-dev.txt       # pytest、httpx、PyInstaller
-│  └─ tests/
-│     └─ test_main.py            # API 基础测试
+│  └─ tests/                     # 31 项测试（安全、迁移、项目、目录、设置）
+├─ scripts/
+│  └─ e2e_smoke.py               # 真实 HTTP 端到端冒烟（15 项，含重启持久化）
 ├─ docs/
 │  ├─ Ryan_DAM_Product_Spec_v1.md
 │  ├─ TECHNICAL_ARCHITECTURE_V1.md
@@ -177,7 +200,7 @@ Ryan_DAM/
 └─ README.md
 ```
 
-**现状特别提醒：** 截至交接时仓库还没有 `package-lock.json`、没有 Alembic 目录和真正 ORM 模型、没有正式业务路由；如果本地有其他文件，以实际 `git status` 为准，不能擅自清理。
+**现状特别提醒：** `package-lock.json` 已于 2026-10-24 生成并提交，CI 已改用 `npm ci`。Alembic 目录、ORM 模型与正式业务路由均已落地；`shadcn-vue` 仍未引入。如果本地有其他未提交文件，以实际 `git status` 为准，不能擅自清理。
 
 ---
 
@@ -247,8 +270,8 @@ Ryan_DAM/
 | Electron → Chrome 原生拖出真实文件 | **未人工验收，高优先级** | `sample-upload.txt` 拖入 Chrome 上传区，确认是真实文件而非 URL / 文本 |
 | 窗口上次状态在不同屏幕配置下恢复 | **未人工验收** | 正常窗口 / 最大化 / 断开副屏 |
 | 复杂失效路径（崩溃、强杀、端口与令牌异常） | **未充分验证** | 定向手工 / 自动化验证 |
-| SQLAlchemy / Alembic / SQLite 数据层 | **未实现** | 阶段 1 |
-| 通用/项目目录、标签、正式资产文件和 UI | **未实现** | 阶段 1 及后续 |
+| 阶段 1 数据层 / 目录 API / 目录树 UI | **代码与测试已落地（31 pytest + 15 项 HTTP e2e）** | 待真实桌面人工过一遍目录树交互；Alembic 从空库迁移已自动化验证 |
+| 画廊、标签、导入等正式业务 UI | **未实现** | 阶段 2 及后续（按拆票顺序） |
 | shadcn-vue 组件配置 | **未实现** | UI 开发时按需引入 |
 
 请坚持：**代码存在 ≠ 功能通过用户场景验收。**
@@ -379,87 +402,38 @@ npm run package:win
 
 ## 7. Codex 下一步建议：严格按优先级实施
 
-### P0：补齐阶段 0 的真实用户场景验收
+### P0：补齐阶段 0 的真实用户场景验收（仅剩 GUI 项）
 
-**优先级最高，但不要求为了验收而重做整个骨架。**
+1. 核对阶段 1 提交后的最新 CI run（`.handoff` 文末迭代记录里的链接）为 `success`。
+2. 在 Windows 环境**人工验证**：安装版/开发版启动、退出后无残留进程、`sample-upload.txt` 拖入 Chrome 上传区为真实文件、窗口状态恢复。步骤见 §5.5。
+3. 只有真实人工完成的项目才能勾选 `docs/STAGE_0_VALIDATION.md`，并把环境/结果写回本文件。
+4. 若本会话或下一位开发者没有 Windows GUI 操作能力：保持未勾选，明确报告，不虚构通过。
 
-1. 拉取最新 main 并运行基础检查。
-2. 确认 GitHub 最新 CI 及 Artifact 可用（见第 4 节）。
-3. 在 Windows 环境**人工验证**安装版 / 开发版的启动、健康接口、关闭、拖出、窗口状态。
-4. 如出现失败，最小修复、补充可自动化测试的部分，并重新跑 CI。
-5. 在 `docs/STAGE_0_VALIDATION.md` 勾选**确实人工完成**的条目。没有实测就保留未勾选。
-6. 同步更新本 `.handoff/current.md` 的状态与 CI 提交链接。
+### P1：阶段 2——系统托管导入、任务面板与磁盘安全（按票推进）
 
-若当前 Codex 没有 Windows 图形桌面操作能力：可以继续做自动化和后续代码，但必须**明确标记 GUI 验收未完成**，不能声称拖到 Chrome 已通过。
+**阶段目标：** 从「目录树可用」推进到「可以真实导入文件并保留层级、去重、断点可诊断」。
 
-### P1：开始阶段 1——SQLite 数据模型与基础目录
+**1. 文件/文件夹选择与导入任务骨架**
+- Electron 侧新增受控 IPC：`dialog:select-files`、`dialog:select-folder`（只返回用户选中的路径，不接受 Renderer 任意路径）。
+- 后端 `POST /api/v1/imports` 创建 `import_jobs` + `import_job_items`；进程内有限并发 worker 执行。
+- 前端导入按钮接入；任务面板（抽屉）轮询 `GET /api/v1/imports/{id}`。
 
-**阶段目标：** 从「只有状态页的桌面骨架」推进到「有真实数据库、通用资产库 / 项目资产库的基本目录管理」。
+**2. 导入安全顺序（严格按技术架构 §4.3）**
+- 预扫描数量/总大小 → 检查目标盘空间（`app_settings.managed_root`）→ staging 复制 → 校验 → 原子落盘到 `objects/<asset-id>/<filename>` → 事务写 assets 记录 → 失败补偿清理半文件。
+- SHA-256 后台分块计算；默认重复跳过，允许强制导入；同名不同内容自动加后缀。
+- 文件夹导入保留子目录层级，映射到逻辑目录树。
 
-按顺序实现，优先交付可运行的纵向切片：
+**3. 验收**
+- UI 导入期间不冻结；重复导入默认跳过；失败可重试且不重复处理成功项；空间不足/中断不留半成品；每条资产 file_path 真实可访问。
 
-**1. 先建立数据库基础**
-- 在 `backend/requirements.txt` 增加 SQLAlchemy、Alembic 等实际需要的依赖；Pydantic 随 FastAPI 已存在，但请求/响应 schema 应显式设计。
-- 目录建议：`backend/app/db/`、`backend/app/models/`、`backend/app/schemas/`、`backend/app/services/`、`backend/app/api/v1/`、`backend/alembic/`。
-- SQLite 放在应用 userData 下，例如 `%LOCALAPPDATA%\Ryan_DAM\data\ryan_dam.sqlite3`，Windows 路径通过配置/环境变量传递，便于测试使用临时目录。
-- 启用 SQLite 外键约束与 WAL，区分开发测试数据库与用户真实数据库。
-- 使用 Alembic 初始迁移，确认全新数据库能创建并在应用重启后持久化。
+### P2：阶段 3–6 排期参考（**按拆票顺序做，不要一次性都做**）
 
-**2. 建立尽量简洁但可扩展的关系模型**
-
-目标概念（字段细节以架构文档为起点，允许稳妥简化）：
-
-| 表 | 必要职责 |
-|---|---|
-| `projects` | 项目 ID、名称、时间 |
-| `folders` | 自关联目录树，区分通用与项目作用域，包含 `project_id`、`parent_id` |
-| `assets` | 稳定 ID、文件名/类型/大小/真实路径、来源 `managed/external`、关联外部来源、标签和提示词需要的元数据 |
-| `external_sources` | 外部根目录、目标逻辑目录、扫描状态 |
-| `tags` / `asset_tags` | 全局标签以及资产-标签关联 |
-| `import_jobs` / `import_job_items` | 为后续导入任务的状态与失败重试保留模型 |
-| `app_settings` | 当前默认**新导入托管素材**根目录及必要配置 |
-
-提醒：阶段 1 可先建基础字段和迁移，**不要求同时实现每个表的全部业务逻辑**。避免为了数据库 schema 提前扩建复杂任务引擎。
-
-**3. 目录管理 API**
-- 通用资产库根目录查询 / 文件夹创建与树形查询。
-- 项目创建 / 列表 / 重命名，项目下文件夹创建与树形查询。
-- 基础目录重命名、移动前的层级检查，防止循环父子目录及跨项目越界。
-- 非空目录删除采用保护策略，不得悄悄级联删除资产。
-- 提供稳定的错误码、输入校验及最少的 API 测试。
-- API 统一使用 `/api/v1` 路径前缀（既有 `/health` 作为进程健康端点可继续保留）。
-- 数据库会话必须可测试、可替换；不要把 ORM 实例直接作为随意暴露的 HTTP payload。
-
-**4. 托管根目录设置**
-- 数据库里保存当前默认托管根目录；Windows 推荐默认值 `D:\Ryan_DAM\assets`。
-- 首次使用目录不存在 / 磁盘不可用时给出明确反馈，可选其他路径。
-- 变更默认根目录仅影响将来的导入，不触碰旧资产路径。
-- 本阶段可实现存储位置配置入口，**不需要提前开发整套资产导入复制流程**。
-
-**5. 最简 UI 纵向切片**
-- 在现有 Vue/Electron 骨架上按 `UI_UX_DESIGN_V1.md` 实现基本导航和目录树（Apple 浅色风格）。
-- 暂时可以是空画廊，但目录树必须真正从 SQLite 的 API 读写，而不是只写死前端假数据。
-- 通用资产库、项目资产库明确分开；不要新增独立「外部目录」顶层导航。
-- 设计和使用的 UI 组件可逐步接入 shadcn-vue，而不是一上来构建复杂设计系统。
-
-**6. 测试与阶段 1 验收**
-- 新数据库自动初始化。
-- 关闭重开应用后，项目、目录与默认存储位置仍保留。
-- 两个项目的目录树隔离，通用库不被意外归属某项目。
-- 可创建多层目录，能正确重命名；拒绝非法循环、跨作用域移动。
-- 修改默认托管目录不导致既有资产记录失效（可以通过测试固定的历史路径模拟）。
-- Alembic 从空库迁移成功；数据模型约束/外键经过测试。
-- 提交相应代码、迁移、测试与文档，同步本交接文件。
-
-### P2：阶段 2–6 排期参考（**不要一次性都做**）
-
-- **阶段 2**：系统托管导入、目录结构保留、SHA-256 去重、磁盘空间检查、后台任务进度与失败补偿。
 - **阶段 3**：图片/视频/音频缩略图与媒体属性，FFmpeg 打包及缓存。
-- **阶段 4**：网格/列表、搜索筛选、沉浸式预览、批量操作、标签、回收站。
+- **阶段 4**：网格/列表、搜索筛选、沉浸式预览、批量操作、标签、回收站；接入 shadcn-vue。
 - **阶段 5**：外部目录关联与手动扫描、解除关联、原记录就地转托管、图片/视频提示词。
 - **阶段 6**：正式资产卡片原生拖出、Windows 安装包、安装升级安全及全面验收。
 
-具体任务、顺序和验收条款由 `docs/IMPLEMENTATION_PLAN_V1.md` 定义。
+实施计划已拆成 GitHub Issues（见文末迭代记录）；每完成一票：跑测试 → 更新本文件 → 提交。
 
 ---
 
@@ -523,6 +497,37 @@ npm run package:win
 **可信度排序：** 真实代码与成功测试 / CI / Windows 实测记录 ＞ Spec 中已确认的产品事实 ＞ 技术设计建议 ＞ 未验证的口头进度说明。
 
 如果实际代码、Spec、CI、聊天说法之间出现不一致，先定位差异并记录，不要悄悄改写已确认的产品规则来迎合现有代码。
+
+---
+
+## 12. 迭代记录
+
+### 最近一次迭代（更新日期 2026-10-24，ZCode 会话）
+
+- **Git 分支 / 提交：** `main`
+  - `8f083d4` feat: stage 1 sqlite data layer with alembic migrations and api v1
+  - `87c1ecf` feat: stage 1 library shell with folder tree ui
+  - 本次 handoff 文档提交：见 `git log -- .handoff/current.md`
+- **开发目标：** 复核阶段 0 未验收事项（能自动化的全部自动化）；推进阶段 1（数据层 + 目录 API + 目录树 UI）。
+- **实际交付：** 见 §0.0 摘要。
+- **修改文件：** `backend/**`（models/db/api/services/schemas/alembic/tests/main.py/requirements）、`apps/web/src/**`（api client/types、stores/library、components、App.vue 重写）、`package.json`（venv python + alembic 打包）、`package-lock.json`（新增）、`.github/workflows/stage0-windows.yml`（npm ci + venv）、`scripts/e2e_smoke.py`（新增）、`.gitignore`。
+- **运行验证（本机 Windows 10，Python 3.12.8 venv，Node 24）：**
+  - `.venv/Scripts/python.exe -m pytest backend/tests` → **31 passed**（阶段 0 原 6 项 + 新 25 项）
+  - `npm run typecheck` / `npm run build` → 通过
+  - `.venv/Scripts/python.exe scripts/e2e_smoke.py` → **15 passed**（真实 HTTP：健康、默认根目录、项目/目录 CRUD、循环与跨作用域拦截、token 401、设置更新、**重启后持久化**）
+  - 后端直启冒烟：READY 随机端口 → `/health` 200 → 无 token 401 → `/shutdown` 干净退出（退出码 0）
+  - CI：run `40077429948`（commit `1d70a69`）success；阶段 1 提交 CI：https://github.com/twj515895394/Ryan_DAM/actions/runs （head `87c1ecf`，提交时正在运行，结果需下一位核对并回填）
+- **未完成 / 已知问题：**
+  - **阶段 0 GUI 实机验收仍未完成**（安装版启动、bundled 后端生命周期、拖入 Chrome、多屏窗口状态）——`docs/STAGE_0_VALIDATION.md` 对应项保持未勾选，不得在未实测时勾选。
+  - `shadcn-vue` 尚未引入（阶段 4 前按需接入）；Pinia 未引入（当前用轻量 composable store `apps/web/src/stores/library.ts`，够用）。
+  - 本会话没有可信的 Windows GUI 自动化验收能力，拖出验收不能由 AI 代做。
+- **工程注意点（新）：**
+  - FastAPI 0.115 + `from __future__ import annotations` 组合下，204 路由必须显式 `response_model=None`，否则返回注解 `-> None` 被解析为 response_model 触发断言（已修复，见 projects/folders delete 路由）。
+  - 本机沙盒环境盘符探测不可靠；`test_unavailable_drive_reported` 动态选择不存在的盘符，找不到则跳过。
+- **下一步第一任务（1–3 个）：**
+  1. 核对 head `87c1ecf` 的 CI 结果并回填本节；失败则修复重跑。
+  2. Windows 实机完成 §5.5 验收步骤，勾选 `docs/STAGE_0_VALIDATION.md` 已实测项。
+  3. 按 GitHub Issues 的票序开始阶段 2 第 1 票（导入任务骨架 + 文件/文件夹选择 IPC）。
 
 ---
 
