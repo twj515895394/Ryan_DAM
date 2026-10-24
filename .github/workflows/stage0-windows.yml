@@ -65,3 +65,10 @@ jobs:
           $installer = Get-ChildItem -Path release -Filter "*.exe" -File
           if (-not $installer) { throw "Expected a Windows installer in release." }
           $installer | Select-Object Name, Length
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ryan_DAM-Windows-Installer
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 14
