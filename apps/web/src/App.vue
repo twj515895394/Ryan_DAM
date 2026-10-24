@@ -28,6 +28,7 @@ import {
   deleteProject,
   deleteTag,
   emptyTrashAll,
+  ensureTopLevelFolder,
   fetchAssets,
   importFiles,
   importFolder,
@@ -186,6 +187,7 @@ const allFolderOptions = computed<{ id: number; label: string }[]>(() => {
 async function onTargetDialogPick(folderId: number): Promise<void> {
   const request = targetDialog.value;
   targetDialog.value = null;
+  newFolderDraft.value = "";
   if (!request) return;
   if (request.kind === "external-link") {
     await linkExternalSource(request.root, folderId);
@@ -343,21 +345,62 @@ async function runFolderImport(folderId: number): Promise<void> {
   await importFolder(folder, folderId);
 }
 
-function startImport(): void {
-  // 「全部资产」等项目根视图没有 folderId，先让用户选定目标目录再继续
-  if (activeFolderId.value === null) {
-    targetDialog.value = { kind: "import-files" };
-    return;
-  }
-  void runFilesImport(activeFolderId.value);
+function getFolderNameFromPath(dirPath: string): string {
+  const normalized = dirPath.replace(/[/\\]+$/, "");
+  const parts = normalized.split(/[/\\]/);
+  return parts[parts.length - 1] || "新建文件夹";
 }
 
-function startFolderImport(): void {
-  if (activeFolderId.value === null) {
-    targetDialog.value = { kind: "import-folder" };
+const newFolderDraft = ref("");
+
+function startImport(): void {
+  // 非一级菜单目录：直接选择文件导入到当前选中的目录
+  if (activeFolderId.value !== null) {
+    void runFilesImport(activeFolderId.value);
     return;
   }
-  void runFolderImport(activeFolderId.value);
+  // 一级菜单目录：弹出目标目录选择或快速新建目录对话框
+  newFolderDraft.value = "";
+  targetDialog.value = { kind: "import-files" };
+}
+
+async function startFolderImport(): Promise<void> {
+  // 1. 如果不是一级菜单目录（选中了具体子目录），直接将文件夹导入到该目录
+  if (activeFolderId.value !== null) {
+    await runFolderImport(activeFolderId.value);
+    return;
+  }
+
+  // 2. 如果在一级菜单目录（针对项目目录，或通用资产库「全部资产」）：
+  // 允许一级菜单选中直接导入文件夹：自动以所选本地文件夹名称在顶层创建（或复用）目录并导入！
+  let folderPath: string | null = null;
+  try {
+    folderPath = await window.ryanDam.selectFolder();
+  } catch {
+    return;
+  }
+  if (!folderPath) return;
+
+  const folderName = getFolderNameFromPath(folderPath);
+  const scope = activeScope.value === "project" ? "project" : "general";
+  const projectId = scope === "project" ? activeProjectId.value : null;
+
+  const targetFolder = await ensureTopLevelFolder(scope, folderName, projectId);
+  if (!targetFolder) return;
+
+  await importFolder(folderPath, targetFolder.id);
+}
+
+async function createAndPickFolder(): Promise<void> {
+  const name = newFolderDraft.value.trim();
+  if (!name) return;
+  const scope = activeScope.value === "project" ? "project" : "general";
+  const projectId = scope === "project" ? activeProjectId.value : null;
+
+  const folder = await ensureTopLevelFolder(scope, name, projectId);
+  if (!folder) return;
+  newFolderDraft.value = "";
+  await onTargetDialogPick(folder.id);
 }
 
 async function refreshCurrentAssets(append = false, page = 1): Promise<void> {
@@ -1046,13 +1089,13 @@ onUnmounted(() => {
           <button
             class="rounded-xl border border-line bg-white px-4 py-2 text-sm font-medium transition hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
             :disabled="!canImport"
-            :title="activeFolderId === null ? '先选择目标目录，再选择文件夹（保留子目录层级导入）' : '选择文件夹，保留子目录层级导入'"
+            :title="activeFolderId === null ? (activeScope === 'project' ? '选择本地文件夹，直接作为当前项目目录导入' : '选择本地文件夹，作为顶层目录导入') : '选择本地文件夹，导入到当前目录'"
             @click="startFolderImport"
           >导入文件夹</button>
           <button
             class="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
             :disabled="!canImport"
-            :title="activeFolderId === null ? '先选择目标目录，再选择文件' : '选择文件并导入到当前目录'"
+            :title="activeFolderId === null ? '选择文件导入（可指定或新建目录）' : '选择文件并导入到当前目录'"
             @click="startImport"
           >导入文件</button>
         </div>
@@ -1274,27 +1317,54 @@ onUnmounted(() => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
         @click.self="targetDialog = null"
       >
-        <div class="w-[440px] rounded-2xl border border-line bg-white p-5 shadow-soft">
+        <div class="w-[460px] rounded-2xl border border-line bg-white p-5 shadow-soft">
           <h3 class="text-sm font-semibold">{{ targetDialogTitle }}</h3>
           <p class="mt-1.5 break-all text-xs leading-5 text-muted">
             {{ targetDialogHint }}
           </p>
-          <div class="mt-3 max-h-64 overflow-y-auto rounded-xl border border-line p-1.5">
-            <p v-if="targetDialogOptions.length === 0" class="px-2 py-1.5 text-xs text-muted">
-              还没有可用目录，请先在左侧创建一个目录。
-            </p>
-            <button
-              v-for="option in targetDialogOptions"
-              :key="option.id"
-              class="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-canvas"
-              :title="option.label"
-              @click="onTargetDialogPick(option.id)"
-            >{{ option.label }}</button>
+
+          <div class="mt-3.5 space-y-3">
+            <!-- 已有目录选择列表 -->
+            <div
+              v-if="targetDialogOptions.length > 0"
+              class="max-h-52 overflow-y-auto rounded-xl border border-line p-1.5"
+            >
+              <button
+                v-for="option in targetDialogOptions"
+                :key="option.id"
+                class="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-canvas"
+                :title="option.label"
+                @click="onTargetDialogPick(option.id)"
+              >{{ option.label }}</button>
+            </div>
+
+            <!-- 内联快捷新建目录导入区（消除无目录死胡同） -->
+            <div class="rounded-xl border border-line/80 bg-canvas/40 p-3">
+              <label class="block text-xs font-medium text-ink/80 mb-2">
+                {{ targetDialogOptions.length === 0 ? `当前${activeScope === 'project' ? '项目' : '资产库'}还没有目录，直接新建一个：` : "或者新建一个目录并导入：" }}
+              </label>
+              <div class="flex gap-2">
+                <input
+                  v-model="newFolderDraft"
+                  type="text"
+                  placeholder="输入新目录名称，例如：默认素材"
+                  class="min-w-0 flex-1 rounded-lg border border-line bg-white px-3 py-1.5 text-xs text-ink outline-none transition focus:border-accent focus:ring-1 focus:ring-accent/20"
+                  @keydown.enter.prevent="createAndPickFolder"
+                />
+                <button
+                  type="button"
+                  class="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+                  :disabled="!newFolderDraft.trim()"
+                  @click="createAndPickFolder"
+                >创建并导入</button>
+              </div>
+            </div>
           </div>
+
           <div class="mt-4 flex justify-end">
             <button
               class="rounded-lg px-3 py-1.5 text-sm text-muted transition hover:bg-canvas"
-              @click="targetDialog = null"
+              @click="targetDialog = null; newFolderDraft = ''"
             >取消</button>
           </div>
         </div>

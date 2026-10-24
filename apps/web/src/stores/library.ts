@@ -149,6 +149,47 @@ export async function createProjectFolder(projectId: number, name: string, paren
   }
 }
 
+export async function ensureTopLevelFolder(
+  scope: "general" | "project",
+  name: string,
+  projectId?: number | null
+): Promise<FolderNode | null> {
+  const tree =
+    scope === "general"
+      ? library.generalTree
+      : projectId
+      ? library.projectTrees[projectId] ?? []
+      : [];
+
+  const cleanName = name.trim();
+  const existing = tree.find((f) => f.name.toLowerCase() === cleanName.toLowerCase());
+  if (existing) return existing;
+
+  try {
+    const payload =
+      scope === "general"
+        ? { name: cleanName, scope: "general" as const, parent_id: null }
+        : {
+            name: cleanName,
+            scope: "project" as const,
+            project_id: projectId ?? undefined,
+            parent_id: null
+          };
+    await api.createFolder(payload);
+    await loadAll();
+    const updatedTree =
+      scope === "general"
+        ? library.generalTree
+        : projectId
+        ? library.projectTrees[projectId] ?? []
+        : [];
+    return updatedTree.find((f) => f.name.toLowerCase() === cleanName.toLowerCase()) ?? null;
+  } catch (error) {
+    notify("error", errText(error));
+    return null;
+  }
+}
+
 export async function renameFolder(id: number, name: string): Promise<boolean> {
   try {
     await api.renameFolder(id, name);
