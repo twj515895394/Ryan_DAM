@@ -15,17 +15,19 @@
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-24，ZCode 接手 · 已交付至票 7）
+### 0.0 最新迭代摘要（2026-10-24，ZCode 接手 · 已交付至票 8）
 
-- **Git 分支 / 提交：** `main`，最新 `0e6d909`
-- **当前状态一句话：** 阶段 0 自动化全过（GUI 实机项待人工）；阶段 1 数据层/目录/设置完成；按 `docs/ISSUES_BACKLOG.md`（本地拆票）完成票 2–7；全部提交 CI 绿（最新 [run 40091433600](https://github.com/twj515895394/Ryan_DAM/actions/runs/40091433600) success，含 Pillow 打包验证）。
-- **运行验证（最新）：** pytest **59/59**；vue-tsc / build / `node --check` 通过；e2e 真实 HTTP **21/21**；全量测试后 `D:\Ryan_DAM\assets` 保持 0 条目。
+- **Git 分支 / 提交：** `main`，最新 `70116d3`
+- **当前状态一句话：** 阶段 0 自动化全过（GUI 实机项待人工）；阶段 1 数据层/目录/设置完成；按 `docs/ISSUES_BACKLOG.md`（本地拆票）完成票 2–8；全部提交 CI 绿（最新 [run 40091433600](https://github.com/twj515895394/Ryan_DAM/actions/runs/40091433600) success，含 Pillow 打包验证）。
+- **运行验证（最新）：** pytest **66/66**；vue-tsc / build / `node --check` 通过；e2e 真实 HTTP **21/21**；全量测试后 `D:\Ryan_DAM\assets` 保持 0 条目。
 - **已知问题：** 无新增阻塞问题（历史工程注意点见 §6.4 与下方迭代记录）。
-- **下一步第一任务：** 票 8（视频/音频元数据与代表帧，FFmpeg/ffprobe 打包）；GUI 实机验收（票 1）仍待人工完成（可顺带确认新中文菜单）。
+- **下一步第一任务：** 票 9（沉浸式预览框架 + 图片预览 + 位置恢复）；GUI 实机验收（票 1）仍待人工完成（可顺带确认新中文菜单）。
 
 ### 0.0.1 迭代时间线（倒序）
 
-1. **票 7：图片缩略图管线**（`0e6d909`）——Pillow 后台 worker + 磁盘缓存（`RYAN_DAM_CACHE_DIR`，默认 `<data>/cache/thumbnails`），源文件指纹（大小+mtime）侧车：命中直接返回、源变化自动重生成、重复失败标记 `failed` 不再重试；`GET /api/v1/assets/{id}/thumbnail` 未命中入队并返回 404（`thumbnail_unavailable`）；导入完成自动为图片入队；前端卡片 blob 带 token 加载、`object-contain` 不裁切、失败回退类型图标、画廊有 pending 时 2.5s 自动刷新（上限 8 次）；e2e +2（21 项）；测试 +6（59/59）。
+1. **票 8：音视频元数据与代表帧（FFmpeg 打包）**（`70116d3`）——`media_service` 受控定位器（`RYAN_DAM_FFMPEG_DIR` 环境变量 → PyInstaller 包内 `_MEIPASS/ffmpeg` → 仓库 `ffmpeg-bin/` → PATH，校验 PE 头拒绝构建期占位符）；ffprobe 提取时长/宽高、ffmpeg 提取视频代表帧（512px contain、1s 起帧回退）与音频内嵌封面；缩略图管线扩展到视频/音频；卡片新增时长角标（mm:ss）；`scripts/prepare-ffmpeg.mjs` 装载真实二进制或占位符、PyInstaller `--add-binary` 捆绑、CI 下载 BtbN win64 构建并导出环境变量；`docs/THIRD_PARTY_NOTICES.md` 记录 FFmpeg GPL v3 来源；测试 +7（66/66，无 ffmpeg 环境自动跳过）。
+   - **本地打包验证**：PyInstaller 产物 129MB（含 FFmpeg），冻结版 exe 端到端通过——视频时长 3000ms 精确、320x240、代表帧 JPEG 200；音频时长 2038ms。
+2. **票 7：图片缩略图管线**（`0e6d909`）——Pillow 后台 worker + 磁盘缓存（`RYAN_DAM_CACHE_DIR`，默认 `<data>/cache/thumbnails`），源文件指纹（大小+mtime）侧车：命中直接返回、源变化自动重生成、重复失败标记 `failed` 不再重试；`GET /api/v1/assets/{id}/thumbnail` 未命中入队并返回 404（`thumbnail_unavailable`）；导入完成自动为图片入队；前端卡片 blob 带 token 加载、`object-contain` 不裁切、失败回退类型图标、画廊有 pending 时 2.5s 自动刷新（上限 8 次）；e2e +2（21 项）；测试 +6（59/59）。
 2. **自测 + Code Review 轮**（`5a54f47`）——修复：①资产行提交失败时 objects/ 孤儿文件补偿（含回归测试）；②导入类测试曾污染 `D:\Ryan_DAM\assets`（新增 `iso_client` 夹具隔离并清理残留）；③票 5 UI 遗漏——任务面板新增「仍要导入重复项」；④目录路径误入文件导入 422、NameDialog 防双击、删除后选区复位、启动加载全部资产；⑤UI：中文菜单替换英文默认菜单、SVG 线性图标替换 emoji（AssetIcon）、`RYAN_DAM_USER_DATA` 隔离、DEV 浏览器预览桥。
    - **真实应用 UI 实测通过**（Electron + 隔离数据，computer-use 驱动）：新建项目/文件夹对话框、目录选中联动导入按钮、原生对话框多选导入、任务面板、重复跳过→强制导入、重启持久化、阶段 0 诊断弹窗、退出干净。
 3. **票 5 + 票 6**（`e1cb958`）——`POST /api/v1/imports/{id}/retry-failed`（仅重跑失败项、进行中 409、无可重试 409、retry_count 计数）；任务面板「重试失败项目」。
