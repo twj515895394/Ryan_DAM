@@ -155,7 +155,7 @@ function startBackend() {
       lines.forEach(handleLine);
     });
     child.stderr.on("data", (chunk) => log("INFO", `[backend stderr] ${chunk.toString("utf8").trimEnd()}`));
-    child.on("error", (error) => fail(new Error(`Failed to start Python backend: ${error.message}`));
+    child.on("error", (error) => fail(new Error(`Failed to start Python backend: ${error.message}`)));
     child.on("close", (code) => {
       if (!settled) {
         fail(new Error(`Python backend exited before becoming ready (code ${code}).`));
