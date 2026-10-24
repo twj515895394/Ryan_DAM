@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import FolderTree from "./components/FolderTree.vue";
 import AssetCard from "./components/AssetCard.vue";
@@ -441,6 +441,38 @@ const previewAsset = computed(() => {
 
 const promptRequested = ref(false);
 
+let lastSelectedAssetId: number | null = null;
+
+function handleCardSelect(asset: { id: number }, e?: MouseEvent): void {
+  const assetId = asset.id;
+  // 支持桌面标准 Shift 范围连续选择
+  if (e?.shiftKey && lastSelectedAssetId !== null && library.assets) {
+    const items = library.assets.items;
+    const fromIdx = items.findIndex((a) => a.id === lastSelectedAssetId);
+    const toIdx = items.findIndex((a) => a.id === assetId);
+    if (fromIdx !== -1 && toIdx !== -1) {
+      const start = Math.min(fromIdx, toIdx);
+      const end = Math.max(fromIdx, toIdx);
+      const rangeSlice = items.slice(start, end + 1);
+      for (const item of rangeSlice) {
+        if (!library.selectedAssetIds.includes(item.id)) {
+          library.selectedAssetIds.push(item.id);
+        }
+      }
+      lastSelectedAssetId = assetId;
+      return;
+    }
+  }
+
+  toggleAssetSelection(assetId);
+  lastSelectedAssetId = library.selectedAssetIds.includes(assetId) ? assetId : null;
+}
+
+function selectAllCurrentAssets(): void {
+  if (!library.assets) return;
+  library.selectedAssetIds = library.assets.items.map((a) => a.id);
+}
+
 function onCardPrompt(asset: { id: number }): void {
   if (!library.assets) return;
   const index = library.assets.items.findIndex((a) => a.id === asset.id);
@@ -591,11 +623,47 @@ watch(
   }
 );
 
+function onGlobalKeyDown(e: KeyboardEvent): void {
+  const target = e.target as HTMLElement | null;
+  const isInputActive =
+    target &&
+    (target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "SELECT" ||
+      target.isContentEditable);
+
+  // Ctrl+A / Cmd+A: 全选当前视图资产
+  if ((e.ctrlKey || e.metaKey) && (e.key === "a" || e.key === "A")) {
+    if (!isInputActive && viewMode.value === "library" && library.assets && library.assets.items.length > 0) {
+      e.preventDefault();
+      selectAllCurrentAssets();
+    }
+    return;
+  }
+
+  // Escape: 优先关闭预览，其次清空选择
+  if (e.key === "Escape") {
+    if (previewIndex.value !== null) {
+      closePreview();
+      return;
+    }
+    if (library.selectedAssetIds.length > 0) {
+      clearAssetSelection();
+      batchPanel.value = "none";
+    }
+  }
+}
+
 onMounted(() => {
+  window.addEventListener("keydown", onGlobalKeyDown);
   void loadAll().then(() => refreshCurrentAssets());
   void loadTags();
   void loadTrash();
   void loadExternalSources();
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", onGlobalKeyDown);
 });
 </script>
 
@@ -1061,8 +1129,9 @@ onMounted(() => {
             :key="asset.id"
             :asset="asset"
             :selected="library.selectedAssetIds.includes(asset.id)"
+            :selection-active="library.selectedAssetIds.length > 0"
             @open="openPreview(asset.id)"
-            @toggle-select="toggleAssetSelection(asset.id)"
+            @toggle-select="handleCardSelect"
             @prompt="onCardPrompt"
           />
         </div>
@@ -1132,8 +1201,24 @@ onMounted(() => {
         leave-to-class="opacity-0 translate-y-2"
       >
         <div v-if="showBatchBar" class="fixed bottom-5 left-1/2 z-40 -translate-x-1/2">
-          <div class="flex items-center gap-1.5 rounded-2xl border border-line bg-white px-4 py-2.5 shadow-soft">
-            <span class="mr-1 text-sm font-medium">已选 {{ library.selectedAssetIds.length }} 项</span>
+          <div class="flex items-center gap-2 rounded-2xl border border-line bg-white px-4 py-2.5 shadow-soft">
+            <div class="flex items-center gap-1.5 mr-1">
+              <span class="text-sm font-medium">已选 {{ library.selectedAssetIds.length }} 项</span>
+              <button
+                v-if="library.assets && library.selectedAssetIds.length < library.assets.items.length"
+                type="button"
+                class="rounded-md px-1.5 py-0.5 text-xs font-medium text-accent transition hover:bg-accent/10"
+                title="全选当前列表所有资产 (Ctrl+A)"
+                @click="selectAllCurrentAssets"
+              >全选</button>
+              <button
+                v-else
+                type="button"
+                class="rounded-md px-1.5 py-0.5 text-xs font-medium text-muted transition hover:bg-canvas"
+                title="清空当前所有选中 (Esc)"
+                @click="clearAssetSelection"
+              >全不选</button>
+            </div>
             <div class="relative">
               <button class="rounded-lg px-3 py-1.5 text-sm text-ink transition hover:bg-canvas" @click="batchPanel = batchPanel === 'add-tag' ? 'none' : 'add-tag'">加标签</button>
               <div v-if="batchPanel === 'add-tag'" class="absolute bottom-11 left-0 z-50 w-52 rounded-xl border border-line bg-white p-2 shadow-soft">

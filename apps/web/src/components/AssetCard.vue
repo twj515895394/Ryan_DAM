@@ -5,13 +5,41 @@ import { api } from "../api/client";
 import AssetIcon from "./AssetIcon.vue";
 import type { AssetOut } from "../api/types";
 
-const props = defineProps<{ asset: AssetOut; selected: boolean }>();
+const props = withDefaults(
+  defineProps<{
+    asset: AssetOut;
+    selected: boolean;
+    selectionActive?: boolean;
+  }>(),
+  { selectionActive: false }
+);
 
 const emit = defineEmits<{
   (e: "open", asset: AssetOut): void;
-  (e: "toggle-select", asset: AssetOut): void;
+  (e: "toggle-select", asset: AssetOut, event?: MouseEvent): void;
   (e: "prompt", asset: AssetOut): void;
 }>();
+
+function onCardClick(e: MouseEvent): void {
+  // 当满足下列任一条件时，单击整张卡片一律触发勾选/多选，绝不打断弹出大图预览：
+  // 1. 用户按住 Ctrl / Meta / Shift 修饰键（桌面端标准连续/独立多选）
+  // 2. 当前已有选中的资产（处于批量选择状态）
+  if (e.ctrlKey || e.metaKey || e.shiftKey || props.selectionActive) {
+    emit("toggle-select", props.asset, e);
+    return;
+  }
+  // 未在选择态时，单击打开大图预览
+  emit("open", props.asset);
+}
+
+function onCardDblClick(): void {
+  // 双击卡片始终打开大图预览
+  emit("open", props.asset);
+}
+
+function onCheckboxClick(e: MouseEvent): void {
+  emit("toggle-select", props.asset, e);
+}
 
 const canUsePrompt = computed(() => props.asset.asset_type === "image" || props.asset.asset_type === "video");
 
@@ -85,38 +113,50 @@ onUnmounted(clear);
 
 <template>
   <div
-    class="group cursor-zoom-in overflow-hidden rounded-2xl border bg-white transition-shadow hover:shadow-soft"
-    :class="selected ? 'border-accent ring-2 ring-accent/30' : 'border-line'"
+    class="group overflow-hidden rounded-2xl border bg-white transition-all select-none"
+    :class="[
+      selectionActive ? 'cursor-pointer hover:border-accent/60' : 'cursor-zoom-in hover:shadow-soft',
+      selected
+        ? 'border-accent ring-2 ring-accent/30 bg-accent/[0.02] shadow-xs'
+        : 'border-line'
+    ]"
     role="button"
     tabindex="0"
-    @click="emit('open', asset)"
-    @keydown.enter="emit('open', asset)"
+    @click="onCardClick"
+    @dblclick="onCardDblClick"
+    @keydown.enter="onCardClick"
+    @keydown.space.prevent="emit('open', asset)"
   >
     <div class="relative flex aspect-square items-center justify-center overflow-hidden bg-canvas">
+      <!-- 左上角大感应触控区（44×44px，覆盖整个左上边缘，彻底解决小靶心误触问题） -->
       <button
         type="button"
-        class="absolute left-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded border text-[11px] transition shadow-xs"
-        :class="
-          selected
-            ? 'border-accent bg-accent text-white'
-            : 'border-line bg-white/90 text-transparent hover:border-accent/80 group-hover:text-muted/60'
-        "
-        :title="selected ? '取消选择' : '选择'"
-        @click.stop="emit('toggle-select', asset)"
+        class="group/chk absolute left-0 top-0 z-20 flex h-11 w-11 items-start justify-start p-2 text-[11px] transition"
+        :title="selected ? '取消选择 (按住 Shift 可范围多选)' : '选择 (按住 Shift 可范围多选)'"
+        @click.stop="onCheckboxClick"
       >
-        <svg
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="h-3.5 w-3.5 transition-opacity"
-          :class="selected ? 'opacity-100 text-white' : 'opacity-0 group-hover:opacity-100'"
-          aria-hidden="true"
+        <div
+          class="flex h-5 w-5 items-center justify-center rounded border transition-all duration-150 shadow-xs"
+          :class="
+            selected
+              ? 'border-accent bg-accent text-white scale-105'
+              : 'border-line bg-white/90 text-transparent hover:border-accent group-hover/chk:border-accent group-hover/chk:text-muted/60 group-hover:text-muted/60'
+          "
         >
-          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
-        </svg>
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="h-3.5 w-3.5 transition-opacity"
+            :class="selected ? 'opacity-100 text-white' : 'opacity-0 group-hover/chk:opacity-100 group-hover:opacity-100'"
+            aria-hidden="true"
+          >
+            <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
+          </svg>
+        </div>
       </button>
       <img
         v-if="objectUrl"
