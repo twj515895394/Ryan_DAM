@@ -163,8 +163,13 @@ def test_missing_ffmpeg_marks_failed(iso_client, headers, app, tmp_path, monkeyp
 
 def test_ffmpeg_locator_rejects_placeholders(monkeypatch, tmp_path) -> None:
     (tmp_path / "ffmpeg.exe").write_text("PLACEHOLDER - not a real binary\n")
-    monkeypatch.setenv("RYAN_DAM_FFMPEG_DIR", str(tmp_path))
-    monkeypatch.setattr("shutil.which", lambda name: None)
+    (tmp_path / "ffprobe.exe").write_text("PLACEHOLDER - not a real binary\n")
+    # Isolate the candidate search to the placeholder dir: the repo staging
+    # dir (ffmpeg-bin/) holds real binaries whenever prepare:ffmpeg ran.
+    monkeypatch.setattr(
+        media_service, "_candidates", lambda binary: [tmp_path / f"{binary}.exe"]
+    )
+    monkeypatch.setattr(media_service, "_which", lambda name: None)
     assert media_service.get_ffmpeg() is None
     assert media_service.get_ffprobe() is None
 
