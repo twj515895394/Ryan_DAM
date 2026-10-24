@@ -1,17 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 
 import FolderTree from "./components/FolderTree.vue";
+import AssetCard from "./components/AssetCard.vue";
 import ImportJobPanel from "./components/ImportJobPanel.vue";
 import NameDialog from "./components/NameDialog.vue";
 import Stage0Panel from "./components/Stage0Panel.vue";
 import type { FolderNode } from "./api/types";
 import {
+  clearAssets,
   createGeneralFolder,
   createProject,
   createProjectFolder,
   deleteFolder,
   deleteProject,
+  fetchAssets,
   importFiles,
   library,
   loadAll,
@@ -119,6 +122,35 @@ async function startImport(): Promise<void> {
   }
   if (paths.length === 0) return;
   await importFiles(paths, activeFolderId.value);
+}
+
+async function refreshCurrentAssets(append = false, page = 1): Promise<void> {
+  await fetchAssets(
+    { scope: activeScope.value, projectId: activeProjectId.value, folderId: activeFolderId.value },
+    { page, append }
+  );
+}
+
+watch([activeScope, activeProjectId, activeFolderId], () => {
+  clearAssets();
+  void refreshCurrentAssets();
+});
+
+watch(
+  () => library.importJob?.status,
+  (status, previous) => {
+    const terminal = new Set(["completed", "completed_with_errors", "failed", "interrupted"]);
+    if (status && previous && terminal.has(status) && !terminal.has(previous)) {
+      void loadAll();
+      void refreshCurrentAssets();
+    }
+  }
+);
+
+function loadMoreAssets(): void {
+  const assets = library.assets;
+  if (!assets) return;
+  void refreshCurrentAssets(true, assets.page + 1);
 }
 
 async function onDialogConfirm(value: string): Promise<void> {
@@ -277,6 +309,7 @@ onMounted(() => {
           <h1 class="truncate text-base font-semibold">{{ locationTitle }}</h1>
           <p class="text-[11px] text-muted">
             {{ activeScope === "general" ? "通用资产库" : activeProject?.name ?? "项目资产库" }}
+            <template v-if="library.assets">· {{ library.assets.total }} 项</template>
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -289,17 +322,34 @@ onMounted(() => {
         </div>
       </header>
 
-      <main class="flex flex-1 items-center justify-center px-8 pb-10">
-        <div class="w-full max-w-md rounded-3xl border border-line bg-white p-10 text-center shadow-sm">
-          <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-canvas text-2xl">🗂</div>
-          <h2 class="mt-5 text-base font-semibold">
-            {{ library.loaded ? "此目录还没有资产" : "正在连接本地服务…" }}
-          </h2>
-          <p class="mt-2 text-sm leading-6 text-muted">
-            {{ library.loaded
-              ? "选中左侧目录后，通过顶部「导入文件」将文件复制进托管存储；缩略图与预览将在后续阶段接入。"
-              : "如果长时间未连接，请打开左下角的「阶段 0 诊断」检查本地服务。" }}
-          </p>
+      <main class="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-6">
+        <div
+          v-if="library.assets && library.assets.items.length > 0"
+          class="grid gap-4"
+          style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr))"
+        >
+          <AssetCard v-for="asset in library.assets.items" :key="asset.id" :asset="asset" />
+        </div>
+
+        <div v-if="library.assets && library.assets.items.length < library.assets.total" class="mt-6 flex justify-center">
+          <button
+            class="rounded-xl border border-line bg-white px-5 py-2.5 text-sm font-medium transition hover:bg-canvas"
+            @click="loadMoreAssets"
+          >加载更多（已显示 {{ library.assets.items.length }} / {{ library.assets.total }}）</button>
+        </div>
+
+        <div v-if="!library.assets || library.assets.items.length === 0" class="flex min-h-full items-center justify-center">
+          <div class="w-full max-w-md rounded-3xl border border-line bg-white p-10 text-center shadow-sm">
+            <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-canvas text-2xl">🗂</div>
+            <h2 class="mt-5 text-base font-semibold">
+              {{ !library.loaded ? "正在连接本地服务…" : library.assets === null ? "加载失败" : "此目录还没有资产" }}
+            </h2>
+            <p class="mt-2 text-sm leading-6 text-muted">
+              {{ library.loaded
+                ? "选中左侧目录后，通过顶部「导入文件」将文件复制进托管存储；缩略图与预览将在后续阶段接入。"
+                : "如果长时间未连接，请打开左下角的「阶段 0 诊断」检查本地服务。" }}
+            </p>
+          </div>
         </div>
       </main>
     </div>

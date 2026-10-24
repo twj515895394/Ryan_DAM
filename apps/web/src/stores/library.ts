@@ -1,7 +1,7 @@
 import { reactive } from "vue";
 
 import { api, ApiRequestError } from "../api/client";
-import type { FolderNode, ImportJob, Project, Settings } from "../api/types";
+import type { AssetPage, FolderNode, ImportJob, Project, Settings } from "../api/types";
 
 export interface LibraryState {
   loaded: boolean;
@@ -11,6 +11,7 @@ export interface LibraryState {
   settings: Settings | null;
   notice: { kind: "error" | "success"; text: string } | null;
   importJob: ImportJob | null;
+  assets: AssetPage | null;
 }
 
 export const library = reactive<LibraryState>({
@@ -20,7 +21,8 @@ export const library = reactive<LibraryState>({
   projectTrees: {},
   settings: null,
   notice: null,
-  importJob: null
+  importJob: null,
+  assets: null
 });
 
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -189,4 +191,31 @@ export async function importFiles(paths: string[], folderId: number, allowDuplic
 export function dismissImportJob(): void {
   stopImportPolling();
   library.importJob = null;
+}
+
+export async function fetchAssets(
+  params: { scope: string; projectId?: number | null; folderId?: number | null },
+  options: { page?: number; append?: boolean } = {}
+): Promise<void> {
+  try {
+    const page = options.page ?? 1;
+    const result = await api.listAssets({
+      scope: params.scope,
+      project_id: params.projectId ?? undefined,
+      folder_id: params.folderId ?? undefined,
+      page,
+      page_size: 50
+    });
+    if (options.append && library.assets) {
+      library.assets = { ...result, items: [...library.assets.items, ...result.items] };
+    } else {
+      library.assets = result;
+    }
+  } catch (error) {
+    notify("error", errText(error));
+  }
+}
+
+export function clearAssets(): void {
+  library.assets = null;
 }

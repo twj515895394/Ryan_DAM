@@ -38,6 +38,25 @@ export interface Settings {
   managed_root_state: "ok" | "missing" | "unavailable";
 }
 
+export interface AssetOut {
+  id: number;
+  folder_id: number;
+  name: string;
+  extension: string | null;
+  asset_type: "image" | "video" | "audio" | "document" | "other";
+  size_bytes: number;
+  source_type: "managed" | "external";
+  thumbnail_status: string;
+  created_at: string;
+}
+
+export interface AssetPage {
+  total: number;
+  page: number;
+  page_size: number;
+  items: AssetOut[];
+}
+
 export interface ImportJobItem {
   id: number;
   source_path: string;

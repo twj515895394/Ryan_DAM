@@ -1,5 +1,6 @@
 import type {
   ApiErrorBody,
+  AssetPage,
   FolderCreatePayload,
   FolderNode,
   FolderOut,
@@ -87,6 +88,16 @@ export const api = {
       json: { paths, folder_id: folderId, allow_duplicates: allowDuplicates }
     }),
   getImport: (id: number) => request<ImportJob>(`/api/v1/imports/${id}`),
+
+  listAssets: (params: { scope?: string; project_id?: number; folder_id?: number; page?: number; page_size?: number }) => {
+    const query = new URLSearchParams();
+    if (params.scope) query.set("scope", params.scope);
+    if (params.project_id !== undefined) query.set("project_id", String(params.project_id));
+    if (params.folder_id !== undefined) query.set("folder_id", String(params.folder_id));
+    query.set("page", String(params.page ?? 1));
+    query.set("page_size", String(params.page_size ?? 50));
+    return request<AssetPage>(`/api/v1/assets?${query.toString()}`);
+  },
 
   getSettings: () => request<Settings>("/api/v1/settings"),
   updateSettings: (managedRoot: string) =>

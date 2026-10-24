@@ -121,6 +121,17 @@ def main() -> None:
             import_item = (import_final.get("items") or [{}])[0]
             check("import produced asset", bool(import_item.get("asset_id")), str(import_item))
 
+            assets_page = client.get(
+                "/api/v1/assets", params={"folder_id": general_id}
+            ).json()
+            check(
+                "asset list shows import",
+                assets_page.get("total") == 1
+                and assets_page["items"][0]["name"] == "e2e-source.png"
+                and assets_page["items"][0]["asset_type"] == "image",
+                str(assets_page),
+            )
+
         # restart the backend to prove persistence
         httpx.post(f"{base}/shutdown", headers=headers, timeout=5)
         proc.wait(timeout=10)

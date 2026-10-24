@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+
+from backend.app.api.v1.deps import get_db
+from backend.app.core.errors import ApiError
+from backend.app.models.asset import Asset
+from backend.app.models.folder import Folder
+from backend.app.schemas.asset import AssetOut, AssetPage
+
+router = APIRouter(tags=["assets"])
+
+
+@router.get("/assets", response_model=AssetPage)
+def list_assets(
+    scope: Literal["general", "project"] | None = Query(default=None),
+    project_id: int | None = Query(default=None),
+    folder_id: int | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> AssetPage:
+    query = (
+        db.query(Asset)
+        .join(Folder, Asset.folder_id == Folder.id)
+        .filter(Asset.status == "active")
+    )
+    if folder_id is not None:
+        query = query.filter(Asset.folder_id == folder_id)
+    elif scope == "general":
+        query = query.filter(Folder.scope_type == "general")
+    elif scope == "project":
+        if project_id is None:
+            raise ApiError("validation_error", "按项目查询资产时必须提供 project_id。", 422)
+        query = query.filter(Folder.scope_type == "project", Folder.project_id == project_id)
+
+    total = query.count()
+    items = (
+        query.order_by(Asset.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return AssetPage(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=[AssetOut.model_validate(item) for item in items],
+    )
