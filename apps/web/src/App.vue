@@ -5,6 +5,7 @@ import FolderTree from "./components/FolderTree.vue";
 import AssetCard from "./components/AssetCard.vue";
 import AssetIcon from "./components/AssetIcon.vue";
 import AssetPreview from "./components/AssetPreview.vue";
+import SidebarIcon from "./components/SidebarIcon.vue";
 import ImportJobPanel from "./components/ImportJobPanel.vue";
 import NameDialog from "./components/NameDialog.vue";
 import Stage0Panel from "./components/Stage0Panel.vue";
@@ -69,6 +70,7 @@ const targetDialog = ref<TargetDialogRequest | null>(null);
 
 const dialog = ref<DialogRequest | null>(null);
 const showStage0 = ref(false);
+const showSettingsDialog = ref(false);
 const activeScope = ref<"general" | "project">("general");
 const activeProjectId = ref<number | null>(null);
 const activeFolderId = ref<number | null>(null);
@@ -580,36 +582,55 @@ onMounted(() => {
 
 <template>
   <div class="flex h-screen overflow-hidden bg-canvas text-ink">
-    <aside class="flex w-64 shrink-0 flex-col border-r border-line bg-white">
-      <div class="flex items-center gap-3 px-4 py-4">
-        <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-ink text-xs font-semibold text-white">R.</div>
-        <div class="min-w-0">
-          <p class="truncate text-sm font-semibold">Ryan_DAM</p>
-          <p class="text-xs text-muted">本地数字资产库</p>
+    <aside class="flex w-60 shrink-0 flex-col border-r border-line/80 bg-[#FAFAFA]">
+      <!-- 顶部精简品牌区 -->
+      <div class="flex items-center gap-2.5 px-3.5 py-3">
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-ink to-neutral-700 text-xs font-bold text-white shadow-xs">
+          R
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-1.5">
+            <span class="truncate text-[13px] font-semibold text-ink">Ryan_DAM</span>
+            <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" title="本地服务已连接" />
+          </div>
+          <p class="truncate text-[10.5px] text-muted">本地数字资产库</p>
         </div>
       </div>
 
-      <nav class="flex-1 overflow-y-auto px-3 pb-4">
-        <section>
-          <div class="flex items-center justify-between px-2 pb-1.5 pt-2.5">
-            <h2 class="text-xs font-bold tracking-wide text-ink/70">通用资产库</h2>
+      <nav class="flex-1 overflow-y-auto px-2.5 pb-4">
+        <!-- 通用资产库 -->
+        <section class="space-y-0.5">
+          <div class="flex items-center justify-between px-2 pb-1 pt-1.5">
+            <span class="text-[11px] font-semibold tracking-wider text-muted/70 uppercase">通用资产库</span>
             <button
-              class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-canvas hover:text-accent"
+              class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-black/5 hover:text-accent"
               title="新建顶层文件夹"
               @click="dialog = { kind: 'folder-create', scope: 'general', projectId: null, parentId: null }"
-            >＋</button>
+            >
+              <SidebarIcon name="plus" class="h-3 w-3" />
+            </button>
           </div>
           <button
-            class="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors"
-            :class="activeScope === 'general' && activeFolderId === null ? 'bg-accent/10 font-semibold text-accent' : 'font-medium text-ink hover:bg-canvas'"
+            class="group flex h-7.5 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors duration-100"
+            :class="activeScope === 'general' && activeFolderId === null && viewMode === 'library'
+              ? 'bg-accent/10 font-medium text-accent'
+              : 'text-ink/90 hover:bg-black/5'"
             @click="selectGeneral"
           >
+            <SidebarIcon
+              name="grid"
+              class="h-3.5 w-3.5 text-muted group-hover:text-ink/80"
+              :class="activeScope === 'general' && activeFolderId === null && viewMode === 'library' ? 'text-accent' : ''"
+            />
             <span class="min-w-0 flex-1 truncate">全部资产</span>
+            <span v-if="library.assets && activeScope === 'general' && activeFolderId === null && viewMode === 'library'" class="text-[11px] text-muted">
+              {{ library.assets.total }}
+            </span>
           </button>
-          <div class="mt-0.5">
+          <div class="pt-0.5">
             <FolderTree
               :nodes="library.generalTree"
-              :active-id="activeScope === 'general' ? activeFolderId : null"
+              :active-id="activeScope === 'general' && viewMode === 'library' ? activeFolderId : null"
               @select="selectFolder"
               @create-child="(n) => (dialog = { kind: 'folder-create', scope: 'general', projectId: null, parentId: n.id })"
               @rename="(n) => (dialog = { kind: 'folder-rename', folderId: n.id, initial: n.name })"
@@ -618,91 +639,66 @@ onMounted(() => {
           </div>
         </section>
 
-        <section class="mt-6">
-          <div class="flex items-center justify-between px-2 pb-1.5 pt-1">
-            <h2 class="text-xs font-bold tracking-wide text-ink/70">标签管理</h2>
+        <!-- 项目资产库 -->
+        <section class="mt-4 space-y-0.5">
+          <div class="flex items-center justify-between px-2 pb-1 pt-1">
+            <span class="text-[11px] font-semibold tracking-wider text-muted/70 uppercase">项目</span>
             <button
-              class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-canvas hover:text-accent"
-              title="新建标签"
-              @click="dialog = { kind: 'tag-create' }"
-            >＋</button>
-          </div>
-          <p v-if="library.tags.length === 0" class="px-2 py-1 text-xs leading-5 text-muted">
-            还没有标签。创建全局标签后可打在任意资产上。
-          </p>
-          <div v-for="tag in library.tags" :key="tag.id" class="group/tag">
-            <div
-              class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors"
-              :class="library.assetQuery.tagId === tag.id ? 'bg-accent/10 font-semibold text-accent' : 'text-ink/90 hover:bg-canvas'"
-              role="button"
-              tabindex="0"
-              @click="library.assetQuery.tagId = library.assetQuery.tagId === tag.id ? null : tag.id"
-              @keydown.enter="library.assetQuery.tagId = library.assetQuery.tagId === tag.id ? null : tag.id"
-            >
-              <span class="min-w-0 flex-1 truncate">
-                {{ tag.name }}
-                <span class="ml-1 text-xs text-muted">{{ tag.asset_count }}</span>
-              </span>
-              <span class="hidden shrink-0 items-center gap-0.5 group-hover/tag:flex">
-                <button
-                  class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-ink"
-                  title="重命名标签"
-                  @click.stop="dialog = { kind: 'tag-rename', tagId: tag.id, initial: tag.name }"
-                >✎</button>
-                <button
-                  class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-rose-600"
-                  title="删除标签（仅允许删除未被使用的标签）"
-                  @click.stop="askDeleteTag(tag.id, tag.name)"
-                >×</button>
-              </span>
-            </div>
-          </div>
-        </section>
-
-        <section class="mt-6">
-          <div class="flex items-center justify-between px-2 pb-1.5 pt-1">
-            <h2 class="text-xs font-bold tracking-wide text-ink/70">项目资产库</h2>
-            <button
-              class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-canvas hover:text-accent"
+              class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-black/5 hover:text-accent"
               title="新建项目"
               @click="dialog = { kind: 'project-create' }"
-            >＋</button>
+            >
+              <SidebarIcon name="plus" class="h-3 w-3" />
+            </button>
           </div>
-          <p v-if="library.projects.length === 0" class="px-2 py-1 text-xs leading-5 text-muted">
-            还没有项目。点击「＋」创建第一个项目。
-          </p>
+          <div v-if="library.projects.length === 0" class="px-2 py-0.5 text-[11px] text-muted/60">
+            暂无项目
+          </div>
           <div v-for="project in library.projects" :key="project.id" class="group/proj">
             <div
-              class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors"
-              :class="activeScope === 'project' && activeProjectId === project.id && activeFolderId === null ? 'bg-accent/10 font-semibold text-accent' : 'font-medium text-ink hover:bg-canvas'"
+              class="flex h-7.5 items-center gap-2 rounded-md px-2 text-[13px] transition-colors duration-100"
+              :class="activeScope === 'project' && activeProjectId === project.id && activeFolderId === null && viewMode === 'library'
+                ? 'bg-accent/10 font-medium text-accent'
+                : 'text-ink/90 hover:bg-black/5'"
               role="button"
               tabindex="0"
               @click="selectProject(project.id)"
               @keydown.enter="selectProject(project.id)"
             >
+              <SidebarIcon
+                name="project"
+                class="h-3.5 w-3.5 text-muted group-hover/proj:text-ink/80"
+                :class="activeScope === 'project' && activeProjectId === project.id && activeFolderId === null && viewMode === 'library' ? 'text-accent' : ''"
+              />
               <span class="min-w-0 flex-1 truncate">{{ project.name }}</span>
               <span class="hidden shrink-0 items-center gap-0.5 group-hover/proj:flex">
                 <button
-                  class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-accent"
-                  title="在项目顶层新建文件夹"
+                  class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-accent hover:shadow-xs"
+                  title="新建子文件夹"
                   @click.stop="dialog = { kind: 'folder-create', scope: 'project', projectId: project.id, parentId: null }"
-                >＋</button>
+                >
+                  <SidebarIcon name="plus" class="h-3 w-3" />
+                </button>
                 <button
-                  class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-ink"
+                  class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-ink hover:shadow-xs"
                   title="重命名项目"
                   @click.stop="dialog = { kind: 'project-rename', projectId: project.id, initial: project.name }"
-                >✎</button>
+                >
+                  <SidebarIcon name="edit" class="h-3 w-3" />
+                </button>
                 <button
-                  class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-rose-600"
+                  class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-rose-600 hover:shadow-xs"
                   title="删除空项目"
                   @click.stop="askDeleteProject(project.id, project.name)"
-                >×</button>
+                >
+                  <SidebarIcon name="close" class="h-3 w-3" />
+                </button>
               </span>
             </div>
-            <div class="ml-3.5 border-l border-line pl-1.5">
+            <div class="ml-3.5 border-l border-line/70 pl-1.5">
               <FolderTree
                 :nodes="library.projectTrees[project.id] ?? []"
-                :active-id="activeScope === 'project' && activeProjectId === project.id ? activeFolderId : null"
+                :active-id="activeScope === 'project' && activeProjectId === project.id && viewMode === 'library' ? activeFolderId : null"
                 @select="selectFolder"
                 @create-child="(n) => (dialog = { kind: 'folder-create', scope: 'project', projectId: project.id, parentId: n.id })"
                 @rename="(n) => (dialog = { kind: 'folder-rename', folderId: n.id, initial: n.name })"
@@ -712,84 +708,138 @@ onMounted(() => {
           </div>
         </section>
 
-        <section class="mt-6">
-          <div class="flex items-center justify-between px-2 pb-1.5 pt-1">
-            <h2 class="text-xs font-bold tracking-wide text-ink/70">外部目录</h2>
+        <!-- 外部目录 -->
+        <section class="mt-4 space-y-0.5">
+          <div class="flex items-center justify-between px-2 pb-1 pt-1">
+            <span class="text-[11px] font-semibold tracking-wider text-muted/70 uppercase">外部目录</span>
             <button
-              class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-canvas hover:text-accent"
+              class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-black/5 hover:text-accent"
               title="关联外部目录（只读索引，不修改源文件）"
               @click="startLinkExternal"
-            >＋</button>
+            >
+              <SidebarIcon name="plus" class="h-3 w-3" />
+            </button>
           </div>
-          <p v-if="library.externalSources.length === 0" class="px-2 py-1 text-xs leading-5 text-muted">
-            可将磁盘上已有的素材目录索引进资产库，只读不修改源文件。
-          </p>
+          <div v-if="library.externalSources.length === 0" class="px-2 py-0.5 text-[11px] text-muted/60">
+            未关联外部目录
+          </div>
           <div v-for="source in library.externalSources" :key="source.id" class="group/src">
-            <div class="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[13px] transition-colors hover:bg-canvas">
-              <span class="min-w-0 flex-1">
-                <span class="block truncate font-medium text-ink" :title="source.root_path">{{ source.display_name ?? source.root_path }}</span>
-                <span class="block truncate text-xs text-muted">
-                  {{ source.asset_count }} 项 · 指向 {{ source.target_folder_name ?? "未知目录" }}
-                </span>
+            <div class="flex h-7.5 items-center gap-2 rounded-md px-2 text-[13px] transition-colors duration-100 hover:bg-black/5">
+              <SidebarIcon name="external" class="h-3.5 w-3.5 text-muted group-hover/src:text-ink/80" />
+              <span class="min-w-0 flex-1 truncate" :title="source.root_path">
+                {{ source.display_name ?? source.root_path }}
               </span>
+              <span class="text-[11px] text-muted">{{ source.asset_count }}</span>
               <span class="hidden shrink-0 items-center gap-0.5 group-hover/src:flex">
                 <button
-                  class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-accent"
+                  class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-accent hover:shadow-xs"
                   title="重新扫描（检测新增/变更/失效）"
                   @click.stop="rescanExternalSource(source.id)"
-                >⟳</button>
+                >
+                  <SidebarIcon name="refresh" class="h-3 w-3" />
+                </button>
                 <button
-                  class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-rose-600"
+                  class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-rose-600 hover:shadow-xs"
                   title="解除关联（只移除索引，不删除源文件）"
                   @click.stop="askUnlinkExternal(source)"
-                >×</button>
+                >
+                  <SidebarIcon name="close" class="h-3 w-3" />
+                </button>
               </span>
             </div>
-            <p v-if="source.missing_count > 0" class="px-2 pb-1 text-xs leading-4 text-amber-700">
-              {{ source.missing_count }} 项源文件缺失，重新扫描可检测恢复
+            <p v-if="source.missing_count > 0" class="px-2 text-[10.5px] leading-4 text-amber-700">
+              {{ source.missing_count }} 项源文件失效
             </p>
           </div>
         </section>
 
-        <section class="mt-6">
-          <div class="flex items-center justify-between px-2 pb-1.5 pt-1">
-            <h2 class="text-xs font-bold tracking-wide text-ink/70">回收站</h2>
+        <!-- 标签管理 -->
+        <section class="mt-4 space-y-0.5">
+          <div class="flex items-center justify-between px-2 pb-1 pt-1">
+            <span class="text-[11px] font-semibold tracking-wider text-muted/70 uppercase">标签</span>
+            <button
+              class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-black/5 hover:text-accent"
+              title="新建标签"
+              @click="dialog = { kind: 'tag-create' }"
+            >
+              <SidebarIcon name="plus" class="h-3 w-3" />
+            </button>
           </div>
+          <div v-if="library.tags.length === 0" class="px-2 py-0.5 text-[11px] text-muted/60">
+            暂无标签
+          </div>
+          <div v-for="tag in library.tags" :key="tag.id" class="group/tag">
+            <div
+              class="flex h-7 items-center gap-2 rounded-md px-2 text-[12.5px] transition-colors duration-100"
+              :class="library.assetQuery.tagId === tag.id ? 'bg-accent/10 font-medium text-accent' : 'text-ink/90 hover:bg-black/5'"
+              role="button"
+              tabindex="0"
+              @click="library.assetQuery.tagId = library.assetQuery.tagId === tag.id ? null : tag.id"
+              @keydown.enter="library.assetQuery.tagId = library.assetQuery.tagId === tag.id ? null : tag.id"
+            >
+              <SidebarIcon
+                name="tag"
+                class="h-3 w-3 text-muted group-hover/tag:text-ink/80"
+                :class="library.assetQuery.tagId === tag.id ? 'text-accent' : ''"
+              />
+              <span class="min-w-0 flex-1 truncate">{{ tag.name }}</span>
+              <span class="text-[11px] text-muted">{{ tag.asset_count }}</span>
+              <span class="hidden shrink-0 items-center gap-0.5 group-hover/tag:flex">
+                <button
+                  class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-ink hover:shadow-xs"
+                  title="重命名标签"
+                  @click.stop="dialog = { kind: 'tag-rename', tagId: tag.id, initial: tag.name }"
+                >
+                  <SidebarIcon name="edit" class="h-3 w-3" />
+                </button>
+                <button
+                  class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-rose-600 hover:shadow-xs"
+                  title="删除标签"
+                  @click.stop="askDeleteTag(tag.id, tag.name)"
+                >
+                  <SidebarIcon name="close" class="h-3 w-3" />
+                </button>
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 回收站：不再作为重复的分类标题，而是独立且清晰的系统项 -->
+        <section class="mt-4 border-t border-line/60 pt-2 space-y-0.5">
           <button
-            class="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors"
-            :class="viewMode === 'trash' ? 'bg-accent/10 font-semibold text-accent' : 'font-medium text-ink hover:bg-canvas'"
+            class="group flex h-7.5 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors duration-100"
+            :class="viewMode === 'trash' ? 'bg-accent/10 font-medium text-accent' : 'text-ink/90 hover:bg-black/5'"
             @click="selectTrash"
           >
-            <span class="min-w-0 flex-1">回收站</span>
+            <SidebarIcon
+              name="trash"
+              class="h-3.5 w-3.5 text-muted group-hover:text-ink/80"
+              :class="viewMode === 'trash' ? 'text-accent' : ''"
+            />
+            <span class="min-w-0 flex-1 truncate">回收站</span>
             <span
               v-if="library.trash.length > 0"
-              class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
-              :class="viewMode === 'trash' ? 'bg-accent/15 text-accent' : 'bg-canvas text-muted'"
+              class="shrink-0 rounded-full px-1.5 py-0.2 text-[10.5px] font-medium"
+              :class="viewMode === 'trash' ? 'bg-accent/15 text-accent' : 'bg-black/5 text-muted'"
             >{{ library.trash.length }}</span>
           </button>
-          <p v-if="viewMode === 'trash'" class="px-2 pt-1 text-xs leading-5 text-muted">
-            托管资产删除后在此保留，可恢复；外部资产移除仅删索引，不进回收站。
-          </p>
         </section>
       </nav>
 
-      <div class="border-t border-line px-4 py-3.5">
-        <div class="flex items-center justify-between">
-          <h2 class="text-xs font-bold tracking-wide text-ink/70">设置</h2>
-          <button
-            class="rounded-lg px-2 py-1 text-xs font-medium text-accent transition hover:bg-canvas"
-            @click="dialog = { kind: 'root-edit' }"
-          >编辑</button>
-        </div>
-        <template v-if="library.settings">
-          <p class="mt-1.5 truncate font-mono text-xs text-muted" :title="library.settings.managed_root">
-            {{ library.settings.managed_root }}
-          </p>
-          <p class="mt-1 text-xs" :class="library.settings.managed_root_state === 'ok' ? 'text-emerald-700 font-medium' : library.settings.managed_root_state === 'missing' ? 'text-amber-700' : 'text-rose-700'">
-            {{ rootStateLabel }} · 仅影响新导入
-          </p>
-        </template>
-        <button class="mt-2.5 text-xs text-muted transition hover:text-ink" @click="showStage0 = true">阶段 0 诊断…</button>
+      <!-- 底部整洁单行设置入口（移走繁杂路径，回归桌面级纯净） -->
+      <div class="border-t border-line/60 p-2">
+        <button
+          class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[12.5px] text-ink/80 transition-colors duration-100 hover:bg-black/5"
+          @click="showSettingsDialog = true"
+        >
+          <SidebarIcon name="settings" class="h-3.5 w-3.5 text-muted" />
+          <span class="flex-1 text-left font-medium">偏好设置与存储</span>
+          <span
+            class="h-2 w-2 rounded-full"
+            :class="library.settings?.managed_root_state === 'ok' ? 'bg-emerald-500' : 'bg-amber-500'"
+            :title="`存储状态：${rootStateLabel}`"
+          />
+        </button>
       </div>
     </aside>
 
@@ -1125,6 +1175,84 @@ onMounted(() => {
               class="rounded-lg px-3 py-1.5 text-sm text-muted transition hover:bg-canvas"
               @click="targetDialog = null"
             >取消</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="showSettingsDialog"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/35 backdrop-blur-xs"
+        @click.self="showSettingsDialog = false"
+      >
+        <div class="w-[460px] rounded-2xl border border-line bg-white p-6 shadow-soft">
+          <div class="flex items-center justify-between pb-3 border-b border-line/70">
+            <div class="flex items-center gap-2">
+              <SidebarIcon name="settings" class="h-4 w-4 text-muted" />
+              <h3 class="text-sm font-semibold text-ink">偏好设置与存储</h3>
+            </div>
+            <button
+              class="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-canvas hover:text-ink transition-colors"
+              @click="showSettingsDialog = false"
+            >
+              <SidebarIcon name="close" class="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <div class="mt-4 space-y-4">
+            <!-- 存储位置 -->
+            <div class="rounded-xl border border-line/80 bg-canvas/40 p-3.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-ink/80">默认托管存储目录</span>
+                <span
+                  class="rounded-full px-2 py-0.5 text-[10.5px] font-medium"
+                  :class="library.settings?.managed_root_state === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"
+                >
+                  {{ rootStateLabel }}
+                </span>
+              </div>
+              <p
+                class="mt-2 truncate rounded-lg bg-white px-2.5 py-1.5 font-mono text-xs text-muted border border-line/60"
+                :title="library.settings?.managed_root"
+              >
+                {{ library.settings?.managed_root ?? "未设置" }}
+              </p>
+              <div class="mt-2.5 flex items-center justify-between text-[11px] text-muted">
+                <span>修改后仅影响后续新导入的文件</span>
+                <button
+                  class="rounded-md border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-canvas"
+                  @click="dialog = { kind: 'root-edit' }"
+                >
+                  修改位置…
+                </button>
+              </div>
+            </div>
+
+            <!-- 系统诊断与关于 -->
+            <div class="rounded-xl border border-line/80 bg-canvas/40 p-3.5">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h4 class="text-xs font-semibold text-ink/80">系统诊断与环境检查</h4>
+                  <p class="mt-0.5 text-[11px] text-muted">检查本地 API 服务、SQLite 数据库与 FFmpeg 环境</p>
+                </div>
+                <button
+                  class="rounded-md border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-canvas"
+                  @click="showStage0 = true; showSettingsDialog = false"
+                >
+                  打开诊断…
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-5 flex justify-end">
+            <button
+              class="rounded-xl bg-ink px-4 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-800"
+              @click="showSettingsDialog = false"
+            >
+              完成
+            </button>
           </div>
         </div>
       </div>

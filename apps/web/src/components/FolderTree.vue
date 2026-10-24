@@ -2,6 +2,7 @@
 import { ref } from "vue";
 
 import type { FolderNode } from "../api/types";
+import SidebarIcon from "./SidebarIcon.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -33,45 +34,71 @@ function toggle(node: FolderNode): void {
   <ul class="space-y-0.5">
     <li v-for="node in nodes" :key="node.id">
       <div
-        class="group flex items-center gap-1 rounded-lg px-2 py-1.5 transition-colors"
+        class="group flex h-7 items-center gap-1.5 rounded-md px-2 transition-colors duration-100"
         :class="[
           depth === 0 ? 'text-[13px]' : 'text-xs text-ink/80',
-          activeId === node.id ? 'bg-accent/10 font-semibold text-accent' : 'hover:bg-canvas text-ink'
+          activeId === node.id
+            ? 'bg-accent/10 font-medium text-accent'
+            : 'hover:bg-black/5 text-ink'
         ]"
         role="button"
         tabindex="0"
         @click="emit('select', node)"
         @keydown.enter="emit('select', node)"
       >
+        <!-- 折叠/展开箭头 -->
         <button
           v-if="node.children.length > 0"
-          class="flex h-4 w-4 shrink-0 items-center justify-center text-muted hover:text-ink"
+          class="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted hover:text-ink"
           :aria-label="collapsed.has(node.id) ? '展开目录' : '折叠目录'"
           @click.stop="toggle(node)"
         >
-          <span class="inline-block text-[9px] transition-transform" :class="collapsed.has(node.id) ? '' : 'rotate-90'">▶</span>
+          <SidebarIcon
+            name="chevron-right"
+            class="h-3 w-3 transition-transform duration-150"
+            :class="collapsed.has(node.id) ? '' : 'rotate-90'"
+          />
         </button>
         <span v-else class="h-4 w-4 shrink-0" />
+
+        <!-- 目录图标 -->
+        <SidebarIcon
+          :name="node.children.length > 0 && !collapsed.has(node.id) ? 'folder-open' : 'folder'"
+          class="h-3.5 w-3.5 text-muted group-hover:text-ink/80"
+          :class="activeId === node.id ? 'text-accent' : ''"
+        />
+
+        <!-- 目录名称 -->
         <span class="min-w-0 flex-1 truncate">{{ node.name }}</span>
+
+        <!-- 悬停操作按钮组 -->
         <span class="hidden shrink-0 items-center gap-0.5 group-hover:flex">
           <button
-            class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-accent"
+            class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-accent hover:shadow-xs"
             title="新建子文件夹"
             @click.stop="emit('create-child', node)"
-          >＋</button>
+          >
+            <SidebarIcon name="plus" class="h-3 w-3" />
+          </button>
           <button
-            class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-ink"
+            class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-ink hover:shadow-xs"
             title="重命名"
             @click.stop="emit('rename', node)"
-          >✎</button>
+          >
+            <SidebarIcon name="edit" class="h-3 w-3" />
+          </button>
           <button
-            class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-rose-600"
+            class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-rose-600 hover:shadow-xs"
             title="删除空目录"
             @click.stop="emit('remove', node)"
-          >×</button>
+          >
+            <SidebarIcon name="close" class="h-3 w-3" />
+          </button>
         </span>
       </div>
-      <div v-if="node.children.length > 0 && !collapsed.has(node.id)" class="ml-3.5 border-l border-line pl-1.5">
+
+      <!-- 子目录递归缩进 -->
+      <div v-if="node.children.length > 0 && !collapsed.has(node.id)" class="ml-3.5 border-l border-line/70 pl-1.5">
         <FolderTree
           :nodes="node.children"
           :active-id="activeId"
