@@ -4,12 +4,16 @@ External sources are read-only mirrors of directories on disk: scanning only
 reads files, indexes metadata and mirrors the sub-directory hierarchy into the
 library. It NEVER writes to, moves or deletes source files — the scan result
 for vanished files is a 'missing' status on the index row, not a deletion.
+Converting an asset to managed (ticket 19) copies the file out and updates the
+existing record in place; the source file still stays untouched.
 """
 
 from __future__ import annotations
 
+import hashlib
 import mimetypes
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,6 +25,11 @@ from backend.app.models.asset import Asset
 from backend.app.models.external_source import ExternalSource
 from backend.app.services.folder_service import ensure_folder_path, get_folder_or_404
 from backend.app.services.import_service import guess_asset_type
+from backend.app.services.settings_service import get_managed_root
+from backend.app.services.trash_service import get_asset_or_404
+
+CHUNK_SIZE = 1024 * 1024
+SPACE_MARGIN_FACTOR = 1.1  # keep in sync with import_service
 
 
 def _utcnow() -> datetime:
@@ -202,3 +211,95 @@ def unlink_external_source(db: Session, source_id: int) -> int:
     db.delete(source)
     db.commit()
     return len(external_assets)
+
+
+def _hash_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        while True:
+            chunk = handle.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _copy_with_hash(source: Path, destination: Path) -> str:
+    digest = hashlib.sha256()
+    with open(source, "rb") as src, open(destination, "wb") as dst:
+        while True:
+            chunk = src.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            digest.update(chunk)
+            dst.write(chunk)
+    return digest.hexdigest()
+
+
+def convert_to_managed(db: Session, asset_id: int) -> Asset:
+    """Copy the external file into managed storage and update THIS record in
+    place — never a second card. The source file is never removed."""
+    asset = get_asset_or_404(db, asset_id)
+    if asset.source_type != "external":
+        raise ApiError("validation_error", "该资产已经是系统托管，无需转换。", 422)
+    source = Path(asset.file_path)
+    if not source.is_file():
+        raise ApiError("content_unavailable", "外部源文件缺失或不可访问，无法转托管。", 404)
+
+    managed_root = Path(get_managed_root(db))
+    objects_dir = managed_root / "objects" / str(asset.id)
+    staging_dir = managed_root / ".staging" / f"convert-{asset.id}"
+    destination = objects_dir / source.name
+
+    try:
+        source_size = source.stat().st_size
+        try:
+            free_bytes = shutil.disk_usage(managed_root).free
+        except OSError:
+            free_bytes = None  # root not created yet; the copy below will surface real errors
+        if free_bytes is not None and free_bytes < int(source_size * SPACE_MARGIN_FACTOR):
+            raise ApiError(
+                "insufficient_space",
+                f"托管磁盘空间不足：需要约 {source_size} 字节，当前剩余 {free_bytes} 字节。",
+                400,
+            )
+
+        source_hash = _hash_file(source)
+        objects_dir.mkdir(parents=True, exist_ok=True)
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        staged = staging_dir / source.name
+        try:
+            staged_hash = _copy_with_hash(source, staged)
+            if staged_hash != source_hash or staged.stat().st_size != source_size:
+                raise ApiError(
+                    "copy_verification_failed",
+                    "复制校验失败（哈希或大小不一致），资产保持外部状态，可重试。",
+                    400,
+                )
+            os.replace(staged, destination)  # same volume → atomic
+        finally:
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+        try:
+            asset.source_type = "managed"
+            asset.external_source_id = None
+            asset.file_path = str(destination)
+            asset.sha256 = source_hash
+            asset.size_bytes = source_size
+            db.commit()
+        except Exception:
+            db.rollback()
+            # compensate the half-written state: row still external, staged file must go
+            try:
+                destination.unlink()
+                objects_dir.rmdir()
+            except OSError:
+                pass
+            raise
+        db.refresh(asset)
+        return asset
+    except ApiError:
+        raise
+    except OSError as error:
+        db.rollback()
+        raise ApiError("convert_failed", f"转托管失败：{error}", 400) from error

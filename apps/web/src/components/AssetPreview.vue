@@ -15,6 +15,7 @@ const emit = defineEmits<{
   (e: "delete", assetId: number): void;
   (e: "rename", assetId: number): void;
   (e: "move", assetId: number, folderId: number): void;
+  (e: "convert", assetId: number): void;
 }>();
 
 const objectUrl = ref<string | null>(null);
@@ -152,6 +153,13 @@ watch(
 function confirmMove(): void {
   if (moveTargetId.value === null) return;
   emit("move", props.asset.id, moveTargetId.value);
+}
+
+function askConvert(): void {
+  const message =
+    `确定把「${props.asset.name}」转为系统托管吗？\n\n` +
+    `文件将复制到托管存储并就地更新这条资产记录（保留目录与标签），外部源文件不会被删除。`;
+  if (window.confirm(message)) emit("convert", props.asset.id);
 }
 
 function clearContent(): void {
@@ -422,26 +430,33 @@ onUnmounted(() => {
               >添加</button>
             </div>
           </div>
-          <div v-if="asset.source_type === 'managed'" class="mt-4 border-t border-line pt-3">
+          <div v-if="asset.source_type === 'managed' || (asset.source_type === 'external' && asset.status !== 'missing')" class="mt-4 border-t border-line pt-3">
             <p class="text-xs font-medium text-muted">管理</p>
-            <button
-              class="mt-2 w-full rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink transition hover:bg-canvas"
-              @click="emit('rename', asset.id)"
-            >重命名</button>
-            <div class="mt-1.5 flex gap-1.5">
-              <select
-                v-model="moveTargetId"
-                class="min-w-0 flex-1 rounded-lg border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-accent"
-              >
-                <option :value="null">移动到…</option>
-                <option v-for="option in moveOptions" :key="option.id" :value="option.id">{{ option.label }}</option>
-              </select>
+            <template v-if="asset.source_type === 'managed'">
               <button
-                class="shrink-0 rounded-lg bg-accent px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
-                :disabled="moveTargetId === null"
-                @click="confirmMove"
-              >移动</button>
-            </div>
+                class="mt-2 w-full rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink transition hover:bg-canvas"
+                @click="emit('rename', asset.id)"
+              >重命名</button>
+              <div class="mt-1.5 flex gap-1.5">
+                <select
+                  v-model="moveTargetId"
+                  class="min-w-0 flex-1 rounded-lg border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-accent"
+                >
+                  <option :value="null">移动到…</option>
+                  <option v-for="option in moveOptions" :key="option.id" :value="option.id">{{ option.label }}</option>
+                </select>
+                <button
+                  class="shrink-0 rounded-lg bg-accent px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+                  :disabled="moveTargetId === null"
+                  @click="confirmMove"
+                >移动</button>
+              </div>
+            </template>
+            <button
+              v-else
+              class="mt-2 w-full rounded-lg border border-amber-200 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-50"
+              @click="askConvert"
+            >转为系统托管</button>
           </div>
           <div class="mt-4 border-t border-line pt-3">
             <p class="text-xs text-muted">路径</p>

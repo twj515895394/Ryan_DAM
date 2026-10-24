@@ -17,6 +17,7 @@ import {
   clearAssetFilters,
   clearAssetSelection,
   clearAssets,
+  convertExternalToManaged,
   createGeneralFolder,
   createProject,
   createProjectFolder,
@@ -125,6 +126,10 @@ function relocatePreview(assetId: number): void {
 
 async function onMoveFromPreview(assetId: number, folderId: number): Promise<void> {
   if (await moveAssetToFolder(assetId, folderId)) closePreview();
+}
+
+async function onConvertFromPreview(assetId: number): Promise<void> {
+  if (await convertExternalToManaged(assetId)) relocatePreview(assetId);
 }
 
 const previewMoveOptions = computed<{ id: number; label: string }[]>(() => {
@@ -961,6 +966,7 @@ onMounted(() => {
       @delete="onDeleteFromPreview"
       @rename="onRenameFromPreview"
       @move="onMoveFromPreview"
+      @convert="onConvertFromPreview"
     />
 
     <Teleport to="body">

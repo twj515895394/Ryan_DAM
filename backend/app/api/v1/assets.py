@@ -84,6 +84,15 @@ def move_asset(asset_id: int, payload: MoveAssetPayload, db: Session = Depends(g
     return _asset_out_with_tags(db, asset)
 
 
+@router.post("/assets/{asset_id}/convert-to-managed", response_model=AssetOut)
+def convert_to_managed(asset_id: int, db: Session = Depends(get_db)) -> AssetOut:
+    """External → managed: copy + verify + update THIS record in place."""
+    from backend.app.services import external_service
+
+    asset = external_service.convert_to_managed(db, asset_id)
+    return _asset_out_with_tags(db, asset)
+
+
 @router.get("/assets/{asset_id}/thumbnail")
 def get_asset_thumbnail(asset_id: int, db: Session = Depends(get_db)) -> FileResponse:
     asset = db.get(Asset, asset_id)

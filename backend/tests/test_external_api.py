@@ -229,3 +229,123 @@ def test_unlink_removes_only_external_index(iso_client, headers, app, tmp_path) 
     # second unlink of the same source → 404
     again = iso_client.delete(f"/api/v1/external-sources/{source_id}", headers=headers)
     assert again.status_code == 404
+
+
+def test_convert_to_managed_updates_record_in_place(iso_client, headers, app, tmp_path) -> None:
+    from pathlib import Path
+
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.app.models.asset import Asset
+
+    root = tmp_path / "转托管库"
+    root.mkdir()
+    media = root / "hero.png"
+    media.write_bytes(b"convertible-image-bytes")
+
+    folder = iso_client.post("/api/v1/folders", json={"name": "转托管目标", "scope": "general"}, headers=headers).json()
+    source_id = _link(iso_client, headers, root, folder["id"])["source"]["id"]
+
+    assets = _assets_in(iso_client, headers, folder["id"])
+    asset_id = assets[0]["id"]
+    # give it a tag to verify metadata survives
+    tag = iso_client.post("/api/v1/tags", json={"name": "转托管标签"}, headers=headers).json()
+    assert iso_client.put(f"/api/v1/assets/{asset_id}/tags", json={"tag_ids": [tag["id"]]}, headers=headers).status_code == 200
+
+    response = iso_client.post(f"/api/v1/assets/{asset_id}/convert-to-managed", headers=headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["source_type"] == "managed"
+    assert body["id"] == asset_id, "same record, no second card"
+    assert body["folder_id"] == folder["id"]
+    assert [t["name"] for t in body["tags"]] == ["转托管标签"]
+    assert "objects" in body["file_path"], "managed copy lives under objects/"
+    assert "转托管库" not in body["file_path"], "copy must leave the external source dir"
+
+    session_factory: sessionmaker = app.state.session_factory
+    with session_factory() as session:
+        row = session.get(Asset, asset_id)
+        assert row.source_type == "managed"
+        assert row.external_source_id is None
+        assert row.sha256 is not None
+        assert Path(row.file_path).is_file()
+        managed_path = Path(row.file_path)
+
+    assert media.is_file(), "source file must stay on disk"
+    assert media.read_bytes() == b"convertible-image-bytes"
+    assert managed_path.read_bytes() == b"convertible-image-bytes"
+
+    # exactly one asset remains in the library
+    total = iso_client.get("/api/v1/assets", params={"folder_id": folder["id"]}, headers=headers).json()["total"]
+    assert total == 1
+
+    # the source record is gone; unlink would now only remove nothing extra
+    assert iso_client.get("/api/v1/external-sources", headers=headers).json()[0]["asset_count"] == 0
+    # rescan would re-add the still-present source file as a new external index
+    scan = _rescan(iso_client, headers, source_id)
+    assert scan["added"] == 1, "source file still exists so it gets re-indexed"
+    with session_factory() as session:
+        session.expire_all()
+        row = session.get(Asset, asset_id)
+        assert row.source_type == "managed", "rescan must not touch the converted record"
+
+
+def test_convert_failure_keeps_external(iso_client, headers, app, tmp_path) -> None:
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.app.models.asset import Asset
+
+    root = tmp_path / "转托管失败库"
+    root.mkdir()
+    media = root / "ghost.txt"
+    media.write_text("gone-soon", encoding="utf-8")
+    folder = iso_client.post("/api/v1/folders", json={"name": "失败目标", "scope": "general"}, headers=headers).json()
+    _link(iso_client, headers, root, folder["id"])
+    asset_id = _assets_in(iso_client, headers, folder["id"])[0]["id"]
+
+    media.unlink()  # file vanishes without a rescan: row still says active/external
+    response = iso_client.post(f"/api/v1/assets/{asset_id}/convert-to-managed", headers=headers)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "content_unavailable"
+
+    session_factory: sessionmaker = app.state.session_factory
+    with session_factory() as session:
+        row = session.get(Asset, asset_id)
+        assert row.source_type == "external"
+    assets = _assets_in(iso_client, headers, folder["id"])
+    assert assets[0]["source_type"] == "external", "failure keeps the asset external and retryable"
+
+
+def test_convert_rejects_managed_and_insufficient_space(iso_client, headers, app, tmp_path, monkeypatch) -> None:
+    import backend.app.services.external_service as external_module
+
+    root = tmp_path / "空间库"
+    root.mkdir()
+    (root / "big.bin").write_bytes(b"x" * 2048)
+    folder = iso_client.post("/api/v1/folders", json={"name": "空间目标", "scope": "general"}, headers=headers).json()
+    _link(iso_client, headers, root, folder["id"])
+    asset_id = _assets_in(iso_client, headers, folder["id"])[0]["id"]
+
+    class FakeUsage:
+        free = 0
+        total = 1
+        used = 1
+
+    monkeypatch.setattr(external_module.shutil, "disk_usage", lambda _p: FakeUsage())
+    response = iso_client.post(f"/api/v1/assets/{asset_id}/convert-to-managed", headers=headers)
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "insufficient_space"
+    assert _assets_in(iso_client, headers, folder["id"])[0]["source_type"] == "external"
+
+    monkeypatch.setattr(external_module.shutil, "disk_usage", lambda _p: None, raising=False)
+    # convert a managed import instead → rejected
+    source = tmp_path / "managed.txt"
+    source.write_text("managed", encoding="utf-8")
+    job = iso_client.post("/api/v1/imports", json={"paths": [str(source)], "folder_id": folder["id"]}, headers=headers).json()
+    for _ in range(300):
+        final = iso_client.get(f"/api/v1/imports/{job['id']}", headers=headers).json()
+        if final["status"] in {"completed", "failed"}:
+            break
+    managed_id = final["items"][0]["asset_id"]
+    rejected = iso_client.post(f"/api/v1/assets/{managed_id}/convert-to-managed", headers=headers)
+    assert rejected.status_code == 422

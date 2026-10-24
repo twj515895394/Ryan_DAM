@@ -523,6 +523,18 @@ export async function unlinkExternalSource(sourceId: number): Promise<boolean> {
   }
 }
 
+export async function convertExternalToManaged(assetId: number): Promise<boolean> {
+  try {
+    await api.convertToManaged(assetId);
+    await Promise.all([loadExternalSources(), refreshCurrentAssetsQuiet()]);
+    notify("success", "已转为系统托管：文件已复制进托管存储，原记录就地更新，外部源文件保留。");
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
 // 删除/恢复会同时影响画廊与回收站计数，统一刷新两处
 async function refreshAfterTrashChange(): Promise<void> {
   await Promise.all([loadTrash(), loadTags(), refreshCurrentAssetsQuiet()]);

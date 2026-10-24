@@ -184,6 +184,8 @@ export const api = {
     request<ScanResult>(`/api/v1/external-sources/${id}/scan`, { method: "POST" }),
   unlinkExternalSource: (id: number) =>
     request<{ removed: number }>(`/api/v1/external-sources/${id}`, { method: "DELETE" }),
+  convertToManaged: (id: number) =>
+    request<AssetOut>(`/api/v1/assets/${id}/convert-to-managed`, { method: "POST" }),
 
   listTags: () => request<Tag[]>("/api/v1/tags"),
   createTag: (name: string) => request<Tag>("/api/v1/tags", { method: "POST", json: { name } }),
