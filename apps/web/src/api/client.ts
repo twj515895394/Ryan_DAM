@@ -112,13 +112,25 @@ export const api = {
   getImport: (id: number) => request<ImportJob>(`/api/v1/imports/${id}`),
   retryFailed: (id: number) => request<ImportJob>(`/api/v1/imports/${id}/retry-failed`, { method: "POST" }),
 
-  listAssets: (params: { scope?: string; project_id?: number; folder_id?: number; page?: number; page_size?: number }) => {
+  listAssets: (params: {
+    scope?: string;
+    project_id?: number;
+    folder_id?: number;
+    q?: string;
+    asset_type?: string;
+    size_min?: number;
+    size_max?: number;
+    modified_after?: string;
+    modified_before?: string;
+    sort?: string;
+    order?: string;
+    page?: number;
+    page_size?: number;
+  }) => {
     const query = new URLSearchParams();
-    if (params.scope) query.set("scope", params.scope);
-    if (params.project_id !== undefined) query.set("project_id", String(params.project_id));
-    if (params.folder_id !== undefined) query.set("folder_id", String(params.folder_id));
-    query.set("page", String(params.page ?? 1));
-    query.set("page_size", String(params.page_size ?? 50));
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== "") query.set(key, String(value));
+    }
     return request<AssetPage>(`/api/v1/assets?${query.toString()}`);
   },
 

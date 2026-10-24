@@ -9,9 +9,8 @@ from sqlalchemy.orm import Session
 from backend.app.api.v1.deps import get_db
 from backend.app.core.errors import ApiError
 from backend.app.models.asset import Asset
-from backend.app.models.folder import Folder
 from backend.app.schemas.asset import AssetOut, AssetPage
-from backend.app.services import thumbnail_service
+from backend.app.services import asset_query, thumbnail_service
 
 router = APIRouter(tags=["assets"])
 
@@ -21,28 +20,35 @@ def list_assets(
     scope: Literal["general", "project"] | None = Query(default=None),
     project_id: int | None = Query(default=None),
     folder_id: int | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=128),
+    asset_type: Literal["image", "video", "audio", "document", "other"] | None = Query(default=None),
+    size_min: int | None = Query(default=None, ge=0),
+    size_max: int | None = Query(default=None, ge=0),
+    modified_after: str | None = Query(default=None),
+    modified_before: str | None = Query(default=None),
+    sort: Literal["created_at", "updated_at", "name", "size"] = Query(default="created_at"),
+    order: Literal["asc", "desc"] = Query(default="desc"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
 ) -> AssetPage:
-    query = (
-        db.query(Asset)
-        .join(Folder, Asset.folder_id == Folder.id)
-        .filter(Asset.status == "active")
+    args = asset_query.AssetQuery(
+        scope=scope,
+        project_id=project_id,
+        folder_id=folder_id,
+        q=q,
+        asset_type=asset_type,
+        size_min=size_min,
+        size_max=size_max,
+        modified_after=asset_query.parse_datetime(modified_after, "modified_after"),
+        modified_before=asset_query.parse_datetime(modified_before, "modified_before"),
+        sort=sort,
+        order=order,
     )
-    if folder_id is not None:
-        query = query.filter(Asset.folder_id == folder_id)
-    elif scope == "general":
-        query = query.filter(Folder.scope_type == "general")
-    elif scope == "project":
-        if project_id is None:
-            raise ApiError("validation_error", "按项目查询资产时必须提供 project_id。", 422)
-        query = query.filter(Folder.scope_type == "project", Folder.project_id == project_id)
-
+    query = asset_query.build_query(db, args)
     total = query.count()
     items = (
-        query.order_by(Asset.id.desc())
-        .offset((page - 1) * page_size)
+        query.offset((page - 1) * page_size)
         .limit(page_size)
         .all()
     )
@@ -52,7 +58,6 @@ def list_assets(
         page_size=page_size,
         items=[AssetOut.model_validate(item) for item in items],
     )
-
 
 @router.get("/assets/{asset_id}/thumbnail")
 def get_asset_thumbnail(asset_id: int, db: Session = Depends(get_db)) -> FileResponse:

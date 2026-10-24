@@ -10,6 +10,7 @@ import NameDialog from "./components/NameDialog.vue";
 import Stage0Panel from "./components/Stage0Panel.vue";
 import type { FolderNode } from "./api/types";
 import {
+  clearAssetFilters,
   clearAssets,
   createGeneralFolder,
   createProject,
@@ -268,6 +269,32 @@ const canImport = computed(
   () => activeFolderId.value !== null && !["queued", "running"].includes(library.importJob?.status ?? "")
 );
 
+const searchDraft = ref("");
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(searchDraft, (value) => {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    library.assetQuery.q = value.trim();
+  }, 300);
+});
+
+const showFilters = ref(false);
+const activeFilterCount = computed(
+  () =>
+    (library.assetQuery.assetType ? 1 : 0) +
+    (library.assetQuery.sizeRange ? 1 : 0) +
+    (library.assetQuery.modifiedRange ? 1 : 0)
+);
+
+watch(
+  () => [library.assetQuery.assetType, library.assetQuery.sizeRange, library.assetQuery.modifiedRange, library.assetQuery.sort, library.assetQuery.order],
+  () => {
+    clearAssets();
+    void refreshCurrentAssets();
+  }
+);
+
 onMounted(() => {
   void loadAll().then(() => refreshCurrentAssets());
 });
@@ -393,6 +420,74 @@ onMounted(() => {
           </p>
         </div>
         <div class="flex items-center gap-2">
+          <input
+            v-model="searchDraft"
+            type="text"
+            placeholder="搜索文件名 / 文件夹…"
+            class="w-56 rounded-xl border border-line bg-white px-3.5 py-2 text-sm outline-none transition placeholder:text-muted focus:border-accent"
+          />
+          <div class="relative">
+            <button
+              class="rounded-xl border px-3.5 py-2 text-sm font-medium transition"
+              :class="activeFilterCount > 0 ? 'border-accent bg-accent/10 text-accent' : 'border-line bg-white hover:bg-canvas'"
+              @click="showFilters = !showFilters"
+            >筛选{{ activeFilterCount > 0 ? ` · ${activeFilterCount}` : "" }}</button>
+            <div
+              v-if="showFilters"
+              class="absolute right-0 top-11 z-30 w-72 rounded-2xl border border-line bg-white p-4 shadow-soft"
+            >
+              <label class="block text-xs font-medium text-muted">类型</label>
+              <select
+                v-model="library.assetQuery.assetType"
+                class="mt-1 w-full rounded-lg border border-line bg-white px-2.5 py-2 text-sm outline-none focus:border-accent"
+              >
+                <option value="">全部类型</option>
+                <option value="image">图片</option>
+                <option value="video">视频</option>
+                <option value="audio">音频</option>
+                <option value="document">文档</option>
+                <option value="other">其他</option>
+              </select>
+              <label class="mt-3 block text-xs font-medium text-muted">大小</label>
+              <select
+                v-model="library.assetQuery.sizeRange"
+                class="mt-1 w-full rounded-lg border border-line bg-white px-2.5 py-2 text-sm outline-none focus:border-accent"
+              >
+                <option value="">不限</option>
+                <option value="small">≤ 1 MB</option>
+                <option value="medium">1 MB – 50 MB</option>
+                <option value="large">≥ 50 MB</option>
+              </select>
+              <label class="mt-3 block text-xs font-medium text-muted">修改时间</label>
+              <select
+                v-model="library.assetQuery.modifiedRange"
+                class="mt-1 w-full rounded-lg border border-line bg-white px-2.5 py-2 text-sm outline-none focus:border-accent"
+              >
+                <option value="">不限</option>
+                <option value="today">今天</option>
+                <option value="week">最近 7 天</option>
+                <option value="month">最近 30 天</option>
+              </select>
+              <div class="mt-4 flex justify-end">
+                <button class="rounded-lg px-3 py-1.5 text-xs text-accent transition hover:bg-canvas" @click="clearAssetFilters">清除筛选</button>
+              </div>
+            </div>
+          </div>
+          <select
+            v-model="library.assetQuery.sort"
+            class="rounded-xl border border-line bg-white px-3 py-2 text-sm outline-none focus:border-accent"
+            title="排序方式"
+          >
+            <option value="created_at">最新导入</option>
+            <option value="name">按名称</option>
+            <option value="size">按大小</option>
+            <option value="updated_at">最近修改</option>
+          </select>
+          <button
+            class="rounded-xl border border-line bg-white px-3 py-2 text-sm font-medium transition hover:bg-canvas"
+            :title="library.assetQuery.order === 'desc' ? '当前：降序' : '当前：升序'"
+            @click="library.assetQuery.order = library.assetQuery.order === 'desc' ? 'asc' : 'desc'"
+          >{{ library.assetQuery.order === "desc" ? "↓" : "↑" }}</button>
           <button
             class="rounded-xl border border-line bg-white px-4 py-2 text-sm font-medium transition hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
             :disabled="!canImport"

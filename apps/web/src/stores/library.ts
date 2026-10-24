@@ -3,6 +3,18 @@ import { reactive } from "vue";
 import { api, ApiRequestError } from "../api/client";
 import type { AssetPage, FolderNode, ImportJob, Project, Settings } from "../api/types";
 
+export type SizeRange = "" | "small" | "medium" | "large";
+export type ModifiedRange = "" | "today" | "week" | "month";
+
+export interface AssetQueryState {
+  q: string;
+  assetType: "" | "image" | "video" | "audio" | "document" | "other";
+  sizeRange: SizeRange;
+  modifiedRange: ModifiedRange;
+  sort: "created_at" | "name" | "size" | "updated_at";
+  order: "asc" | "desc";
+}
+
 export interface LibraryState {
   loaded: boolean;
   generalTree: FolderNode[];
@@ -12,6 +24,7 @@ export interface LibraryState {
   notice: { kind: "error" | "success"; text: string } | null;
   importJob: ImportJob | null;
   assets: AssetPage | null;
+  assetQuery: AssetQueryState;
 }
 
 export const library = reactive<LibraryState>({
@@ -22,7 +35,8 @@ export const library = reactive<LibraryState>({
   settings: null,
   notice: null,
   importJob: null,
-  assets: null
+  assets: null,
+  assetQuery: { q: "", assetType: "", sizeRange: "", modifiedRange: "", sort: "created_at", order: "desc" }
 });
 
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -250,13 +264,31 @@ export async function fetchAssets(
 ): Promise<void> {
   try {
     const page = options.page ?? 1;
-    const result = await api.listAssets({
+    const query = library.assetQuery;
+    const request: Record<string, string | number | undefined> = {
       scope: params.scope,
       project_id: params.projectId ?? undefined,
       folder_id: params.folderId ?? undefined,
       page,
-      page_size: 50
-    });
+      page_size: 50,
+      q: query.q || undefined,
+      asset_type: query.assetType || undefined,
+      sort: query.sort,
+      order: query.order
+    };
+    if (query.sizeRange === "small") request.size_max = 1024 * 1024;
+    else if (query.sizeRange === "medium") {
+      request.size_min = 1024 * 1024;
+      request.size_max = 50 * 1024 * 1024;
+    } else if (query.sizeRange === "large") request.size_min = 50 * 1024 * 1024;
+    if (query.modifiedRange) {
+      const now = new Date();
+      if (query.modifiedRange === "today") now.setHours(0, 0, 0, 0);
+      else if (query.modifiedRange === "week") now.setDate(now.getDate() - 7);
+      else now.setDate(now.getDate() - 30);
+      request.modified_after = now.toISOString();
+    }
+    const result = await api.listAssets(request as Parameters<typeof api.listAssets>[0]);
     if (options.append && library.assets) {
       library.assets = { ...result, items: [...library.assets.items, ...result.items] };
     } else {
@@ -265,6 +297,12 @@ export async function fetchAssets(
   } catch (error) {
     notify("error", errText(error));
   }
+}
+
+export function clearAssetFilters(): void {
+  library.assetQuery.assetType = "";
+  library.assetQuery.sizeRange = "";
+  library.assetQuery.modifiedRange = "";
 }
 
 export function clearAssets(): void {
