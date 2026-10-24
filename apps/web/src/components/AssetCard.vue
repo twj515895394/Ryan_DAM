@@ -94,11 +94,30 @@ onUnmounted(clear);
   >
     <div class="relative flex aspect-square items-center justify-center overflow-hidden bg-canvas">
       <button
-        class="absolute left-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded border bg-white/90 text-[11px] transition"
-        :class="selected ? 'border-accent bg-accent text-white' : 'border-line text-transparent group-hover:text-muted'"
+        type="button"
+        class="absolute left-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded border text-[11px] transition shadow-xs"
+        :class="
+          selected
+            ? 'border-accent bg-accent text-white'
+            : 'border-line bg-white/90 text-transparent hover:border-accent/80 group-hover:text-muted/60'
+        "
         :title="selected ? '取消选择' : '选择'"
         @click.stop="emit('toggle-select', asset)"
-      >✓</button>
+      >
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="h-3.5 w-3.5 transition-opacity"
+          :class="selected ? 'opacity-100 text-white' : 'opacity-0 group-hover:opacity-100'"
+          aria-hidden="true"
+        >
+          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
+        </svg>
+      </button>
       <img
         v-if="objectUrl"
         :src="objectUrl"
@@ -112,7 +131,7 @@ onUnmounted(clear);
       >{{ durationLabel }}</span>
       <span
         v-if="asset.source_type === 'external'"
-        class="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+        class="absolute right-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 shadow-xs"
       >外部链接</span>
       <span
         v-if="asset.status === 'missing'"
