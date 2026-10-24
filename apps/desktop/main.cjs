@@ -1,11 +1,12 @@
-const { app, BrowserWindow, dialog, ipcMain, nativeImage, screen } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen } = require("electron");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 app.setName("Ryan_DAM");
-const localDataRoot = process.env.LOCALAPPDATA || app.getPath("appData");
+// RYAN_DAM_USER_DATA lets dev/test runs isolate all local data (DB, logs, window state).
+const localDataRoot = process.env.RYAN_DAM_USER_DATA || process.env.LOCALAPPDATA || app.getPath("appData");
 app.setPath("userData", path.join(localDataRoot, "Ryan_DAM"));
 
 const userDataPath = app.getPath("userData");
@@ -227,20 +228,22 @@ ipcMain.handle("backend:get-info", () => {
 
 ipcMain.handle("dialog:select-files", async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  const result = await dialog.showOpenDialog(win, {
+  const options = {
     title: "选择要导入的文件",
     properties: ["openFile", "multiSelections", "dontAddToRecent"]
-  });
+  };
+  const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
   if (result.canceled) return [];
   return result.filePaths;
 });
 
 ipcMain.handle("dialog:select-folder", async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  const result = await dialog.showOpenDialog(win, {
+  const options = {
     title: "选择要导入的文件夹（将保留子目录层级）",
     properties: ["openDirectory", "dontAddToRecent"]
-  });
+  };
+  const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
 });
@@ -275,8 +278,47 @@ app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0 && backendInfo) createWindow();
 });
+function buildAppMenu() {
+  const template = [
+    {
+      label: "文件",
+      submenu: [{ role: "quit", label: "退出" }]
+    },
+    {
+      label: "视图",
+      submenu: [
+        { role: "reload", label: "重新加载" },
+        { role: "forceReload", label: "强制重新加载" },
+        { role: "toggleDevTools", label: "开发者工具" },
+        { type: "separator" },
+        { role: "resetZoom", label: "实际大小" },
+        { role: "zoomIn", label: "放大" },
+        { role: "zoomOut", label: "缩小" }
+      ]
+    },
+    {
+      label: "帮助",
+      submenu: [
+        {
+          label: "关于 Ryan_DAM",
+          click: () => {
+            dialog.showMessageBox({
+              type: "info",
+              title: "关于 Ryan_DAM",
+              message: `Ryan_DAM ${app.getVersion()}`,
+              detail: "本地优先的个人数字资产管理工具。"
+            });
+          }
+        }
+      ]
+    }
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 app.whenReady().then(async () => {
   try {
+    buildAppMenu();
     fs.mkdirSync(userDataPath, { recursive: true });
     await startBackend();
     createWindow();

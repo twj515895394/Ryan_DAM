@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 
 import FolderTree from "./components/FolderTree.vue";
 import AssetCard from "./components/AssetCard.vue";
+import AssetIcon from "./components/AssetIcon.vue";
 import ImportJobPanel from "./components/ImportJobPanel.vue";
 import NameDialog from "./components/NameDialog.vue";
 import Stage0Panel from "./components/Stage0Panel.vue";
@@ -103,13 +104,17 @@ function selectFolder(node: FolderNode): void {
 
 function askDeleteProject(id: number, name: string): void {
   if (window.confirm(`确定删除项目「${name}」吗？仅允许删除没有任何文件夹的空项目。`)) {
-    void deleteProject(id);
+    void deleteProject(id).then((ok) => {
+      if (ok && activeProjectId.value === id) selectGeneral();
+    });
   }
 }
 
 function askDeleteFolder(node: FolderNode): void {
   if (window.confirm(`确定删除文件夹「${node.name}」吗？只有空文件夹（无子目录、无资产）可以删除。`)) {
-    void deleteFolder(node.id);
+    void deleteFolder(node.id).then((ok) => {
+      if (ok && activeFolderId.value === node.id) selectGeneral();
+    });
   }
 }
 
@@ -206,7 +211,7 @@ const canImport = computed(
 );
 
 onMounted(() => {
-  void loadAll();
+  void loadAll().then(() => refreshCurrentAssets());
 });
 </script>
 
@@ -363,7 +368,9 @@ onMounted(() => {
 
         <div v-if="!library.assets || library.assets.items.length === 0" class="flex min-h-full items-center justify-center">
           <div class="w-full max-w-md rounded-3xl border border-line bg-white p-10 text-center shadow-sm">
-            <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-canvas text-2xl">🗂</div>
+            <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-canvas text-muted/70">
+            <AssetIcon type="other" class="h-7 w-7" />
+          </div>
             <h2 class="mt-5 text-base font-semibold">
               {{ !library.loaded ? "正在连接本地服务…" : library.assets === null ? "加载失败" : "此目录还没有资产" }}
             </h2>

@@ -220,6 +220,30 @@ export async function retryFailedImports(): Promise<boolean> {
   }
 }
 
+export async function forceImportSkipped(): Promise<boolean> {
+  const job = library.importJob;
+  if (!job) return false;
+  const groups = new Map<number, string[]>();
+  for (const item of job.items) {
+    if (item.status !== "skipped") continue;
+    const folderId = item.target_folder_id ?? job.target_folder_id;
+    if (folderId === null) continue;
+    const paths = groups.get(folderId) ?? [];
+    paths.push(item.source_path);
+    groups.set(folderId, paths);
+  }
+  if (groups.size === 0) {
+    notify("error", "没有可强制导入的重复项。");
+    return false;
+  }
+  let allOk = true;
+  for (const [folderId, paths] of groups) {
+    const ok = await importFiles(paths, folderId, true);
+    allOk = allOk && ok;
+  }
+  return allOk;
+}
+
 export async function fetchAssets(
   params: { scope: string; projectId?: number | null; folderId?: number | null },
   options: { page?: number; append?: boolean } = {}

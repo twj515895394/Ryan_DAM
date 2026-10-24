@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-import { library, dismissImportJob, retryFailedImports } from "../stores/library";
+import { library, dismissImportJob, retryFailedImports, forceImportSkipped } from "../stores/library";
 
 const job = computed(() => library.importJob);
 
@@ -73,8 +73,13 @@ const done = computed(() => job.value !== null && !["queued", "running"].include
 
         <div class="mt-3 flex justify-end gap-1">
           <button
-            v-if="done && job.failed_count > 0"
+            v-if="done && job.skipped_count > 0"
             class="rounded-lg px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-canvas"
+            @click="forceImportSkipped"
+          >仍要导入重复项</button>
+          <button
+            v-if="done && job.failed_count > 0"
+            class="rounded-lg px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-canvas"
             @click="retryFailedImports"
           >重试失败项目</button>
           <button

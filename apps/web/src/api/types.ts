@@ -63,6 +63,7 @@ export interface ImportJobItem {
   status: "pending" | "processing" | "success" | "skipped" | "failed";
   error_message: string | null;
   asset_id: number | null;
+  target_folder_id: number | null;
 }
 
 export interface ImportJob {

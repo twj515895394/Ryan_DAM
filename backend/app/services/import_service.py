@@ -148,6 +148,8 @@ def create_import(
         path = Path(raw)
         if not path.is_absolute():
             raise ApiError("validation_error", f"导入路径必须是绝对路径：{raw}", 422)
+        if path.is_dir():
+            raise ApiError("validation_error", f"路径是文件夹，请使用「导入文件夹」：{raw}", 422)
         sources.append(path)
 
     managed_root = get_managed_root(db)
@@ -360,9 +362,10 @@ def _process_item(session_factory: sessionmaker, job_id: int, item_id: int) -> N
         return
 
     job_staging = staging_dir / str(job_id)
+    cleanup_candidates = [job_staging / f"{item_id}_{source.name}"]
     try:
         job_staging.mkdir(parents=True, exist_ok=True)
-        staged = job_staging / f"{item_id}_{source.name}"
+        staged = cleanup_candidates[0]
         sha256 = _copy_with_hash(source, staged)
         if staged.stat().st_size != source.stat().st_size:
             raise OSError("复制后大小校验失败")
@@ -395,19 +398,31 @@ def _process_item(session_factory: sessionmaker, job_id: int, item_id: int) -> N
             final_dir = objects_dir / str(asset.id)
             final_dir.mkdir(parents=True, exist_ok=True)
             final_path = final_dir / source.name
-            os.replace(staged, final_path)
+            cleanup_candidates.append(final_path)
+            _atomic_move(staged, final_path)
             asset.file_path = str(final_path)
             item = session.get(ImportJobItem, item_id)
             item.status = "success"
             item.asset_id = asset.id
+            # On commit failure the row rolls back; the except below then removes
+            # the already-moved file so no unmanaged object is left behind.
             session.commit()
     except Exception as error:  # noqa: BLE001 - any failure must not leave half files
-        staged_cleanup = job_staging / f"{item_id}_{source.name}"
-        try:
-            staged_cleanup.unlink(missing_ok=True)
-        except OSError:
-            pass
+        for candidate in cleanup_candidates:
+            try:
+                candidate.unlink(missing_ok=True)
+            except OSError:
+                pass
+        for candidate in cleanup_candidates[1:]:
+            try:
+                candidate.parent.rmdir()
+            except OSError:
+                pass
         _fail_item(session_factory, item_id, f"导入失败：{error}")
+
+
+def _atomic_move(source: Path, destination: Path) -> None:
+    os.replace(source, destination)
 
 
 def _copy_with_hash(source: Path, destination: Path) -> str:

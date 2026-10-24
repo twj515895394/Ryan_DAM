@@ -22,11 +22,28 @@ function hasNativeBridge(): boolean {
 }
 
 async function getBackendInfo(): Promise<BackendInfo> {
-  if (!hasNativeBridge()) {
-    throw new Error("请在 Ryan_DAM 桌面客户端中使用（缺少本地服务桥接）。");
+  if (hasNativeBridge()) {
+    if (!infoPromise) {
+      infoPromise = window.ryanDam.getBackendInfo().catch((error) => {
+        infoPromise = null; // allow retry after a failed bridge call
+        throw error;
+      });
+    }
+    return infoPromise;
   }
-  if (!infoPromise) infoPromise = window.ryanDam.getBackendInfo();
-  return infoPromise;
+  // Dev-only affordance: develop/test the UI in a plain browser against a
+  // locally started backend. Packaged builds always have the native bridge.
+  if (import.meta.env.DEV) {
+    const raw = localStorage.getItem("ryan-dam-dev-backend");
+    if (raw) {
+      const parsed = JSON.parse(raw) as BackendInfo | null;
+      if (parsed?.baseUrl && parsed?.token) return parsed;
+    }
+    throw new Error(
+      "开发模式浏览器预览：请先设置 localStorage['ryan-dam-dev-backend'] = JSON.stringify({ baseUrl, token, version })，或改用桌面客户端。"
+    );
+  }
+  throw new Error("请在 Ryan_DAM 桌面客户端中使用（缺少本地服务桥接）。");
 }
 
 export class ApiRequestError extends Error {

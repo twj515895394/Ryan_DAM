@@ -1,19 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
+import AssetIcon from "./AssetIcon.vue";
 import type { AssetOut } from "../api/types";
 
 const props = defineProps<{ asset: AssetOut }>();
-
-const typeIcon = computed(() => {
-  switch (props.asset.asset_type) {
-    case "image": return "🖼️";
-    case "video": return "🎬";
-    case "audio": return "🎵";
-    case "document": return "📄";
-    default: return "📦";
-  }
-});
 
 const typeLabel = computed(() => {
   switch (props.asset.asset_type) {
@@ -37,7 +28,7 @@ const sizeLabel = computed(() => {
 <template>
   <div class="group overflow-hidden rounded-2xl border border-line bg-white transition-shadow hover:shadow-soft">
     <div class="flex aspect-square items-center justify-center bg-canvas">
-      <span class="text-4xl opacity-80">{{ typeIcon }}</span>
+      <AssetIcon :type="asset.asset_type" class="h-12 w-12 text-muted/70" />
     </div>
     <div class="px-3 py-2.5">
       <p class="truncate text-sm font-medium" :title="asset.name">{{ asset.name }}</p>

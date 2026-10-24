@@ -18,6 +18,20 @@ def client(app):
 
 
 @pytest.fixture()
+def iso_client(app, tmp_path):
+    """Client whose managed root points at a temp dir, so import tests never
+    touch the real default storage location (D:\\Ryan_DAM\\assets)."""
+    with TestClient(app) as test_client:
+        response = test_client.patch(
+            "/api/v1/settings",
+            json={"managed_root": str(tmp_path / "managed-assets")},
+            headers={"Host": "127.0.0.1", "X-Ryan-DAM-Token": "test-token"},
+        )
+        assert response.status_code == 200, response.text
+        yield test_client
+
+
+@pytest.fixture()
 def headers():
     return {"Host": "127.0.0.1", "X-Ryan-DAM-Token": "test-token"}
 
