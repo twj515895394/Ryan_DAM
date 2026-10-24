@@ -1,0 +1,53 @@
+{
+  "name": "ryan-dam",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first digital asset manager for creators",
+  "main": "apps/desktop/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev:web": "vite --config vite.config.ts",
+    "dev:electron": "wait-on tcp:127.0.0.1:5173 && cross-env RYAN_DAM_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
+    "dev": "concurrently -k -s first \"npm:dev:web\" \"npm:dev:electron\"",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "build:web": "vite build --config vite.config.ts",
+    "build": "npm run typecheck && npm run build:web",
+    "test:backend": "python -m pytest backend/tests",
+    "build:backend": "python -m PyInstaller --noconfirm --clean --onefile --name ryan-dam-api --paths . --collect-all fastapi --collect-all uvicorn --collect-all pydantic --collect-all starlette --hidden-import uvicorn.logging --hidden-import uvicorn.loops.auto --hidden-import uvicorn.protocols.http.auto --hidden-import uvicorn.lifespan.on --distpath backend/dist --workpath backend/build backend/launcher.py",
+    "package:win": "npm run build:backend && npm run build && electron-builder --win nsis --publish never"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "5.2.3",
+    "@types/node": "22.13.10",
+    "autoprefixer": "10.4.21",
+    "concurrently": "9.1.2",
+    "cross-env": "7.0.3",
+    "electron": "36.2.1",
+    "electron-builder": "26.0.12",
+    "postcss": "8.5.3",
+    "tailwindcss": "3.4.17",
+    "typescript": "5.8.2",
+    "vite": "6.2.2",
+    "vue": "3.5.13",
+    "vue-tsc": "2.2.8",
+    "wait-on": "8.0.3"
+  },
+  "build": {
+    "appId": "com.ryandam.desktop",
+    "productName": "Ryan_DAM",
+    "asar": true,
+    "directories": { "output": "release" },
+    "files": ["apps/desktop/**/*", "apps/web/dist/**/*", "package.json"],
+    "extraResources": [
+      { "from": "backend/dist", "to": "backend", "filter": ["ryan-dam-api.exe"] }
+    ],
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "artifactName": "Ryan_DAM-${version}-${arch}.${ext}"
+  }
+}
