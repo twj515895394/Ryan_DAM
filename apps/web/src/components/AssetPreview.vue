@@ -4,6 +4,7 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import { api } from "../api/client";
 import AssetIcon from "./AssetIcon.vue";
 import SidebarIcon from "./SidebarIcon.vue";
+import ConfirmDialog from "./ConfirmDialog.vue";
 import { createTag, library, updateAssetTags } from "../stores/library";
 import type { AssetOut } from "../api/types";
 
@@ -250,12 +251,35 @@ const updatedAtLabel = computed(() => {
   return date.toLocaleString("zh-CN", { hour12: false });
 });
 
+interface PreviewConfirmState {
+  title: string;
+  description: string;
+  confirmText: string;
+  intent: "danger" | "warning" | "default";
+  action: () => void;
+}
+
+const confirmDialog = ref<PreviewConfirmState | null>(null);
+
 function askDelete(): void {
   const isExternal = props.asset.source_type === "external";
-  const message = isExternal
-    ? `确定从资产库移除「${props.asset.name}」吗？只删除索引记录，不会删除磁盘上的源文件。`
-    : `确定把「${props.asset.name}」移入回收站吗？之后可以在回收站中恢复或永久删除。`;
-  if (window.confirm(message)) emit("delete", props.asset.id);
+  if (isExternal) {
+    confirmDialog.value = {
+      title: "从资产库移除资产？",
+      description: `确定从资产库移除「${props.asset.name}」吗？\n只删除索引记录，不会删除磁盘上的源文件。`,
+      confirmText: "移除索引",
+      intent: "warning",
+      action: () => emit("delete", props.asset.id)
+    };
+  } else {
+    confirmDialog.value = {
+      title: "移入回收站？",
+      description: `确定把「${props.asset.name}」移入回收站吗？\n之后可以在回收站中随时恢复或永久删除。`,
+      confirmText: "移入回收站",
+      intent: "danger",
+      action: () => emit("delete", props.asset.id)
+    };
+  }
 }
 
 const moveTargetId = ref<number | null>(null);
@@ -263,6 +287,7 @@ watch(
   () => props.asset.id,
   () => {
     moveTargetId.value = null;
+    confirmDialog.value = null;
   }
 );
 
@@ -272,10 +297,13 @@ function confirmMove(): void {
 }
 
 function askConvert(): void {
-  const message =
-    `确定把「${props.asset.name}」转为系统托管吗？\n\n` +
-    `文件将复制到托管存储并就地更新这条资产记录（保留目录与标签），外部源文件不会被删除。`;
-  if (window.confirm(message)) emit("convert", props.asset.id);
+  confirmDialog.value = {
+    title: "转为系统托管存储？",
+    description: `确定把「${props.asset.name}」转为系统托管吗？\n\n文件将复制到托管存储并就地更新资产记录（保留目录与标签），原外部文件不会被删除。`,
+    confirmText: "转为托管",
+    intent: "default",
+    action: () => emit("convert", props.asset.id)
+  };
 }
 
 // ── 提示词（票 20）────────────────────────────────────────────
@@ -846,5 +874,15 @@ onUnmounted(() => {
         </div>
       </div>
     </Teleport>
+
+    <ConfirmDialog
+      :open="confirmDialog !== null"
+      :title="confirmDialog?.title ?? ''"
+      :description="confirmDialog?.description"
+      :confirm-text="confirmDialog?.confirmText"
+      :intent="confirmDialog?.intent ?? 'default'"
+      @confirm="() => { const action = confirmDialog?.action; confirmDialog = null; action?.(); }"
+      @cancel="confirmDialog = null"
+    />
   </Teleport>
 </template>

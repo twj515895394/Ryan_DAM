@@ -8,6 +8,7 @@ import AssetPreview from "./components/AssetPreview.vue";
 import SidebarIcon from "./components/SidebarIcon.vue";
 import ImportJobPanel from "./components/ImportJobPanel.vue";
 import NameDialog from "./components/NameDialog.vue";
+import ConfirmDialog, { type ConfirmIntent } from "./components/ConfirmDialog.vue";
 import Stage0Panel from "./components/Stage0Panel.vue";
 import type { ExternalSource, FolderNode, TrashItem } from "./api/types";
 import {
@@ -80,6 +81,16 @@ const galleryScroll = ref<HTMLElement | null>(null);
 const viewMode = ref<"library" | "trash">("library");
 let savedScrollTop = 0;
 
+interface GlobalConfirmState {
+  title: string;
+  description: string;
+  confirmText: string;
+  intent: ConfirmIntent;
+  action: () => void;
+}
+
+const confirmDialog = ref<GlobalConfirmState | null>(null);
+
 function selectTrash(): void {
   viewMode.value = "trash";
   void loadTrash();
@@ -88,15 +99,27 @@ function selectTrash(): void {
 function askEmptyTrash(): void {
   const count = library.trash.length;
   if (count === 0) return;
-  if (window.confirm(`确定清空回收站吗？将永久删除 ${count} 项，文件会从磁盘删除，此操作不可恢复。`)) {
-    void emptyTrashAll();
-  }
+  confirmDialog.value = {
+    title: "清空回收站？",
+    description: `确定清空回收站吗？将永久删除 ${count} 项。\n文件会从磁盘中直接删除，此操作不可恢复。`,
+    confirmText: "清空回收站",
+    intent: "danger",
+    action: () => {
+      void emptyTrashAll();
+    }
+  };
 }
 
 function askPermanentDeleteTrashItem(item: TrashItem): void {
-  if (window.confirm(`确定永久删除「${item.name}」吗？文件将从磁盘删除，此操作不可恢复。`)) {
-    void permanentlyDeleteTrashItem(item.id);
-  }
+  confirmDialog.value = {
+    title: "永久删除该资产？",
+    description: `确定永久删除「${item.name}」吗？\n文件将从磁盘中彻底删除，此操作不可恢复。`,
+    confirmText: "永久删除",
+    intent: "danger",
+    action: () => {
+      void permanentlyDeleteTrashItem(item.id);
+    }
+  };
 }
 
 function onRestoreTrashItem(item: TrashItem): void {
@@ -106,9 +129,15 @@ function onRestoreTrashItem(item: TrashItem): void {
 function askBulkTrash(): void {
   const count = library.selectedAssetIds.length;
   if (count === 0) return;
-  if (window.confirm(`确定删除选中的 ${count} 项吗？托管资产将移入回收站，可随时恢复；外部资产仅移除索引，不删除源文件。`)) {
-    void bulkTrashSelected();
-  }
+  confirmDialog.value = {
+    title: "删除选中的资产？",
+    description: `确定删除选中的 ${count} 项吗？\n托管资产将移入回收站，可随时恢复；外部资产仅移除索引，不会删除源文件。`,
+    confirmText: "删除资产",
+    intent: "danger",
+    action: () => {
+      void bulkTrashSelected();
+    }
+  };
 }
 
 async function onDeleteFromPreview(assetId: number): Promise<void> {
@@ -198,11 +227,18 @@ async function onTargetDialogPick(folderId: number): Promise<void> {
 }
 
 function askUnlinkExternal(source: ExternalSource): void {
-  const message =
-    `确定解除关联「${source.display_name ?? source.root_path}」吗？\n\n` +
-    `将移除该来源下 ${source.asset_count} 个外部资产索引（含 ${source.missing_count} 个失效项）；` +
-    `不会删除磁盘上的源文件；已转为托管的资产会保留。`;
-  if (window.confirm(message)) void unlinkExternalSource(source.id);
+  confirmDialog.value = {
+    title: "解除外部目录关联？",
+    description:
+      `确定解除关联「${source.display_name ?? source.root_path}」吗？\n\n` +
+      `将移除该来源下 ${source.asset_count} 个外部资产索引（含 ${source.missing_count} 个失效项）；` +
+      `不会删除磁盘上的源文件；已转为托管的资产不受影响。`,
+    confirmText: "解除关联",
+    intent: "warning",
+    action: () => {
+      void unlinkExternalSource(source.id);
+    }
+  };
 }
 
 const ASSET_TYPE_LABELS: Record<string, string> = {
@@ -281,9 +317,15 @@ const dialogInitial = computed(() => {
 });
 
 function askDeleteTag(id: number, name: string): void {
-  if (window.confirm(`确定删除标签「${name}」吗？只有未被任何资产使用的标签可以删除。`)) {
-    void deleteTag(id);
-  }
+  confirmDialog.value = {
+    title: "删除标签？",
+    description: `确定删除标签「${name}」吗？\n只有未被任何资产使用的空闲标签可以被删除。`,
+    confirmText: "删除标签",
+    intent: "danger",
+    action: () => {
+      void deleteTag(id);
+    }
+  };
 }
 
 function selectGeneral(): void {
@@ -308,19 +350,31 @@ function selectFolder(node: FolderNode): void {
 }
 
 function askDeleteProject(id: number, name: string): void {
-  if (window.confirm(`确定删除项目「${name}」吗？仅允许删除没有任何文件夹的空项目。`)) {
-    void deleteProject(id).then((ok) => {
-      if (ok && activeProjectId.value === id) selectGeneral();
-    });
-  }
+  confirmDialog.value = {
+    title: "删除项目？",
+    description: `确定删除项目「${name}」吗？\n注意：仅允许删除没有任何文件夹的空项目。`,
+    confirmText: "删除项目",
+    intent: "danger",
+    action: () => {
+      void deleteProject(id).then((ok) => {
+        if (ok && activeProjectId.value === id) selectGeneral();
+      });
+    }
+  };
 }
 
 function askDeleteFolder(node: FolderNode): void {
-  if (window.confirm(`确定删除文件夹「${node.name}」吗？只有空文件夹（无子目录、无资产）可以删除。`)) {
-    void deleteFolder(node.id).then((ok) => {
-      if (ok && activeFolderId.value === node.id) selectGeneral();
-    });
-  }
+  confirmDialog.value = {
+    title: "删除文件夹？",
+    description: `确定删除文件夹「${node.name}」吗？\n注意：只有空文件夹（无子目录、无资产）可以被删除。`,
+    confirmText: "删除文件夹",
+    intent: "danger",
+    action: () => {
+      void deleteFolder(node.id).then((ok) => {
+        if (ok && activeFolderId.value === node.id) selectGeneral();
+      });
+    }
+  };
 }
 
 async function runFilesImport(folderId: number): Promise<void> {
@@ -1591,6 +1645,16 @@ onUnmounted(() => {
       :confirm-text="dialog?.kind === 'root-edit' ? '保存' : '确定'"
       @confirm="onDialogConfirm"
       @cancel="dialog = null"
+    />
+
+    <ConfirmDialog
+      :open="confirmDialog !== null"
+      :title="confirmDialog?.title ?? ''"
+      :description="confirmDialog?.description"
+      :confirm-text="confirmDialog?.confirmText"
+      :intent="confirmDialog?.intent ?? 'default'"
+      @confirm="() => { const action = confirmDialog?.action; confirmDialog = null; action?.(); }"
+      @cancel="confirmDialog = null"
     />
 
     <Stage0Panel v-if="showStage0" @close="showStage0 = false" />
