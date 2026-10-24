@@ -43,7 +43,7 @@
 - 配置 SQLite、SQLAlchemy、Alembic 和启动迁移。
 - 建立 projects、folders、assets、tags、asset_tags、external_sources、import_jobs、import_job_items、app_settings 等基础表。
 - 实现通用资产库和项目资产库的逻辑目录树。
-- 实现默认托管目录设置，默认推荐 `D:\\Ryan_DAM\\assets`。
+- 实现默认托管目录设置，默认推荐 `D:\Ryan_DAM\assets`。
 - 实现项目/文件夹基本创建、重命名、选择与目录校验。
 - 建立资产路径、来源类型和状态字段的约束。
 
