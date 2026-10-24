@@ -65,7 +65,7 @@ def create_app(api_token: str | None = None, db_path: str | None = None) -> Fast
     application.add_middleware(
         CORSMiddleware,
         allow_origins=sorted(ALLOWED_ORIGINS),
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "X-Ryan-DAM-Token"],
         allow_credentials=False,
         max_age=300,

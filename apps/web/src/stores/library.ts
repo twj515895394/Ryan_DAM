@@ -535,9 +535,9 @@ export async function convertExternalToManaged(assetId: number): Promise<boolean
   }
 }
 
-// 删除/恢复会同时影响画廊与回收站计数，统一刷新两处
+// 删除/恢复会同时影响画廊、回收站计数与外部来源计数，统一刷新
 async function refreshAfterTrashChange(): Promise<void> {
-  await Promise.all([loadTrash(), loadTags(), refreshCurrentAssetsQuiet()]);
+  await Promise.all([loadTrash(), loadTags(), loadExternalSources(), refreshCurrentAssetsQuiet()]);
 }
 
 export async function deleteAssetToTrash(assetId: number): Promise<boolean> {
