@@ -171,6 +171,16 @@ export const api = {
   deleteTag: (id: number) => request<void>(`/api/v1/tags/${id}`, { method: "DELETE" }),
   setAssetTags: (assetId: number, tagIds: number[]) =>
     request<Tag[]>(`/api/v1/assets/${assetId}/tags`, { method: "PUT", json: { tag_ids: tagIds } }),
+  bulkTags: (payload: { asset_ids: number[]; add_tag_ids?: number[]; remove_tag_ids?: number[] }) =>
+    request<{ ok_count: number; failed_count: number; items: { asset_id: number; ok: boolean; error: string | null }[] }>(
+      "/api/v1/assets/bulk-tags",
+      { method: "POST", json: payload }
+    ),
+  bulkMove: (payload: { asset_ids: number[]; target_folder_id: number }) =>
+    request<{ ok_count: number; failed_count: number; items: { asset_id: number; ok: boolean; error: string | null }[] }>(
+      "/api/v1/assets/bulk-move",
+      { method: "POST", json: payload }
+    ),
 
   getSettings: () => request<Settings>("/api/v1/settings"),
   updateSettings: (managedRoot: string) =>

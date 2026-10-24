@@ -10,7 +10,11 @@ import NameDialog from "./components/NameDialog.vue";
 import Stage0Panel from "./components/Stage0Panel.vue";
 import type { FolderNode } from "./api/types";
 import {
+  bulkAddTags,
+  bulkMove,
+  bulkRemoveTags,
   clearAssetFilters,
+  clearAssetSelection,
   clearAssets,
   createGeneralFolder,
   createProject,
@@ -28,6 +32,7 @@ import {
   renameFolder,
   renameProject,
   renameTag,
+  toggleAssetSelection,
   updateManagedRoot
 } from "./stores/library";
 
@@ -216,6 +221,24 @@ function loadMoreAssets(): void {
   if (!assets) return;
   void refreshCurrentAssets(true, assets.page + 1);
 }
+
+const showBatchBar = computed(() => library.selectedAssetIds.length > 0);
+const batchPanel = ref<"none" | "add-tag" | "remove-tag" | "move">("none");
+
+function flattenFolders(nodes: FolderNode[], prefix: string, out: { id: number; label: string }[]): void {
+  for (const node of nodes) {
+    const label = prefix ? `${prefix} / ${node.name}` : node.name;
+    out.push({ id: node.id, label });
+    flattenFolders(node.children, label, out);
+  }
+}
+
+const moveTargetOptions = computed(() => {
+  const out: { id: number; label: string }[] = [];
+  if (activeScope.value === "general") flattenFolders(library.generalTree, "", out);
+  else if (activeProjectId.value !== null) flattenFolders(library.projectTrees[activeProjectId.value] ?? [], "", out);
+  return out;
+});
 
 const previewAsset = computed(() => {
   if (previewIndex.value === null || !library.assets) return null;
@@ -584,7 +607,9 @@ onMounted(() => {
             v-for="asset in library.assets.items"
             :key="asset.id"
             :asset="asset"
+            :selected="library.selectedAssetIds.includes(asset.id)"
             @open="openPreview(asset.id)"
+            @toggle-select="toggleAssetSelection(asset.id)"
           />
         </div>
 
@@ -637,6 +662,59 @@ onMounted(() => {
       @prev="stepPreview(-1)"
       @next="stepPreview(1)"
     />
+
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-150"
+        enter-from-class="opacity-0 translate-y-2"
+        leave-active-class="transition duration-150"
+        leave-to-class="opacity-0 translate-y-2"
+      >
+        <div v-if="showBatchBar" class="fixed bottom-5 left-1/2 z-40 -translate-x-1/2">
+          <div class="flex items-center gap-1.5 rounded-2xl border border-line bg-white px-4 py-2.5 shadow-soft">
+            <span class="mr-1 text-sm font-medium">已选 {{ library.selectedAssetIds.length }} 项</span>
+            <div class="relative">
+              <button class="rounded-lg px-3 py-1.5 text-sm text-ink transition hover:bg-canvas" @click="batchPanel = batchPanel === 'add-tag' ? 'none' : 'add-tag'">加标签</button>
+              <div v-if="batchPanel === 'add-tag'" class="absolute bottom-11 left-0 z-50 w-52 rounded-xl border border-line bg-white p-2 shadow-soft">
+                <p v-if="library.tags.length === 0" class="px-2 py-1 text-xs text-muted">暂无标签，请先创建</p>
+                <button
+                  v-for="tag in library.tags"
+                  :key="tag.id"
+                  class="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-canvas"
+                  @click="bulkAddTags(tag.id); batchPanel = 'none'"
+                >{{ tag.name }}</button>
+              </div>
+            </div>
+            <div class="relative">
+              <button class="rounded-lg px-3 py-1.5 text-sm text-ink transition hover:bg-canvas" @click="batchPanel = batchPanel === 'remove-tag' ? 'none' : 'remove-tag'">移除标签</button>
+              <div v-if="batchPanel === 'remove-tag'" class="absolute bottom-11 left-0 z-50 w-52 rounded-xl border border-line bg-white p-2 shadow-soft">
+                <p v-if="library.tags.length === 0" class="px-2 py-1 text-xs text-muted">暂无标签</p>
+                <button
+                  v-for="tag in library.tags"
+                  :key="tag.id"
+                  class="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-canvas"
+                  @click="bulkRemoveTags(tag.id); batchPanel = 'none'"
+                >{{ tag.name }}</button>
+              </div>
+            </div>
+            <div class="relative">
+              <button class="rounded-lg px-3 py-1.5 text-sm text-ink transition hover:bg-canvas" @click="batchPanel = batchPanel === 'move' ? 'none' : 'move'">移动到…</button>
+              <div v-if="batchPanel === 'move'" class="absolute bottom-11 left-0 z-50 max-h-64 w-64 overflow-y-auto rounded-xl border border-line bg-white p-2 shadow-soft">
+                <p v-if="moveTargetOptions.length === 0" class="px-2 py-1 text-xs text-muted">当前范围没有可选目录</p>
+                <button
+                  v-for="option in moveTargetOptions"
+                  :key="option.id"
+                  class="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-canvas"
+                  :title="option.label"
+                  @click="bulkMove(option.id); batchPanel = 'none'"
+                >{{ option.label }}</button>
+              </div>
+            </div>
+            <button class="rounded-lg px-3 py-1.5 text-sm text-muted transition hover:bg-canvas" @click="clearAssetSelection(); batchPanel = 'none'">取消</button>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <ImportJobPanel />
 

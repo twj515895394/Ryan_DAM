@@ -5,9 +5,9 @@ import { api } from "../api/client";
 import AssetIcon from "./AssetIcon.vue";
 import type { AssetOut } from "../api/types";
 
-const props = defineProps<{ asset: AssetOut }>();
+const props = defineProps<{ asset: AssetOut; selected: boolean }>();
 
-const emit = defineEmits<{ (e: "open", asset: AssetOut): void }>();
+const emit = defineEmits<{ (e: "open", asset: AssetOut): void; (e: "toggle-select", asset: AssetOut): void }>();
 
 const objectUrl = ref<string | null>(null);
 let loadToken = 0;
@@ -79,13 +79,20 @@ onUnmounted(clear);
 
 <template>
   <div
-    class="group cursor-zoom-in overflow-hidden rounded-2xl border border-line bg-white transition-shadow hover:shadow-soft"
+    class="group cursor-zoom-in overflow-hidden rounded-2xl border bg-white transition-shadow hover:shadow-soft"
+    :class="selected ? 'border-accent ring-2 ring-accent/30' : 'border-line'"
     role="button"
     tabindex="0"
     @click="emit('open', asset)"
     @keydown.enter="emit('open', asset)"
   >
     <div class="relative flex aspect-square items-center justify-center overflow-hidden bg-canvas">
+      <button
+        class="absolute left-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded border bg-white/90 text-[11px] transition"
+        :class="selected ? 'border-accent bg-accent text-white' : 'border-line text-transparent group-hover:text-muted'"
+        :title="selected ? '取消选择' : '选择'"
+        @click.stop="emit('toggle-select', asset)"
+      >✓</button>
       <img
         v-if="objectUrl"
         :src="objectUrl"

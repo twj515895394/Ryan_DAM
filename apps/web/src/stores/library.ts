@@ -27,6 +27,7 @@ export interface LibraryState {
   assets: AssetPage | null;
   assetQuery: AssetQueryState;
   tags: Tag[];
+  selectedAssetIds: number[];
 }
 
 export const library = reactive<LibraryState>({
@@ -39,7 +40,8 @@ export const library = reactive<LibraryState>({
   importJob: null,
   assets: null,
   assetQuery: { q: "", assetType: "", sizeRange: "", modifiedRange: "", tagId: null, sort: "created_at", order: "desc" },
-  tags: []
+  tags: [],
+  selectedAssetIds: []
 });
 
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -373,6 +375,60 @@ export async function updateAssetTags(assetId: number, tagIds: number[]): Promis
   } catch (error) {
     notify("error", errText(error));
     return false;
+  }
+}
+
+export function toggleAssetSelection(assetId: number): void {
+  const index = library.selectedAssetIds.indexOf(assetId);
+  if (index >= 0) library.selectedAssetIds.splice(index, 1);
+  else library.selectedAssetIds.push(assetId);
+}
+
+export function clearAssetSelection(): void {
+  library.selectedAssetIds = [];
+}
+
+function summarize(result: { ok_count: number; failed_count: number }): string {
+  if (result.failed_count === 0) return `操作完成：成功 ${result.ok_count} 项。`;
+  return `操作完成：成功 ${result.ok_count} 项，失败 ${result.failed_count} 项。`;
+}
+
+export async function bulkAddTags(tagId: number): Promise<void> {
+  if (library.selectedAssetIds.length === 0) return;
+  try {
+    const result = await api.bulkTags({ asset_ids: library.selectedAssetIds, add_tag_ids: [tagId] });
+    notify(result.failed_count ? "error" : "success", summarize(result));
+    await loadTags();
+    await refreshCurrentAssetsQuiet();
+    clearAssetSelection();
+  } catch (error) {
+    notify("error", errText(error));
+  }
+}
+
+export async function bulkRemoveTags(tagId: number): Promise<void> {
+  if (library.selectedAssetIds.length === 0) return;
+  try {
+    const result = await api.bulkTags({ asset_ids: library.selectedAssetIds, remove_tag_ids: [tagId] });
+    notify(result.failed_count ? "error" : "success", summarize(result));
+    await loadTags();
+    await refreshCurrentAssetsQuiet();
+    clearAssetSelection();
+  } catch (error) {
+    notify("error", errText(error));
+  }
+}
+
+export async function bulkMove(targetFolderId: number): Promise<void> {
+  if (library.selectedAssetIds.length === 0) return;
+  try {
+    const result = await api.bulkMove({ asset_ids: library.selectedAssetIds, target_folder_id: targetFolderId });
+    notify(result.failed_count ? "error" : "success", summarize(result));
+    await loadAll();
+    await refreshCurrentAssetsQuiet();
+    clearAssetSelection();
+  } catch (error) {
+    notify("error", errText(error));
   }
 }
 
