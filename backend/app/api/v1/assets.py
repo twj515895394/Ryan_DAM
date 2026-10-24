@@ -105,7 +105,11 @@ def get_asset_content(asset_id: int, db: Session = Depends(get_db)) -> FileRespo
     from pathlib import Path as FsPath
 
     asset = db.get(Asset, asset_id)
-    if asset is None or asset.status != "active":
+    if asset is None:
+        raise ApiError("not_found", "资产不存在或已被删除。", 404)
+    if asset.status == "missing":
+        raise ApiError("content_unavailable", "外部源文件缺失或不可访问，请重新扫描外部目录。", 404)
+    if asset.status != "active":
         raise ApiError("not_found", "资产不存在或已被删除。", 404)
     path = FsPath(asset.file_path)
     if not path.is_file():
@@ -120,7 +124,11 @@ def open_asset_externally(asset_id: int, db: Session = Depends(get_db)) -> None:
     import os
 
     asset = db.get(Asset, asset_id)
-    if asset is None or asset.status != "active":
+    if asset is None:
+        raise ApiError("not_found", "资产不存在或已被删除。", 404)
+    if asset.status == "missing":
+        raise ApiError("content_unavailable", "外部源文件缺失或不可访问，请重新扫描外部目录。", 404)
+    if asset.status != "active":
         raise ApiError("not_found", "资产不存在或已被删除。", 404)
     path = asset.file_path
     if not os.path.isfile(path):

@@ -48,10 +48,11 @@ def parse_datetime(value: str | None, field: str) -> datetime | None:
 
 
 def build_query(db: Session, args: AssetQuery):
+    # 'missing' external assets stay visible so the UI can flag them explicitly
     query = (
         db.query(Asset)
         .join(Folder, Asset.folder_id == Folder.id)
-        .filter(Asset.status == "active")
+        .filter(Asset.status.in_(("active", "missing")))
     )
     if args.folder_id is not None:
         query = query.filter(Asset.folder_id == args.folder_id)

@@ -3,11 +3,13 @@ import type {
   AssetOut,
   AssetPage,
   BulkResult,
+  ExternalSource,
   FolderCreatePayload,
   FolderNode,
   FolderOut,
   ImportJob,
   Project,
+  ScanResult,
   Settings,
   Tag,
   TrashList
@@ -171,6 +173,15 @@ export const api = {
     request<AssetOut>(`/api/v1/assets/${id}`, { method: "PATCH", json: { name } }),
   moveAsset: (id: number, folderId: number) =>
     request<AssetOut>(`/api/v1/assets/${id}/move`, { method: "POST", json: { folder_id: folderId } }),
+
+  listExternalSources: () => request<ExternalSource[]>("/api/v1/external-sources"),
+  createExternalSource: (rootPath: string, targetFolderId: number) =>
+    request<{ source: ExternalSource; scan: ScanResult }>("/api/v1/external-sources", {
+      method: "POST",
+      json: { root_path: rootPath, target_folder_id: targetFolderId }
+    }),
+  scanExternalSource: (id: number) =>
+    request<ScanResult>(`/api/v1/external-sources/${id}/scan`, { method: "POST" }),
 
   listTags: () => request<Tag[]>("/api/v1/tags"),
   createTag: (name: string) => request<Tag>("/api/v1/tags", { method: "POST", json: { name } }),

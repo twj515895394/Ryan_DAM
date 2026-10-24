@@ -59,6 +59,7 @@ export interface AssetOut {
   size_bytes: number;
   source_type: "managed" | "external";
   thumbnail_status: string;
+  status: "active" | "trashed" | "missing";
   media_width: number | null;
   media_height: number | null;
   media_duration_ms: number | null;
@@ -94,6 +95,25 @@ export interface BulkResult {
   ok_count: number;
   failed_count: number;
   items: { asset_id: number; ok: boolean; error: string | null }[];
+}
+
+export interface ExternalSource {
+  id: number;
+  root_path: string;
+  display_name: string | null;
+  target_folder_id: number;
+  target_folder_name: string | null;
+  last_scan_at: string | null;
+  status: string;
+  asset_count: number;
+  missing_count: number;
+}
+
+export interface ScanResult {
+  added: number;
+  updated: number;
+  missing: number;
+  reactivated: number;
 }
 
 export interface ImportJobItem {

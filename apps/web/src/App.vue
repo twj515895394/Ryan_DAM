@@ -30,7 +30,9 @@ import {
   importFiles,
   importFolder,
   library,
+  linkExternalSource,
   loadAll,
+  loadExternalSources,
   loadTags,
   loadTrash,
   permanentlyDeleteTrashItem,
@@ -40,6 +42,7 @@ import {
   renameAssetById,
   renameTag,
   restoreFromTrash,
+  rescanExternalSource,
   toggleAssetSelection,
   updateManagedRoot
 } from "./stores/library";
@@ -53,6 +56,8 @@ type DialogRequest =
   | { kind: "tag-rename"; tagId: number; initial: string }
   | { kind: "asset-rename"; assetId: number; initial: string }
   | { kind: "root-edit" };
+
+const externalTargetDialog = ref<string | null>(null);
 
 const dialog = ref<DialogRequest | null>(null);
 const showStage0 = ref(false);
@@ -139,6 +144,37 @@ const previewMoveOptions = computed<{ id: number; label: string }[]>(() => {
   flattenFolders(library.generalTree, "", out);
   return out;
 });
+
+// ── 外部目录关联（票 17）────────────────────────────────────────
+
+async function startLinkExternal(): Promise<void> {
+  let folder: string | null = null;
+  try {
+    folder = await window.ryanDam.selectFolder();
+  } catch {
+    return;
+  }
+  if (!folder) return;
+  externalTargetDialog.value = folder;
+}
+
+const allFolderOptions = computed<{ id: number; label: string }[]>(() => {
+  const out: { id: number; label: string }[] = [];
+  flattenFolders(library.generalTree, "", out);
+  for (const project of library.projects) {
+    const scoped: { id: number; label: string }[] = [];
+    flattenFolders(library.projectTrees[project.id] ?? [], "", scoped);
+    scoped.forEach((option) => out.push({ id: option.id, label: `${project.name} / ${option.label}` }));
+  }
+  return out;
+});
+
+async function confirmLinkExternal(folderId: number): Promise<void> {
+  const root = externalTargetDialog.value;
+  externalTargetDialog.value = null;
+  if (!root) return;
+  await linkExternalSource(root, folderId);
+}
 
 const ASSET_TYPE_LABELS: Record<string, string> = {
   image: "图片",
@@ -463,6 +499,7 @@ onMounted(() => {
   void loadAll().then(() => refreshCurrentAssets());
   void loadTags();
   void loadTrash();
+  void loadExternalSources();
 });
 </script>
 
@@ -595,6 +632,40 @@ onMounted(() => {
             </div>
           </div>
         </section>
+        <section class="mt-5">
+          <div class="flex items-center justify-between pl-1.5 pr-1 pb-1 pt-2">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted">外部目录</p>
+            <button
+              class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-canvas hover:text-accent"
+              title="关联外部目录（只读索引，不修改源文件）"
+              @click="startLinkExternal"
+            >＋</button>
+          </div>
+          <p v-if="library.externalSources.length === 0" class="px-1.5 py-1 text-xs leading-5 text-muted">
+            可将磁盘上已有的素材目录索引进资产库，只读不修改源文件。
+          </p>
+          <div v-for="source in library.externalSources" :key="source.id" class="group/src">
+            <div class="flex items-center gap-1 rounded-lg px-1.5 py-1.5 text-sm transition-colors hover:bg-canvas">
+              <span class="min-w-0 flex-1">
+                <span class="block truncate" :title="source.root_path">{{ source.display_name ?? source.root_path }}</span>
+                <span class="block truncate text-[10px] text-muted">
+                  {{ source.asset_count }} 项 · 指向 {{ source.target_folder_name ?? "未知目录" }}
+                </span>
+              </span>
+              <span class="hidden shrink-0 items-center gap-0.5 group-hover/src:flex">
+                <button
+                  class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-accent"
+                  title="重新扫描（检测新增/变更/失效）"
+                  @click.stop="rescanExternalSource(source.id)"
+                >⟳</button>
+              </span>
+            </div>
+            <p v-if="source.missing_count > 0" class="px-1.5 pb-1 text-[10px] leading-4 text-amber-700">
+              {{ source.missing_count }} 项源文件缺失，重新扫描可检测恢复
+            </p>
+          </div>
+        </section>
+
         <section class="mt-5">
           <div class="flex items-center justify-between pl-1.5 pr-1 pb-1 pt-2">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-muted">回收站</p>
@@ -936,6 +1007,39 @@ onMounted(() => {
     </Teleport>
 
     <ImportJobPanel />
+
+    <Teleport to="body">
+      <div
+        v-if="externalTargetDialog"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+        @click.self="externalTargetDialog = null"
+      >
+        <div class="w-[440px] rounded-2xl border border-line bg-white p-5 shadow-soft">
+          <h3 class="text-sm font-semibold">选择库内目标目录</h3>
+          <p class="mt-1.5 break-all text-xs leading-5 text-muted">
+            {{ externalTargetDialog }} 中的文件将索引到所选目录（保留子目录层级）；只读索引，源文件不会被修改或删除。
+          </p>
+          <div class="mt-3 max-h-64 overflow-y-auto rounded-xl border border-line p-1.5">
+            <p v-if="allFolderOptions.length === 0" class="px-2 py-1.5 text-xs text-muted">
+              还没有可用目录，请先在左侧创建一个目录。
+            </p>
+            <button
+              v-for="option in allFolderOptions"
+              :key="option.id"
+              class="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-canvas"
+              :title="option.label"
+              @click="confirmLinkExternal(option.id)"
+            >{{ option.label }}</button>
+          </div>
+          <div class="mt-4 flex justify-end">
+            <button
+              class="rounded-lg px-3 py-1.5 text-sm text-muted transition hover:bg-canvas"
+              @click="externalTargetDialog = null"
+            >取消</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <NameDialog
       :open="dialog !== null"

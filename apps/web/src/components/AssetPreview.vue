@@ -385,6 +385,10 @@ onUnmounted(() => {
                 {{ asset.source_type === 'external' ? '外部链接' : '系统托管' }}
               </dd>
             </div>
+            <div v-if="asset.status === 'missing'" class="flex justify-between gap-3">
+              <dt class="shrink-0 text-muted">状态</dt>
+              <dd class="text-right text-rose-600">失效（源文件缺失）</dd>
+            </div>
             <div class="flex justify-between gap-3"><dt class="shrink-0 text-muted">大小</dt><dd>{{ sizeLabel }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="shrink-0 text-muted">尺寸</dt><dd>{{ dimensionsLabel }}</dd></div>
             <div v-if="durationLabel" class="flex justify-between gap-3"><dt class="shrink-0 text-muted">时长</dt><dd>{{ durationLabel }}</dd></div>

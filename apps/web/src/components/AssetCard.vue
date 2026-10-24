@@ -108,6 +108,11 @@ onUnmounted(clear);
         v-if="asset.source_type === 'external'"
         class="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
       >外部链接</span>
+      <span
+        v-if="asset.status === 'missing'"
+        class="absolute bottom-1.5 left-2 rounded bg-rose-600/90 px-1.5 py-0.5 text-[10px] font-medium text-white"
+        title="源文件缺失，重新扫描外部目录可检测恢复"
+      >失效</span>
     </div>
     <div class="px-3 py-2.5">
       <p class="truncate text-sm font-medium" :title="asset.name">{{ asset.name }}</p>

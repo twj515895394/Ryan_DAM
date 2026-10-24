@@ -1,7 +1,16 @@
 import { reactive } from "vue";
 
 import { api, ApiRequestError } from "../api/client";
-import type { AssetPage, FolderNode, ImportJob, Project, Settings, Tag, TrashItem } from "../api/types";
+import type {
+  AssetPage,
+  ExternalSource,
+  FolderNode,
+  ImportJob,
+  Project,
+  Settings,
+  Tag,
+  TrashItem
+} from "../api/types";
 
 export type SizeRange = "" | "small" | "medium" | "large";
 export type ModifiedRange = "" | "today" | "week" | "month";
@@ -29,6 +38,7 @@ export interface LibraryState {
   tags: Tag[];
   selectedAssetIds: number[];
   trash: TrashItem[];
+  externalSources: ExternalSource[];
 }
 
 export const library = reactive<LibraryState>({
@@ -43,7 +53,8 @@ export const library = reactive<LibraryState>({
   assetQuery: { q: "", assetType: "", sizeRange: "", modifiedRange: "", tagId: null, sort: "created_at", order: "desc" },
   tags: [],
   selectedAssetIds: [],
-  trash: []
+  trash: [],
+  externalSources: []
 });
 
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -459,6 +470,42 @@ export async function moveAssetToFolder(assetId: number, folderId: number): Prom
 export async function loadTrash(): Promise<void> {
   try {
     library.trash = (await api.listTrash()).items;
+  } catch (error) {
+    notify("error", errText(error));
+  }
+}
+
+export async function loadExternalSources(): Promise<void> {
+  try {
+    library.externalSources = await api.listExternalSources();
+  } catch (error) {
+    notify("error", errText(error));
+  }
+}
+
+export async function linkExternalSource(rootPath: string, targetFolderId: number): Promise<boolean> {
+  try {
+    const result = await api.createExternalSource(rootPath, targetFolderId);
+    await Promise.all([loadExternalSources(), loadAll(), refreshCurrentAssetsQuiet()]);
+    const scan = result.scan;
+    notify("success", `外部目录已关联：新增 ${scan.added} 项。`);
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
+export async function rescanExternalSource(sourceId: number): Promise<void> {
+  try {
+    const scan = await api.scanExternalSource(sourceId);
+    await Promise.all([loadExternalSources(), refreshCurrentAssetsQuiet()]);
+    const parts: string[] = [];
+    if (scan.added) parts.push(`新增 ${scan.added}`);
+    if (scan.updated) parts.push(`变更 ${scan.updated}`);
+    if (scan.missing) parts.push(`失效 ${scan.missing}`);
+    if (scan.reactivated) parts.push(`恢复 ${scan.reactivated}`);
+    notify("success", parts.length ? `重新扫描完成：${parts.join("，")}。` : "重新扫描完成：没有变化。");
   } catch (error) {
     notify("error", errText(error));
   }

@@ -27,7 +27,7 @@ def test_fresh_database_migrates_all_tables(tmp_path) -> None:
     inspector = inspect(engine)
     assert EXPECTED_TABLES.issubset(set(inspector.get_table_names()))
     version = engine.connect().exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-    assert version == "0003"
+    assert version == "0004"
 
 
 def test_migrations_are_idempotent(tmp_path) -> None:
