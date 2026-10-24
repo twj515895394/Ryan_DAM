@@ -516,7 +516,7 @@ npm run package:win
   - `npm run typecheck` / `npm run build` → 通过
   - `.venv/Scripts/python.exe scripts/e2e_smoke.py` → **15 passed**（真实 HTTP：健康、默认根目录、项目/目录 CRUD、循环与跨作用域拦截、token 401、设置更新、**重启后持久化**）
   - 后端直启冒烟：READY 随机端口 → `/health` 200 → 无 token 401 → `/shutdown` 干净退出（退出码 0）
-  - CI：run `40077429948`（commit `1d70a69`）success；阶段 1 提交 CI：https://github.com/twj515895394/Ryan_DAM/actions/runs （head `87c1ecf`，提交时正在运行，结果需下一位核对并回填）
+  - CI：阶段 1 提交（head `87c1ecf`）→ [run 40081295485](https://github.com/twj515895394/Ryan_DAM/actions/runs/40081295485) **success**（npm ci + venv + 31 pytest + typecheck + PyInstaller/NSIS 安装包构建与 Artifact 上传）；此前 run `40077429948`（commit `1d70a69`）同样 success。
 - **未完成 / 已知问题：**
   - **阶段 0 GUI 实机验收仍未完成**（安装版启动、bundled 后端生命周期、拖入 Chrome、多屏窗口状态）——`docs/STAGE_0_VALIDATION.md` 对应项保持未勾选，不得在未实测时勾选。
   - `shadcn-vue` 尚未引入（阶段 4 前按需接入）；Pinia 未引入（当前用轻量 composable store `apps/web/src/stores/library.ts`，够用）。
@@ -525,9 +525,9 @@ npm run package:win
   - FastAPI 0.115 + `from __future__ import annotations` 组合下，204 路由必须显式 `response_model=None`，否则返回注解 `-> None` 被解析为 response_model 触发断言（已修复，见 projects/folders delete 路由）。
   - 本机沙盒环境盘符探测不可靠；`test_unavailable_drive_reported` 动态选择不存在的盘符，找不到则跳过。
 - **下一步第一任务（1–3 个）：**
-  1. 核对 head `87c1ecf` 的 CI 结果并回填本节；失败则修复重跑。
-  2. Windows 实机完成 §5.5 验收步骤，勾选 `docs/STAGE_0_VALIDATION.md` 已实测项。
-  3. 按 GitHub Issues 的票序开始阶段 2 第 1 票（导入任务骨架 + 文件/文件夹选择 IPC）。
+  1. Windows 实机完成 §5.5 验收步骤，勾选 `docs/STAGE_0_VALIDATION.md` 已实测项。
+  2. 按已拆分的 GitHub Issues 票序开始阶段 2 第 1 票（导入任务骨架 + 文件/文件夹选择 IPC + 单文件导入）。
+  3. 每完成一票：跑测试 → 更新本文件 → 提交。
 
 ---
 
