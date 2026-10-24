@@ -36,6 +36,14 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _is_within(path: str, ancestor: str) -> bool:
+    """True when `path` equals or lives under `ancestor` (case-insensitive on Windows)."""
+    try:
+        return os.path.commonpath([os.path.normcase(path), os.path.normcase(ancestor)]) == os.path.normcase(ancestor)
+    except ValueError:
+        return False
+
+
 def _normalize_root(root_path: str) -> Path:
     cleaned = root_path.strip().strip('"').strip("'")
     if not cleaned:
@@ -102,7 +110,14 @@ def scan_external_source(db: Session, source: ExternalSource) -> dict[str, int]:
 
     seen: set[str] = set()
     added = updated = reactivated = 0
-    for dirpath, _dirnames, filenames in os.walk(root):
+    managed_root = Path(get_managed_root(db))
+    for dirpath, dirnames, filenames in os.walk(root):
+        # never index files that belong to the managed storage itself
+        # (linking a parent folder of the managed root would otherwise
+        #  re-index objects/.trash/.staging and fight the trash pipeline)
+        if _is_within(dirpath, str(managed_root)):
+            dirnames[:] = []
+            continue
         for filename in filenames:
             full = Path(dirpath) / filename
             try:

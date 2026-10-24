@@ -161,6 +161,24 @@ def test_permanent_delete_locked_file_is_reported_not_lost(iso_client, headers, 
     assert _asset_row(app, asset_id) is None
 
 
+def test_empty_trash_reports_partial_failure(iso_client, headers, app, tmp_path) -> None:
+    free_id = _make_one(iso_client, headers, tmp_path, "部分清空甲")
+    locked_id = _make_one(iso_client, headers, tmp_path, "部分清空乙")
+    assert iso_client.delete(f"/api/v1/assets/{free_id}", headers=headers).status_code == 204
+    assert iso_client.delete(f"/api/v1/assets/{locked_id}", headers=headers).status_code == 204
+    locked_path = Path(_asset_row(app, locked_id).file_path)
+
+    with open(locked_path, "rb"):
+        response = iso_client.post("/api/v1/trash/empty", headers=headers)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["removed"] == 1 and body["failed"] == 1
+        assert _asset_row(app, locked_id) is not None, "locked record survives"
+
+    # handle released → a second empty clears the rest
+    assert iso_client.post("/api/v1/trash/empty", headers=headers).json()["removed"] == 1
+
+
 def test_delete_external_only_removes_index(iso_client, headers, app, tmp_path) -> None:
     asset_id, source = _make_external(app, tmp_path)
 

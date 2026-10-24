@@ -350,6 +350,11 @@ async function loadContent(): Promise<void> {
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === "Escape") {
     event.preventDefault();
+    if (promptModalOpen.value) {
+      // Esc 只关最上层的提示词弹窗，不连预览一起关
+      promptModalOpen.value = false;
+      return;
+    }
     emit("close");
   } else if (event.key === "ArrowLeft") {
     event.preventDefault();
@@ -365,6 +370,7 @@ watch(() => props.asset.id, loadContent, { immediate: true });
 onUnmounted(() => {
   window.removeEventListener("keydown", onKeydown);
   clearContent();
+  if (promptCopyTimer) clearTimeout(promptCopyTimer);
 });
 </script>
 

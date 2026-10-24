@@ -79,3 +79,12 @@ def test_prompt_only_for_image_and_video(iso_client, headers, tmp_path) -> None:
 def test_prompt_missing_asset(iso_client, headers) -> None:
     assert iso_client.get("/api/v1/assets/99999/prompt", headers=headers).status_code == 404
     assert iso_client.put("/api/v1/assets/99999/prompt", json={"prompt_text": "x"}, headers=headers).status_code == 404
+
+
+def test_prompt_rejected_on_trashed_asset(iso_client, headers, tmp_path) -> None:
+    asset_id = _import_image(iso_client, headers, tmp_path, "trashed-prompt.png")
+    assert iso_client.delete(f"/api/v1/assets/{asset_id}", headers=headers).status_code == 204
+
+    assert iso_client.get(f"/api/v1/assets/{asset_id}/prompt", headers=headers).status_code == 404
+    rejected = iso_client.put(f"/api/v1/assets/{asset_id}/prompt", json={"prompt_text": "x"}, headers=headers)
+    assert rejected.status_code == 404

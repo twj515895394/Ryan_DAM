@@ -543,6 +543,9 @@ async function refreshAfterTrashChange(): Promise<void> {
 export async function deleteAssetToTrash(assetId: number): Promise<boolean> {
   try {
     await api.deleteAsset(assetId);
+    // 选区里残留已删除的 id 会让后续批量操作整体 404
+    const index = library.selectedAssetIds.indexOf(assetId);
+    if (index >= 0) library.selectedAssetIds.splice(index, 1);
     await refreshAfterTrashChange();
     notify("success", "已移入回收站。");
     return true;

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 TERMINAL = {"completed", "completed_with_errors", "failed", "interrupted"}
 
 
@@ -349,3 +351,73 @@ def test_convert_rejects_managed_and_insufficient_space(iso_client, headers, app
     managed_id = final["items"][0]["asset_id"]
     rejected = iso_client.post(f"/api/v1/assets/{managed_id}/convert-to-managed", headers=headers)
     assert rejected.status_code == 422
+
+
+def test_convert_rejected_on_trashed_asset(iso_client, headers, app, tmp_path) -> None:
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.app.models.asset import Asset
+
+    root = tmp_path / "转托管回收库"
+    root.mkdir()
+    (root / "doomed.txt").write_text("doomed", encoding="utf-8")
+    folder = iso_client.post("/api/v1/folders", json={"name": "回收转换目标", "scope": "general"}, headers=headers).json()
+    _link(iso_client, headers, root, folder["id"])
+    asset_id = _assets_in(iso_client, headers, folder["id"])[0]["id"]
+
+    # external deletion is index-only, so convert an imported managed file instead
+    seed = tmp_path / "doomed-managed.txt"
+    seed.write_text("doomed-managed", encoding="utf-8")
+    job = iso_client.post("/api/v1/imports", json={"paths": [str(seed)], "folder_id": folder["id"]}, headers=headers).json()
+    for _ in range(300):
+        final = iso_client.get(f"/api/v1/imports/{job['id']}", headers=headers).json()
+        if final["status"] in TERMINAL:
+            break
+        time.sleep(0.05)
+    managed_id = final["items"][0]["asset_id"]
+    assert iso_client.delete(f"/api/v1/assets/{managed_id}", headers=headers).status_code == 204
+
+    session_factory: sessionmaker = app.state.session_factory
+    with session_factory() as session:
+        row = session.get(Asset, managed_id)
+        assert row is not None and row.status == "trashed"
+
+    response = iso_client.post(f"/api/v1/assets/{managed_id}/convert-to-managed", headers=headers)
+    assert response.status_code == 404
+
+
+def test_scan_skips_managed_root_subtree(iso_client, headers, tmp_path) -> None:
+    """把托管根的父目录关联为外部源时，不得把 objects/.trash/.staging 索引进来。"""
+    parent = tmp_path / "hosting"
+    managed = parent / "managed-assets"
+    managed.mkdir(parents=True)
+    (parent / "outside.txt").write_text("outside", encoding="utf-8")
+
+    # point the app's managed root at parent/managed-assets
+    assert iso_client.patch(
+        "/api/v1/settings",
+        json={"managed_root": str(managed)},
+        headers=headers,
+    ).status_code == 200
+
+    folder = iso_client.post("/api/v1/folders", json={"name": "父目录关联", "scope": "general"}, headers=headers).json()
+    source_id = _link(iso_client, headers, parent, folder["id"])["source"]["id"]
+
+    # seed a managed import into the managed root, then rescan the external source
+    seed = tmp_path / "managed-seed.txt"
+    seed.write_text("managed-content", encoding="utf-8")
+    job = iso_client.post("/api/v1/imports", json={"paths": [str(seed)], "folder_id": folder["id"]}, headers=headers).json()
+    for _ in range(300):
+        final = iso_client.get(f"/api/v1/imports/{job['id']}", headers=headers).json()
+        if final["status"] in TERMINAL:
+            break
+        time.sleep(0.05)
+
+    scan = _rescan(iso_client, headers, source_id)
+    assert scan["added"] == 0, "managed storage files must never be re-indexed"
+
+    items = _assets_in(iso_client, headers, folder["id"])
+    external_names = {item["name"] for item in items if item["source_type"] == "external"}
+    assert external_names == {"outside.txt"}
+    external_paths = [item["file_path"] for item in items if item["source_type"] == "external"]
+    assert all("managed-assets" not in path for path in external_paths)

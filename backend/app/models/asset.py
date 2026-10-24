@@ -15,7 +15,7 @@ class Asset(Base):
     __table_args__ = (
         CheckConstraint("source_type IN ('managed','external')", name="ck_assets_source_type"),
         CheckConstraint("asset_type IN ('image','video','audio','document','other')", name="ck_assets_asset_type"),
-        CheckConstraint("status IN ('active','trashed')", name="ck_assets_status"),
+        CheckConstraint("status IN ('active','trashed','missing')", name="ck_assets_status"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

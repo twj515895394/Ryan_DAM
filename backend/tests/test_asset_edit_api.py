@@ -141,6 +141,16 @@ def test_rename_validation_and_missing(iso_client, headers, tmp_path) -> None:
     assert iso_client.patch("/api/v1/assets/99999", json={"name": "任意"}, headers=headers).status_code == 404
 
 
+def test_rename_missing_managed_file_404(iso_client, headers, app, tmp_path) -> None:
+    asset_id = _make_one(iso_client, headers, tmp_path, "重命名丢文件", "lost.txt", "x")
+    Path(_row(app, asset_id).file_path).unlink()  # file vanishes without a rescan
+
+    response = iso_client.patch(f"/api/v1/assets/{asset_id}", json={"name": "renamed.txt"}, headers=headers)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "content_unavailable"
+    assert _row(app, asset_id).name == "lost.txt", "row keeps its old name when the file is gone"
+
+
 def test_rename_external_readonly(iso_client, headers, app, tmp_path) -> None:
     asset_id = _external_asset(app, tmp_path)
     response = iso_client.patch(f"/api/v1/assets/{asset_id}", json={"name": "新名字.png"}, headers=headers)

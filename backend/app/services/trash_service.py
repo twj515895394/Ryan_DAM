@@ -92,7 +92,16 @@ def trash_asset(db: Session, asset_id: int) -> None:
     asset.deleted_at = _utcnow()
     asset.original_folder_id = asset.folder_id
     asset.file_path = str(destination)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        # best-effort compensation: put the file back so the active row stays truthful
+        try:
+            os.replace(destination, source)
+        except OSError:
+            pass
+        raise
 
 
 def restore_asset(db: Session, asset_id: int) -> None:
@@ -113,7 +122,16 @@ def restore_asset(db: Session, asset_id: int) -> None:
     asset.deleted_at = None
     if asset.original_folder_id is not None:
         asset.folder_id = asset.original_folder_id
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        # best-effort compensation: move the file back into the trash dir
+        try:
+            os.replace(destination, source)
+        except OSError:
+            pass
+        raise
 
 
 def permanent_delete(db: Session, asset_id: int) -> None:
@@ -147,6 +165,9 @@ def empty_trash(db: Session) -> tuple[int, int]:
             permanent_delete(db, asset.id)
             removed += 1
         except ApiError:
+            failed += 1
+        except Exception:
+            db.rollback()  # keep the session usable for the remaining items
             failed += 1
     return removed, failed
 
@@ -197,4 +218,7 @@ def bulk_trash(db: Session, asset_ids: list[int]) -> list[TrashItemResult]:
         except ApiError as error:
             db.rollback()
             results.append(TrashItemResult(asset_id, False, error.message))
+        except Exception:
+            db.rollback()  # unexpected failure must not poison the remaining items
+            results.append(TrashItemResult(asset_id, False, "删除失败，请重试。"))
     return results
