@@ -15,9 +15,9 @@
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-24，ZCode 接手 · 更新至票 4）
+### 0.0 最新迭代摘要（2026-10-24，ZCode 接手 · 更新至票 6）
 
-- **Git 分支 / 提交：** `main`，最新 `fa9e02f`（票 4 文件夹导入）；此前 `c2f247d`（票 3 画廊）、`52ee8a2`（票 2 导入）、`8f083d4` 阶段 1 数据层、`87c1ecf` 目录树 UI、`46687d5` 拆票文档
+- **Git 分支 / 提交：** `main`，最新 `e1cb958`（票 5/6 重试）；此前 `fa9e02f`（票 4）、`c2f247d`（票 3）、`52ee8a2`（票 2）、`8f083d4` 阶段 1 数据层、`87c1ecf` 目录树 UI、`46687d5` 拆票文档
 - **开发目标：** 复核阶段 0 未验收事项；按交接文档推进阶段 1。
 - **实际交付：**
   1. **阶段 0 自动化复核（全部通过）：** `.venv` 环境 pytest 31/31（含原有 6 项）、`node --check`、`npm run typecheck`、`npm run build`、后端直启冒烟（READY 随机端口 → token 化 `/health` → 无 token 401 → `/shutdown` 干净退出）、GitHub API 核对 CI run `40077429948` success。**GUI 实机项（安装版启动、拖入 Chrome、多屏窗口状态）仍未人工验收，不可勾选。**
@@ -28,9 +28,10 @@
   6. **票 2：单文件托管导入**（`docs/ISSUES_BACKLOG.md` 本地拆票，用户确认暂不发布 GitHub Issues）——`POST /api/v1/imports` 创建任务 + 单后台 worker：空间预检（不足同步 400 拒绝，含需用/可用 GB）→ staging 复制 + 流式 SHA-256 → 校验 → 原子落盘 `objects/<asset-id>/<filename>` → 事务写 assets → 清理 staging；内容重复默认跳过（`allow_duplicates` 可强制）；迁移 `0002`（import_jobs.target_folder_id/allow_duplicates）；Electron 受控 `dialog:select-files` IPC；前端导入按钮（需先选目录）+ 轮询任务面板。
   7. **票 3：资产画廊 v1**——`GET /api/v1/assets` 分页列表（按 folder_id 或 scope/project 过滤、id 倒序、排除 trashed）；前端卡片网格（类型图标、大小格式化、外部标识预留、auto-fill 列、加载更多）；目录切换联动刷新，导入完成后自动刷新树与画廊。
   8. **票 4：文件夹批量导入 + 层级保留**——`POST /api/v1/imports/folder`：递归扫描源目录、逐文件 find-or-create 逻辑子目录镜像源层级（item 级 target_folder_id，迁移 `0003`）；Electron `dialog:select-folder` IPC；前端「导入文件夹」按钮；同名文件在不同子目录均可入库（物理路径按 asset-id 隔离）。
-- **运行验证：** pytest **48/48**；vue-tsc / build 通过；`scripts/e2e_smoke.py` 真实 HTTP **19/19**；Electron `node --check` 通过。CI：run `40084716845`（含票 2 代码）success；票 3/4 提交 CI 待核对回填。
+  9. **票 5 + 票 6：去重收尾 + 失败重试**——去重（默认跳过/强制导入/同名隔离）已在票 2/4 落地并有测试；新增 `POST /api/v1/imports/{id}/retry-failed`（仅重跑失败项、进行中任务 409、无可重试 409、retry_count 计数）；任务面板加「重试失败项目」按钮。
+- **运行验证：** pytest **51/51**；vue-tsc / build 通过；`scripts/e2e_smoke.py` 真实 HTTP **19/19**；Electron `node --check` 通过。CI：run `40084716845` success（含票 2）；后续提交 CI 见 GitHub Actions。
 - **已知问题：** 见 §6.4；无新增阻塞问题。
-- **下一步第一任务：** 票 5 收尾（SHA-256 去重已随票 2 落地；补充任务面板「内容重复已跳过」的明细展示即可并入票 6 验收）；随后票 6（失败补偿 + retry-failed）→ 票 7（图片缩略图）。GUI 实机验收（票 1）仍待人工完成。
+- **下一步第一任务：** 票 7（图片缩略图管线：后台生成 + 缓存 + `GET /api/v1/assets/{id}/thumbnail` + 卡片懒加载）；GUI 实机验收（票 1）仍待人工完成。
 
 ### 0.1 推荐接手顺序
 
