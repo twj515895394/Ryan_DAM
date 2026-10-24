@@ -35,6 +35,12 @@ def get_import(job_id: int, db: Session = Depends(get_db)) -> ImportJobOut:
     return _job_out(db, job_id)
 
 
+@router.post("/imports/{job_id}/retry-failed", response_model=ImportJobOut)
+def retry_failed(job_id: int, db: Session = Depends(get_db)) -> ImportJobOut:
+    import_service.retry_failed(job_id)
+    return _job_out(db, job_id)
+
+
 def _job_out(db: Session, job_id: int) -> ImportJobOut:
     job = db.get(ImportJob, job_id)
     if job is None:

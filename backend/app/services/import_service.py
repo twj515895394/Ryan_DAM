@@ -240,6 +240,37 @@ def bind_worker_factory(session_factory: sessionmaker) -> None:
     recover_stale_jobs(session_factory)
 
 
+def retry_failed(job_id: int) -> None:
+    """Requeue only failed/interrupted items; successful items are never reprocessed."""
+    factory = _factory_holder.get("factory")
+    job_worker = _factory_holder.get("worker")
+    if not isinstance(factory, sessionmaker) or not isinstance(job_worker, ImportWorker):
+        raise ApiError("db_unavailable", "导入服务尚未初始化。", 500)
+    with factory() as session:
+        job = session.get(ImportJob, job_id)
+        if job is None:
+            raise ApiError("not_found", "导入任务不存在。", 404)
+        if job.status in {"queued", "running"}:
+            raise ApiError("job_in_progress", "导入任务仍在进行中，不能重试。", 409)
+        failed_items = session.scalars(
+            select(ImportJobItem).where(ImportJobItem.job_id == job_id, ImportJobItem.status == "failed")
+        ).all()
+        if not failed_items:
+            raise ApiError("nothing_to_retry", "没有可重试的失败项。", 409)
+        for item in failed_items:
+            item.status = "pending"
+            item.error_message = None
+            item.retry_count = (item.retry_count or 0) + 1
+        job.status = "queued"
+        job.message = None
+        job.stage = None
+        job.finished_at = None
+        session.commit()
+
+    job_worker.ensure_started(factory)
+    job_worker.submit(job_id)
+
+
 def _mark_job_failed_hard(session_factory: sessionmaker, job_id: int, message: str) -> None:
     with session_factory() as session:
         job = session.get(ImportJob, job_id)

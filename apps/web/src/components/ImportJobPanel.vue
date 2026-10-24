@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-import { library, dismissImportJob } from "../stores/library";
+import { library, dismissImportJob, retryFailedImports } from "../stores/library";
 
 const job = computed(() => library.importJob);
 
@@ -71,7 +71,12 @@ const done = computed(() => job.value !== null && !["queued", "running"].include
           </li>
         </ul>
 
-        <div class="mt-3 flex justify-end">
+        <div class="mt-3 flex justify-end gap-1">
+          <button
+            v-if="done && job.failed_count > 0"
+            class="rounded-lg px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-canvas"
+            @click="retryFailedImports"
+          >重试失败项目</button>
           <button
             v-if="done"
             class="rounded-lg px-3 py-1.5 text-xs font-medium text-accent transition hover:bg-canvas"

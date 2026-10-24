@@ -93,6 +93,7 @@ export const api = {
       json: { source_dir: sourceDir, folder_id: folderId, allow_duplicates: allowDuplicates }
     }),
   getImport: (id: number) => request<ImportJob>(`/api/v1/imports/${id}`),
+  retryFailed: (id: number) => request<ImportJob>(`/api/v1/imports/${id}/retry-failed`, { method: "POST" }),
 
   listAssets: (params: { scope?: string; project_id?: number; folder_id?: number; page?: number; page_size?: number }) => {
     const query = new URLSearchParams();

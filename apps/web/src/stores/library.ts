@@ -172,23 +172,7 @@ async function startImportJob(create: () => Promise<ImportJob>): Promise<boolean
   try {
     const job = await create();
     library.importJob = job;
-    stopImportPolling();
-    importPollTimer = setInterval(async () => {
-      try {
-        const fresh = await api.getImport(job.id);
-        library.importJob = fresh;
-        if (JOB_TERMINAL.has(fresh.status)) {
-          stopImportPolling();
-          if (fresh.status === "completed") notify("success", "导入完成。");
-          else if (fresh.status === "completed_with_errors") notify("error", "导入完成，但部分文件失败。");
-          else if (fresh.status === "failed") notify("error", fresh.message ?? "导入失败。");
-        }
-      } catch {
-        stopImportPolling();
-        library.importJob = null;
-        notify("error", "无法获取导入任务状态。");
-      }
-    }, 800);
+    pollImportJob(job.id);
     return true;
   } catch (error) {
     notify("error", errText(error));
@@ -199,6 +183,41 @@ async function startImportJob(create: () => Promise<ImportJob>): Promise<boolean
 export function dismissImportJob(): void {
   stopImportPolling();
   library.importJob = null;
+}
+
+export function pollImportJob(jobId: number): void {
+  stopImportPolling();
+  importPollTimer = setInterval(async () => {
+    try {
+      const fresh = await api.getImport(jobId);
+      library.importJob = fresh;
+      if (JOB_TERMINAL.has(fresh.status)) {
+        stopImportPolling();
+        if (fresh.status === "completed") notify("success", "导入完成。");
+        else if (fresh.status === "completed_with_errors") notify("error", "导入完成，但部分文件失败。");
+        else if (fresh.status === "failed") notify("error", fresh.message ?? "导入失败。");
+      }
+    } catch {
+      stopImportPolling();
+      library.importJob = null;
+      notify("error", "无法获取导入任务状态。");
+    }
+  }, 800);
+}
+
+export async function retryFailedImports(): Promise<boolean> {
+  const job = library.importJob;
+  if (!job) return false;
+  try {
+    const fresh = await api.retryFailed(job.id);
+    library.importJob = fresh;
+    notify("success", "正在重试失败项。");
+    pollImportJob(fresh.id);
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
 }
 
 export async function fetchAssets(
