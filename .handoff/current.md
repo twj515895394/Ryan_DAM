@@ -15,19 +15,21 @@
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-24，ZCode 接手 · 本地已交付至票 14，未 push）
+### 0.0 最新迭代摘要（2026-10-24，ZCode 会话 · 阶段 5 全部开发票完成，未 push）
 
-> **最新会话交接：** [`.handoff/handoff-20261024-213000.md`](./handoff-20261024-213000.md)（票 9–14 详情、票 15 WIP 状态、下会话任务清单）——接手者先读它，再读本文件。
+> **上一会话交接：** [`.handoff/handoff-20261024-213000.md`](./handoff-20261024-213000.md)（票 9–14 详情）。本会话完成票 15–20 后，**ISSUES_BACKLOG 中全部 19 张开发票（票 2–20）已交付**，剩余票 1/21/22 为 HITL 实机验收票。
 
-- **Git 分支 / 提交：** `main` **本地**最新 `d98db52`（票 14）；**远端 origin/main 停在 `d3ea899`**——用户要求全部开发票完成并统一自测/审查后再一次性 push。
-- **当前状态一句话：** 阶段 0 自动化全过（GUI 实机项待人工）；阶段 1–2 完成；阶段 3 完成（票 7/8）；阶段 4 完成票 9–14（预览/播放/文档预览/搜索/标签/批量）；**票 15 回收站进行中**（service 层 WIP 未提交，见会话交接 §2）；票 16–20 未开始。
-- **运行验证（最新）：** pytest **83/83**；vue-tsc / build / `node --check` 通过；e2e 21/21；全量测试后 `D:\Ryan_DAM\assets` 保持 0 条目。
-- **已知问题：** 无阻塞问题；票 15 的 WIP（trash_service.py 服务层）已随 `5321554` 提交为检查点，**未接线未测试**。
-- **下一步第一任务：** 继续票 15（路由/测试/前端，从会话交接 §2 开始）；随后票 16–20；全部完成后统一自测 + code review + 交付 push。**每票完成后必须跑 codereview 审查（用户要求）。**
+- **Git 分支 / 提交：** `main` **本地**最新 `fd4df00`（review 加固）；远端 origin/main 停在 `d3ea899`，本地领先 17 个提交，待用户确认后一次性 push。
+- **当前状态一句话：** 阶段 0–4 完成；阶段 5 完成（票 15 回收站、16 重命名/移动、17 外部关联与扫描、18 解除关联、19 转托管、20 提示词）；**全部开发票完成**，统一自测 + 全库 review 已做，剩 HITL 票（GUI 实机验收 / 正式拖出 / 终验）。
+- **运行验证（最新）：** pytest **120/120**；vue-tsc / build / `node --check` 通过；e2e **21/21**；浏览器 UI 实测（回收站删除/恢复/清空、批量删除 managed+external 分流、提示词新增/复制/保存失败保留、外部转托管就地更新）全部通过；真实 `D:\Ryan_DAM\assets` 保持 0 条目。
+- **本会话实测发现并修复的问题：** ①CORS 白名单缺 `PUT`（票 20 提示词保存全部失败，UI 实测抓到）；②删除/恢复后外部来源计数不刷新；③review 发现的模型约束与迁移 0004 不同步、外部扫描未排除托管根子树、删除后选区残留、trash 提交失败无补偿（均已修复并补测试，见 `fd4df00`）。
+- **review 遗留（不阻塞，记录在案）：** 加载更多无 in-flight 防抖（快速连点可能重复追加）；搜索 `ilike` 未转义 `%`/`_`；列表 has_prompt 拉全量 prompt_text（可用 exists 优化）；解除关联后镜像出的空目录保留在树上；扫描仅按 size 判变更。
+- **下一步第一任务：** 用户实机验收（票 1 GUI 启动/拖出 PoC、票 21 正式资产拖出、票 22 终验），随后按需发布 GitHub Issues 并推送。
 
 ### 0.0.1 迭代时间线（倒序）
 
-0. **票 9–14（本会话，2026-10-24）**（`9921a82` → `d98db52`，全部仅本地提交）——沉浸式预览与内容端点、Range 播放与系统打开、五类文档预览、搜索/筛选/排序、全局标签、批量操作。详情与逐项验证记录见 `.handoff/handoff-20261024-213000.md`。
+0. **票 15–20（本会话，2026-10-24）**（`194df8a` → `fd4df00`，全部仅本地提交）——回收站（删除/恢复/永久删除/清空/bulk-trash 逐项结果 + 锁定文件 409 保护）、单资产重命名/移动（扩展名保留、同目录冲突、external 只读）、外部目录关联与手动扫描（层级镜像、重扫幂等、失效标记 missing、迁移 0004）、解除关联（仅删仍为 external 的索引）、外部转托管（staging+哈希校验+就地更新）、图片/视频提示词（`GET/PUT /assets/{id}/prompt`，换行逐字保留）。UI 实测全链路通过；review 加固（托管根子树跳过、提交失败补偿、选区清理、Esc 层级）已合入。
+1. **票 9–14（2026-10-24 上一会话）**（`9921a82` → `d98db52`，全部仅本地提交）——沉浸式预览与内容端点、Range 播放与系统打开、五类文档预览、搜索/筛选/排序、全局标签、批量操作。详情与逐项验证记录见 `.handoff/handoff-20261024-213000.md`。
 1. **票 8：音视频元数据与代表帧（FFmpeg 打包）**（`70116d3`）——`media_service` 受控定位器（`RYAN_DAM_FFMPEG_DIR` 环境变量 → PyInstaller 包内 `_MEIPASS/ffmpeg` → 仓库 `ffmpeg-bin/` → PATH，校验 PE 头拒绝构建期占位符）；ffprobe 提取时长/宽高、ffmpeg 提取视频代表帧（512px contain、1s 起帧回退）与音频内嵌封面；缩略图管线扩展到视频/音频；卡片新增时长角标（mm:ss）；`scripts/prepare-ffmpeg.mjs` 装载真实二进制或占位符、PyInstaller `--add-binary` 捆绑、CI 下载 BtbN win64 构建并导出环境变量；`docs/THIRD_PARTY_NOTICES.md` 记录 FFmpeg GPL v3 来源；测试 +7（66/66，无 ffmpeg 环境自动跳过）。CI 首轮失败：定位器测试依赖仓库状态（CI 在测试前已把真实 ffmpeg 放入 ffmpeg-bin/），已改为注入候选列表隔离（`3023b3b` 修复）。
    - **本地打包验证**：PyInstaller 产物 129MB（含 FFmpeg），冻结版 exe 端到端通过——视频时长 3000ms 精确、320x240、代表帧 JPEG 200；音频时长 2038ms。
 2. **票 7：图片缩略图管线**（`0e6d909`）——Pillow 后台 worker + 磁盘缓存（`RYAN_DAM_CACHE_DIR`，默认 `<data>/cache/thumbnails`），源文件指纹（大小+mtime）侧车：命中直接返回、源变化自动重生成、重复失败标记 `failed` 不再重试；`GET /api/v1/assets/{id}/thumbnail` 未命中入队并返回 404（`thumbnail_unavailable`）；导入完成自动为图片入队；前端卡片 blob 带 token 加载、`object-contain` 不裁切、失败回退类型图标、画廊有 pending 时 2.5s 自动刷新（上限 8 次）；e2e +2（21 项）；测试 +6（59/59）。
@@ -514,32 +516,43 @@ npm run package:win
 
 ## 12. 迭代记录
 
-### 最近一次迭代（更新日期 2026-10-24，ZCode 会话）
+### 最近一次迭代（更新日期 2026-10-24，ZCode 会话 · 票 15–20）
 
-- **Git 分支 / 提交：** `main`
-  - `8f083d4` feat: stage 1 sqlite data layer with alembic migrations and api v1
-  - `87c1ecf` feat: stage 1 library shell with folder tree ui
-  - 本次 handoff 文档提交：见 `git log -- .handoff/current.md`
-- **开发目标：** 复核阶段 0 未验收事项（能自动化的全部自动化）；推进阶段 1（数据层 + 目录 API + 目录树 UI）。
-- **实际交付：** 见 §0.0 摘要。
-- **修改文件：** `backend/**`（models/db/api/services/schemas/alembic/tests/main.py/requirements）、`apps/web/src/**`（api client/types、stores/library、components、App.vue 重写）、`package.json`（venv python + alembic 打包）、`package-lock.json`（新增）、`.github/workflows/stage0-windows.yml`（npm ci + venv）、`scripts/e2e_smoke.py`（新增）、`.gitignore`。
-- **运行验证（本机 Windows 10，Python 3.12.8 venv，Node 24）：**
-  - `.venv/Scripts/python.exe -m pytest backend/tests` → **31 passed**（阶段 0 原 6 项 + 新 25 项）
-  - `npm run typecheck` / `npm run build` → 通过
-  - `.venv/Scripts/python.exe scripts/e2e_smoke.py` → **15 passed**（真实 HTTP：健康、默认根目录、项目/目录 CRUD、循环与跨作用域拦截、token 401、设置更新、**重启后持久化**）
-  - 后端直启冒烟：READY 随机端口 → `/health` 200 → 无 token 401 → `/shutdown` 干净退出（退出码 0）
-  - CI：阶段 1 提交（head `87c1ecf`）→ [run 40081295485](https://github.com/twj515895394/Ryan_DAM/actions/runs/40081295485) **success**（npm ci + venv + 31 pytest + typecheck + PyInstaller/NSIS 安装包构建与 Artifact 上传）；此前 run `40077429948`（commit `1d70a69`）同样 success。
+- **Git 分支 / 提交：** `main` 本地 `194df8a` → `fd4df00`（8 个提交，全部仅本地）：
+  - `194df8a` feat: ticket 15 trash with restore, permanent delete and bulk trash
+  - `2db0208` feat: ticket 16 single asset rename and move
+  - `f986183` feat: ticket 17 external directory linking with manual scan
+  - `2e3b367` feat: ticket 18 unlink external source keeping converted assets
+  - `7cd0e60` feat: ticket 19 convert external asset to managed in place
+  - `49d4377` feat: ticket 20 image and video prompt management
+  - `b03c9f0` fix: allow PUT in CORS methods and refresh external counts after trash changes
+  - `fd4df00` fix: review hardening for trash, external scan and selection cleanup
+- **开发目标：** 完成阶段 5 全部开发票（15–20），统一自测 + 全库 code review 后交付。
+- **实际交付：**
+  - **票 15 回收站**：`DELETE /assets/{id}`（managed→trash / external 仅删索引）、`GET /trash`、`POST /trash/{id}/restore`、`DELETE /trash/{id}`（锁定文件 409 保留记录）、`POST /trash/empty`（逐项容错返回 removed/failed）、`POST /assets/bulk-trash`（逐项结果）；前端侧栏回收站入口 + 列表视图（名称/类型/大小/删除时间/原目录/恢复/永久删除）+ 预览删除按钮 + 批量删除。
+  - **票 16 重命名/移动**：`PATCH /assets/{id}`、`POST /assets/{id}/move`；扩展名自动保留、修改扩展名 422、同目录同名 409、external 只读 400、移动仅改 folder_id；预览信息面板「管理」区（重命名对话框 + 同 scope 目录下拉）。
+  - **票 17 外部关联**：迁移 `0004`（status 加 missing）、`GET/POST /external-sources`、`POST /external-sources/{id}/scan`；扫描只读源文件、层级镜像到目标目录、重扫幂等（added/updated/missing/reactivated）、失效标 missing 且列表可见；前端侧栏外部目录区（关联流程 = 原生选目录 → 选库内目标目录弹层、重扫按钮、失效计数）、卡片「失效」角标、预览「状态：失效」。
+  - **票 18 解除关联**：`DELETE /external-sources/{id}` 仅删仍为 external 的索引（转托管记录保留），确认弹窗显示影响数量与「不删除源文件」提示。
+  - **票 19 转托管**：`POST /assets/{id}/convert-to-managed`，按导入安全顺序（空间预检 → staging 复制 → SHA-256+大小校验 → 原子落盘 → 就地更新 source_type/file_path/sha256，失败补偿清理）；源文件永不删除，重扫不触碰已转换记录；预览外部资产「转为系统托管」按钮。
+  - **票 20 提示词**：`GET/PUT /assets/{id}/prompt`（仅 image/video，换行与特殊字符逐字保留，空串清空）；卡片悬停「+ 提示词/查看提示词」入口（自动打开预览弹窗）、预览面板提示词区（查看/编辑/复制全文，保存失败保留草稿）。
+- **修改文件：** `backend/app/**`（api: trash/external/assets、services: trash/external/asset_edit/fs_ops、schemas、models/asset.py、main.py CORS）、`backend/alembic/versions/0004_*`、`apps/web/src/**`（App.vue、stores/library.ts、api/client.ts、api/types.ts、AssetPreview/AssetCard）、`backend/tests/`（+5 个测试文件，120 项）。
+- **运行验证（本机 Windows 10，venv Python 3.12，Node 24）：**
+  - `.venv/Scripts/python.exe -m pytest backend/tests` → **120 passed**
+  - `npm run typecheck` / `npm run build` / `node --check`（桌面入口）→ 通过
+  - `scripts/e2e_smoke.py` → **21 passed**
+  - **浏览器 UI 实测**（隔离后端 49489 + vite 5173 + localStorage 桥）：侧栏新分区渲染、4 资产画廊（外部角标/镜像子目录）、提示词添加→查看→复制→入口翻转、删除→回收站列表→恢复回画廊、批量删除（managed 进回收站、external 仅删索引、逐项 toast）、清空回收站、外部转托管就地更新（卡片不变、路径切到 objects/、管理操作切换、外部计数归零）、磁盘核对（源文件字节未动、托管副本存在、.trash 清空）。
+  - 真实 `D:\Ryan_DAM\assets` 全程 0 条目。
 - **未完成 / 已知问题：**
-  - **阶段 0 GUI 实机验收仍未完成**（安装版启动、bundled 后端生命周期、拖入 Chrome、多屏窗口状态）——`docs/STAGE_0_VALIDATION.md` 对应项保持未勾选，不得在未实测时勾选。
-  - `shadcn-vue` 尚未引入（阶段 4 前按需接入）；Pinia 未引入（当前用轻量 composable store `apps/web/src/stores/library.ts`，够用）。
-  - 本会话没有可信的 Windows GUI 自动化验收能力，拖出验收不能由 AI 代做。
-- **工程注意点（新）：**
-  - FastAPI 0.115 + `from __future__ import annotations` 组合下，204 路由必须显式 `response_model=None`，否则返回注解 `-> None` 被解析为 response_model 触发断言（已修复，见 projects/folders delete 路由）。
-  - 本机沙盒环境盘符探测不可靠；`test_unavailable_drive_reported` 动态选择不存在的盘符，找不到则跳过。
+  - review 建议项未全部采纳（不阻塞）：加载更多无防抖、搜索 ilike 未转义、has_prompt 拉全量文本、解除关联后镜像空目录保留、扫描仅按 size 判变更——已在 §0.0 记录。
+  - HITL 票 1/21/22 未开始（需用户实机）。
 - **下一步第一任务（1–3 个）：**
-  1. Windows 实机完成 §5.5 验收步骤，勾选 `docs/STAGE_0_VALIDATION.md` 已实测项。
-  2. 按已拆分的 GitHub Issues 票序开始阶段 2 第 1 票（导入任务骨架 + 文件/文件夹选择 IPC + 单文件导入）。
-  3. 每完成一票：跑测试 → 更新本文件 → 提交。
+  1. 用户实机验收：安装版/开发版启动、回收站与外部目录真实操作、正式资产拖出（票 21）、终验（票 22）。
+  2. 如需发布 GitHub Issues：用 `to-issues` 把 `docs/ISSUES_BACKLOG.md` 发到仓库（需 gh/token）。
+  3. 处理 review 遗留建议项（可作为下一批小修复）。
+
+### 上一迭代（2026-10-24，票 9–14）
+
+见 `.handoff/handoff-20261024-213000.md` 与 git 历史（`9921a82` → `d98db52`）。
 
 ---
 
