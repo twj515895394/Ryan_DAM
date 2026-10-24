@@ -35,3 +35,7 @@ class ScanResult(BaseModel):
 class ExternalSourceCreated(BaseModel):
     source: ExternalSourceOut
     scan: ScanResult
+
+
+class UnlinkResult(BaseModel):
+    removed: int

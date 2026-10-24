@@ -176,3 +176,56 @@ def test_rescan_reports_unavailable_root(iso_client, headers, tmp_path) -> None:
     # indexed rows stay intact (explicitly flagged only on a successful scan)
     assets = _assets_in(iso_client, headers, folder["id"])
     assert len(assets) == 1 and assets[0]["status"] == "active"
+
+
+def test_unlink_removes_only_external_index(iso_client, headers, app, tmp_path) -> None:
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.app.models.asset import Asset
+
+    root = tmp_path / "解除库"
+    root.mkdir()
+    (root / "keep.txt").write_text("source-keep", encoding="utf-8")
+    (root / "gone.txt").write_text("source-gone", encoding="utf-8")
+
+    folder = iso_client.post("/api/v1/folders", json={"name": "解除目标", "scope": "general"}, headers=headers).json()
+    source_id = _link(iso_client, headers, root, folder["id"])["source"]["id"]
+
+    # simulate ticket 19's conversion: flip one row to managed in place
+    session_factory: sessionmaker = app.state.session_factory
+    with session_factory() as session:
+        rows = session.query(Asset).order_by(Asset.name).all()
+        converted = next(row for row in rows if row.name == "keep.txt")
+        still_external = next(row for row in rows if row.name == "gone.txt")
+        converted.source_type = "managed"
+        converted.external_source_id = None
+        converted_id = converted.id
+        still_external_id = still_external.id
+        session.commit()
+
+    response = iso_client.delete(f"/api/v1/external-sources/{source_id}", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["removed"] == 1, "only the still-external index row goes away"
+
+    with session_factory() as session:
+        kept = session.get(Asset, converted_id)
+        assert kept is not None, "converted asset must survive the unlink"
+        assert kept.source_type == "managed"
+        assert session.get(Asset, still_external_id) is None
+
+    # source files untouched on disk
+    assert (root / "keep.txt").read_text(encoding="utf-8") == "source-keep"
+    assert (root / "gone.txt").read_text(encoding="utf-8") == "source-gone"
+
+    # the source record is gone
+    listing = iso_client.get("/api/v1/external-sources", headers=headers).json()
+    assert listing == []
+
+    # the converted asset is still browsable in the target folder
+    assets = _assets_in(iso_client, headers, folder["id"])
+    assert [item["name"] for item in assets] == ["keep.txt"]
+    assert assets[0]["source_type"] == "managed"
+
+    # second unlink of the same source → 404
+    again = iso_client.delete(f"/api/v1/external-sources/{source_id}", headers=headers)
+    assert again.status_code == 404

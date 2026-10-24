@@ -511,6 +511,18 @@ export async function rescanExternalSource(sourceId: number): Promise<void> {
   }
 }
 
+export async function unlinkExternalSource(sourceId: number): Promise<boolean> {
+  try {
+    const result = await api.unlinkExternalSource(sourceId);
+    await Promise.all([loadExternalSources(), refreshCurrentAssetsQuiet()]);
+    notify("success", `已解除关联，移除 ${result.removed} 个外部资产索引；源文件未受影响。`);
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
 // 删除/恢复会同时影响画廊与回收站计数，统一刷新两处
 async function refreshAfterTrashChange(): Promise<void> {
   await Promise.all([loadTrash(), loadTags(), refreshCurrentAssetsQuiet()]);

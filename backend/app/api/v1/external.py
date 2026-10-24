@@ -11,6 +11,7 @@ from backend.app.schemas.external import (
     ExternalSourceCreate,
     ExternalSourceOut,
     ScanResult,
+    UnlinkResult,
 )
 from backend.app.services import external_service
 
@@ -42,3 +43,11 @@ def create_external_source(payload: ExternalSourceCreate, db: Session = Depends(
 def scan_external_source(source_id: int, db: Session = Depends(get_db)) -> ScanResult:
     source = external_service.get_source_or_404(db, source_id)
     return ScanResult(**external_service.scan_external_source(db, source))
+
+
+@router.delete("/external-sources/{source_id}", response_model=UnlinkResult)
+def unlink_external_source(source_id: int, db: Session = Depends(get_db)) -> UnlinkResult:
+    """Unlink: drop the still-external index rows, keep converted ones, never
+    touch source files."""
+    removed = external_service.unlink_external_source(db, source_id)
+    return UnlinkResult(removed=removed)

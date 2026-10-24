@@ -182,6 +182,8 @@ export const api = {
     }),
   scanExternalSource: (id: number) =>
     request<ScanResult>(`/api/v1/external-sources/${id}/scan`, { method: "POST" }),
+  unlinkExternalSource: (id: number) =>
+    request<{ removed: number }>(`/api/v1/external-sources/${id}`, { method: "DELETE" }),
 
   listTags: () => request<Tag[]>("/api/v1/tags"),
   createTag: (name: string) => request<Tag>("/api/v1/tags", { method: "POST", json: { name } }),

@@ -180,3 +180,25 @@ def list_external_sources(db: Session) -> list[dict]:
         }
         for source, folder_name in rows
     ]
+
+
+def unlink_external_source(db: Session, source_id: int) -> int:
+    """Remove the link and every index row that is STILL external.
+
+    Assets already converted to managed keep their records (business
+    invariant); source files on disk are never touched.
+    """
+    from backend.app.services.trash_service import delete_asset_index
+
+    source = get_source_or_404(db, source_id)
+    external_assets = db.scalars(
+        select(Asset).where(
+            Asset.external_source_id == source.id,
+            Asset.source_type == "external",
+        )
+    ).all()
+    for asset in external_assets:
+        delete_asset_index(db, asset)
+    db.delete(source)
+    db.commit()
+    return len(external_assets)

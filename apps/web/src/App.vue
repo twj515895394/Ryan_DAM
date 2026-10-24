@@ -8,7 +8,7 @@ import AssetPreview from "./components/AssetPreview.vue";
 import ImportJobPanel from "./components/ImportJobPanel.vue";
 import NameDialog from "./components/NameDialog.vue";
 import Stage0Panel from "./components/Stage0Panel.vue";
-import type { FolderNode, TrashItem } from "./api/types";
+import type { ExternalSource, FolderNode, TrashItem } from "./api/types";
 import {
   bulkAddTags,
   bulkMove,
@@ -44,6 +44,7 @@ import {
   restoreFromTrash,
   rescanExternalSource,
   toggleAssetSelection,
+  unlinkExternalSource,
   updateManagedRoot
 } from "./stores/library";
 
@@ -174,6 +175,14 @@ async function confirmLinkExternal(folderId: number): Promise<void> {
   externalTargetDialog.value = null;
   if (!root) return;
   await linkExternalSource(root, folderId);
+}
+
+function askUnlinkExternal(source: ExternalSource): void {
+  const message =
+    `确定解除关联「${source.display_name ?? source.root_path}」吗？\n\n` +
+    `将移除该来源下 ${source.asset_count} 个外部资产索引（含 ${source.missing_count} 个失效项）；` +
+    `不会删除磁盘上的源文件；已转为托管的资产会保留。`;
+  if (window.confirm(message)) void unlinkExternalSource(source.id);
 }
 
 const ASSET_TYPE_LABELS: Record<string, string> = {
@@ -658,6 +667,11 @@ onMounted(() => {
                   title="重新扫描（检测新增/变更/失效）"
                   @click.stop="rescanExternalSource(source.id)"
                 >⟳</button>
+                <button
+                  class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-white hover:text-rose-600"
+                  title="解除关联（只移除索引，不删除源文件）"
+                  @click.stop="askUnlinkExternal(source)"
+                >×</button>
               </span>
             </div>
             <p v-if="source.missing_count > 0" class="px-1.5 pb-1 text-[10px] leading-4 text-amber-700">

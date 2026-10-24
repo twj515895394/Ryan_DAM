@@ -52,7 +52,11 @@ def get_asset_or_404(db: Session, asset_id: int) -> Asset:
     return asset
 
 
-def _delete_index_row(db: Session, asset: Asset) -> None:
+def delete_asset_index(db: Session, asset: Asset) -> None:
+    """Remove an asset row and its associations (tags, import-job references).
+
+    Shared by trash (external index-only removal) and external-source unlink.
+    """
     for link in db.scalars(select(AssetTag).where(AssetTag.asset_id == asset.id)).all():
         db.delete(link)
     for item in db.scalars(select(ImportJobItem).where(ImportJobItem.asset_id == asset.id)).all():
@@ -71,7 +75,7 @@ def trash_asset(db: Session, asset_id: int) -> None:
     asset = get_asset_or_404(db, asset_id)
     if asset.source_type == "external":
         # external: index-only removal, the source file stays untouched
-        _delete_index_row(db, asset)
+        delete_asset_index(db, asset)
         db.commit()
         return
 
@@ -129,7 +133,7 @@ def permanent_delete(db: Session, asset_id: int) -> None:
             ) from error
     if trash_dir.exists():
         raise ApiError("trash_delete_failed", "磁盘文件未能删除，已保留回收站记录。", 409)
-    _delete_index_row(db, asset)
+    delete_asset_index(db, asset)
     db.commit()
 
 
