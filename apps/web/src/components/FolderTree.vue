@@ -3,7 +3,14 @@ import { ref } from "vue";
 
 import type { FolderNode } from "../api/types";
 
-defineProps<{ nodes: FolderNode[]; activeId: number | null }>();
+const props = withDefaults(
+  defineProps<{
+    nodes: FolderNode[];
+    activeId: number | null;
+    depth?: number;
+  }>(),
+  { depth: 0 }
+);
 
 const emit = defineEmits<{
   (e: "select", node: FolderNode): void;
@@ -26,8 +33,11 @@ function toggle(node: FolderNode): void {
   <ul class="space-y-0.5">
     <li v-for="node in nodes" :key="node.id">
       <div
-        class="group flex items-center gap-1 rounded-lg px-1.5 py-1.5 text-sm transition-colors"
-        :class="activeId === node.id ? 'bg-accent/10 font-medium text-accent' : 'hover:bg-canvas'"
+        class="group flex items-center gap-1 rounded-lg px-2 py-1.5 transition-colors"
+        :class="[
+          depth === 0 ? 'text-[13px]' : 'text-xs text-ink/80',
+          activeId === node.id ? 'bg-accent/10 font-semibold text-accent' : 'hover:bg-canvas text-ink'
+        ]"
         role="button"
         tabindex="0"
         @click="emit('select', node)"
@@ -61,10 +71,11 @@ function toggle(node: FolderNode): void {
           >×</button>
         </span>
       </div>
-      <div v-if="node.children.length > 0 && !collapsed.has(node.id)" class="ml-3 border-l border-line pl-1">
+      <div v-if="node.children.length > 0 && !collapsed.has(node.id)" class="ml-3.5 border-l border-line pl-1.5">
         <FolderTree
           :nodes="node.children"
           :active-id="activeId"
+          :depth="depth + 1"
           @select="(n) => emit('select', n)"
           @create-child="(n) => emit('create-child', n)"
           @rename="(n) => emit('rename', n)"

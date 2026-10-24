@@ -59,7 +59,13 @@ type DialogRequest =
   | { kind: "asset-rename"; assetId: number; initial: string }
   | { kind: "root-edit" };
 
-const externalTargetDialog = ref<string | null>(null);
+// 需要先选定库内目标目录的操作：外部目录关联、根视图下发起导入
+type TargetDialogRequest =
+  | { kind: "external-link"; root: string }
+  | { kind: "import-files" }
+  | { kind: "import-folder" };
+
+const targetDialog = ref<TargetDialogRequest | null>(null);
 
 const dialog = ref<DialogRequest | null>(null);
 const showStage0 = ref(false);
@@ -161,7 +167,7 @@ async function startLinkExternal(): Promise<void> {
     return;
   }
   if (!folder) return;
-  externalTargetDialog.value = folder;
+  targetDialog.value = { kind: "external-link", root: folder };
 }
 
 const allFolderOptions = computed<{ id: number; label: string }[]>(() => {
@@ -175,11 +181,16 @@ const allFolderOptions = computed<{ id: number; label: string }[]>(() => {
   return out;
 });
 
-async function confirmLinkExternal(folderId: number): Promise<void> {
-  const root = externalTargetDialog.value;
-  externalTargetDialog.value = null;
-  if (!root) return;
-  await linkExternalSource(root, folderId);
+async function onTargetDialogPick(folderId: number): Promise<void> {
+  const request = targetDialog.value;
+  targetDialog.value = null;
+  if (!request) return;
+  if (request.kind === "external-link") {
+    await linkExternalSource(request.root, folderId);
+    return;
+  }
+  if (request.kind === "import-files") await runFilesImport(folderId);
+  else await runFolderImport(folderId);
 }
 
 function askUnlinkExternal(source: ExternalSource): void {
@@ -308,8 +319,7 @@ function askDeleteFolder(node: FolderNode): void {
   }
 }
 
-async function startImport(): Promise<void> {
-  if (activeFolderId.value === null) return;
+async function runFilesImport(folderId: number): Promise<void> {
   let paths: string[] = [];
   try {
     paths = await window.ryanDam.selectFiles();
@@ -317,11 +327,10 @@ async function startImport(): Promise<void> {
     return;
   }
   if (paths.length === 0) return;
-  await importFiles(paths, activeFolderId.value);
+  await importFiles(paths, folderId);
 }
 
-async function startFolderImport(): Promise<void> {
-  if (activeFolderId.value === null) return;
+async function runFolderImport(folderId: number): Promise<void> {
   let folder: string | null = null;
   try {
     folder = await window.ryanDam.selectFolder();
@@ -329,7 +338,24 @@ async function startFolderImport(): Promise<void> {
     return;
   }
   if (!folder) return;
-  await importFolder(folder, activeFolderId.value);
+  await importFolder(folder, folderId);
+}
+
+function startImport(): void {
+  // 「全部资产」等项目根视图没有 folderId，先让用户选定目标目录再继续
+  if (activeFolderId.value === null) {
+    targetDialog.value = { kind: "import-files" };
+    return;
+  }
+  void runFilesImport(activeFolderId.value);
+}
+
+function startFolderImport(): void {
+  if (activeFolderId.value === null) {
+    targetDialog.value = { kind: "import-folder" };
+    return;
+  }
+  void runFolderImport(activeFolderId.value);
 }
 
 async function refreshCurrentAssets(append = false, page = 1): Promise<void> {
@@ -490,7 +516,31 @@ const rootStateLabel = computed(() => {
 });
 
 const canImport = computed(
-  () => activeFolderId.value !== null && !["queued", "running"].includes(library.importJob?.status ?? "")
+  () => !["queued", "running"].includes(library.importJob?.status ?? "")
+);
+
+const targetDialogTitle = computed(() => {
+  switch (targetDialog.value?.kind) {
+    case "external-link": return "选择库内目标目录";
+    case "import-files": return "选择导入目标目录";
+    case "import-folder": return "选择导入目标目录";
+    default: return "";
+  }
+});
+
+const targetDialogHint = computed(() => {
+  const request = targetDialog.value;
+  if (!request) return "";
+  if (request.kind === "external-link") {
+    return `${request.root} 中的文件将索引到所选目录（保留子目录层级）；只读索引，源文件不会被修改或删除。`;
+  }
+  if (request.kind === "import-files") return "选择的文件将复制进所选目录的托管存储。";
+  return "所选文件夹的子目录层级将镜像到目标目录下，文件复制进托管存储。";
+});
+
+// 外部目录关联可选任意 scope 的目录；导入只能落在当前 scope 的目录树内
+const targetDialogOptions = computed<{ id: number; label: string }[]>(() =>
+  targetDialog.value?.kind === "external-link" ? allFolderOptions.value : moveTargetOptions.value
 );
 
 const searchDraft = ref("");
@@ -531,18 +581,18 @@ onMounted(() => {
 <template>
   <div class="flex h-screen overflow-hidden bg-canvas text-ink">
     <aside class="flex w-64 shrink-0 flex-col border-r border-line bg-white">
-      <div class="flex items-center gap-2.5 px-4 py-4">
+      <div class="flex items-center gap-3 px-4 py-4">
         <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-ink text-xs font-semibold text-white">R.</div>
         <div class="min-w-0">
           <p class="truncate text-sm font-semibold">Ryan_DAM</p>
-          <p class="text-[11px] text-muted">本地数字资产库</p>
+          <p class="text-xs text-muted">本地数字资产库</p>
         </div>
       </div>
 
-      <nav class="flex-1 overflow-y-auto px-2.5 pb-4">
+      <nav class="flex-1 overflow-y-auto px-3 pb-4">
         <section>
-          <div class="flex items-center justify-between pl-1.5 pr-1 pb-1 pt-2">
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted">通用资产库</p>
+          <div class="flex items-center justify-between px-2 pb-1.5 pt-2.5">
+            <h2 class="text-xs font-bold tracking-wide text-ink/70">通用资产库</h2>
             <button
               class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-canvas hover:text-accent"
               title="新建顶层文件夹"
@@ -550,36 +600,40 @@ onMounted(() => {
             >＋</button>
           </div>
           <button
-            class="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left text-sm transition-colors"
-            :class="activeScope === 'general' && activeFolderId === null ? 'bg-accent/10 font-medium text-accent' : 'hover:bg-canvas'"
+            class="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors"
+            :class="activeScope === 'general' && activeFolderId === null ? 'bg-accent/10 font-semibold text-accent' : 'font-medium text-ink hover:bg-canvas'"
             @click="selectGeneral"
-          >全部资产</button>
-          <FolderTree
-            :nodes="library.generalTree"
-            :active-id="activeScope === 'general' ? activeFolderId : null"
-            @select="selectFolder"
-            @create-child="(n) => (dialog = { kind: 'folder-create', scope: 'general', projectId: null, parentId: n.id })"
-            @rename="(n) => (dialog = { kind: 'folder-rename', folderId: n.id, initial: n.name })"
-            @remove="askDeleteFolder"
-          />
+          >
+            <span class="min-w-0 flex-1 truncate">全部资产</span>
+          </button>
+          <div class="mt-0.5">
+            <FolderTree
+              :nodes="library.generalTree"
+              :active-id="activeScope === 'general' ? activeFolderId : null"
+              @select="selectFolder"
+              @create-child="(n) => (dialog = { kind: 'folder-create', scope: 'general', projectId: null, parentId: n.id })"
+              @rename="(n) => (dialog = { kind: 'folder-rename', folderId: n.id, initial: n.name })"
+              @remove="askDeleteFolder"
+            />
+          </div>
         </section>
 
-        <section class="mt-5">
-          <div class="flex items-center justify-between pl-1.5 pr-1 pb-1 pt-2">
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted">标签管理</p>
+        <section class="mt-6">
+          <div class="flex items-center justify-between px-2 pb-1.5 pt-1">
+            <h2 class="text-xs font-bold tracking-wide text-ink/70">标签管理</h2>
             <button
               class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-canvas hover:text-accent"
               title="新建标签"
               @click="dialog = { kind: 'tag-create' }"
             >＋</button>
           </div>
-          <p v-if="library.tags.length === 0" class="px-1.5 py-1 text-xs leading-5 text-muted">
+          <p v-if="library.tags.length === 0" class="px-2 py-1 text-xs leading-5 text-muted">
             还没有标签。创建全局标签后可打在任意资产上。
           </p>
           <div v-for="tag in library.tags" :key="tag.id" class="group/tag">
             <div
-              class="flex items-center gap-1 rounded-lg px-1.5 py-1.5 text-sm transition-colors"
-              :class="library.assetQuery.tagId === tag.id ? 'bg-accent/10 font-medium text-accent' : 'hover:bg-canvas'"
+              class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors"
+              :class="library.assetQuery.tagId === tag.id ? 'bg-accent/10 font-semibold text-accent' : 'text-ink/90 hover:bg-canvas'"
               role="button"
               tabindex="0"
               @click="library.assetQuery.tagId = library.assetQuery.tagId === tag.id ? null : tag.id"
@@ -587,7 +641,7 @@ onMounted(() => {
             >
               <span class="min-w-0 flex-1 truncate">
                 {{ tag.name }}
-                <span class="text-[10px] text-muted">{{ tag.asset_count }}</span>
+                <span class="ml-1 text-xs text-muted">{{ tag.asset_count }}</span>
               </span>
               <span class="hidden shrink-0 items-center gap-0.5 group-hover/tag:flex">
                 <button
@@ -605,22 +659,22 @@ onMounted(() => {
           </div>
         </section>
 
-        <section class="mt-5">
-          <div class="flex items-center justify-between pl-1.5 pr-1 pb-1 pt-2">
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted">项目资产库</p>
+        <section class="mt-6">
+          <div class="flex items-center justify-between px-2 pb-1.5 pt-1">
+            <h2 class="text-xs font-bold tracking-wide text-ink/70">项目资产库</h2>
             <button
               class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-canvas hover:text-accent"
               title="新建项目"
               @click="dialog = { kind: 'project-create' }"
             >＋</button>
           </div>
-          <p v-if="library.projects.length === 0" class="px-1.5 py-1 text-xs leading-5 text-muted">
+          <p v-if="library.projects.length === 0" class="px-2 py-1 text-xs leading-5 text-muted">
             还没有项目。点击「＋」创建第一个项目。
           </p>
           <div v-for="project in library.projects" :key="project.id" class="group/proj">
             <div
-              class="flex items-center gap-1 rounded-lg px-1.5 py-1.5 text-sm transition-colors"
-              :class="activeScope === 'project' && activeProjectId === project.id && activeFolderId === null ? 'bg-accent/10 font-medium text-accent' : 'hover:bg-canvas'"
+              class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors"
+              :class="activeScope === 'project' && activeProjectId === project.id && activeFolderId === null ? 'bg-accent/10 font-semibold text-accent' : 'font-medium text-ink hover:bg-canvas'"
               role="button"
               tabindex="0"
               @click="selectProject(project.id)"
@@ -645,7 +699,7 @@ onMounted(() => {
                 >×</button>
               </span>
             </div>
-            <div class="ml-3 border-l border-line pl-1">
+            <div class="ml-3.5 border-l border-line pl-1.5">
               <FolderTree
                 :nodes="library.projectTrees[project.id] ?? []"
                 :active-id="activeScope === 'project' && activeProjectId === project.id ? activeFolderId : null"
@@ -657,23 +711,24 @@ onMounted(() => {
             </div>
           </div>
         </section>
-        <section class="mt-5">
-          <div class="flex items-center justify-between pl-1.5 pr-1 pb-1 pt-2">
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted">外部目录</p>
+
+        <section class="mt-6">
+          <div class="flex items-center justify-between px-2 pb-1.5 pt-1">
+            <h2 class="text-xs font-bold tracking-wide text-ink/70">外部目录</h2>
             <button
               class="flex h-5 w-5 items-center justify-center rounded text-xs text-muted hover:bg-canvas hover:text-accent"
               title="关联外部目录（只读索引，不修改源文件）"
               @click="startLinkExternal"
             >＋</button>
           </div>
-          <p v-if="library.externalSources.length === 0" class="px-1.5 py-1 text-xs leading-5 text-muted">
+          <p v-if="library.externalSources.length === 0" class="px-2 py-1 text-xs leading-5 text-muted">
             可将磁盘上已有的素材目录索引进资产库，只读不修改源文件。
           </p>
           <div v-for="source in library.externalSources" :key="source.id" class="group/src">
-            <div class="flex items-center gap-1 rounded-lg px-1.5 py-1.5 text-sm transition-colors hover:bg-canvas">
+            <div class="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[13px] transition-colors hover:bg-canvas">
               <span class="min-w-0 flex-1">
-                <span class="block truncate" :title="source.root_path">{{ source.display_name ?? source.root_path }}</span>
-                <span class="block truncate text-[10px] text-muted">
+                <span class="block truncate font-medium text-ink" :title="source.root_path">{{ source.display_name ?? source.root_path }}</span>
+                <span class="block truncate text-xs text-muted">
                   {{ source.asset_count }} 项 · 指向 {{ source.target_folder_name ?? "未知目录" }}
                 </span>
               </span>
@@ -690,51 +745,51 @@ onMounted(() => {
                 >×</button>
               </span>
             </div>
-            <p v-if="source.missing_count > 0" class="px-1.5 pb-1 text-[10px] leading-4 text-amber-700">
+            <p v-if="source.missing_count > 0" class="px-2 pb-1 text-xs leading-4 text-amber-700">
               {{ source.missing_count }} 项源文件缺失，重新扫描可检测恢复
             </p>
           </div>
         </section>
 
-        <section class="mt-5">
-          <div class="flex items-center justify-between pl-1.5 pr-1 pb-1 pt-2">
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted">回收站</p>
+        <section class="mt-6">
+          <div class="flex items-center justify-between px-2 pb-1.5 pt-1">
+            <h2 class="text-xs font-bold tracking-wide text-ink/70">回收站</h2>
           </div>
           <button
-            class="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left text-sm transition-colors"
-            :class="viewMode === 'trash' ? 'bg-accent/10 font-medium text-accent' : 'hover:bg-canvas'"
+            class="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors"
+            :class="viewMode === 'trash' ? 'bg-accent/10 font-semibold text-accent' : 'font-medium text-ink hover:bg-canvas'"
             @click="selectTrash"
           >
             <span class="min-w-0 flex-1">回收站</span>
             <span
               v-if="library.trash.length > 0"
-              class="shrink-0 rounded-full px-1.5 text-[10px]"
+              class="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
               :class="viewMode === 'trash' ? 'bg-accent/15 text-accent' : 'bg-canvas text-muted'"
             >{{ library.trash.length }}</span>
           </button>
-          <p v-if="viewMode === 'trash'" class="px-1.5 pt-1 text-[11px] leading-5 text-muted">
+          <p v-if="viewMode === 'trash'" class="px-2 pt-1 text-xs leading-5 text-muted">
             托管资产删除后在此保留，可恢复；外部资产移除仅删索引，不进回收站。
           </p>
         </section>
       </nav>
 
-      <div class="border-t border-line px-3.5 py-3">
+      <div class="border-t border-line px-4 py-3.5">
         <div class="flex items-center justify-between">
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-muted">设置</p>
+          <h2 class="text-xs font-bold tracking-wide text-ink/70">设置</h2>
           <button
-            class="rounded-lg px-2 py-1 text-xs text-accent transition hover:bg-canvas"
+            class="rounded-lg px-2 py-1 text-xs font-medium text-accent transition hover:bg-canvas"
             @click="dialog = { kind: 'root-edit' }"
           >编辑</button>
         </div>
         <template v-if="library.settings">
-          <p class="mt-1 truncate font-mono text-[11px] text-muted" :title="library.settings.managed_root">
+          <p class="mt-1.5 truncate font-mono text-xs text-muted" :title="library.settings.managed_root">
             {{ library.settings.managed_root }}
           </p>
-          <p class="mt-0.5 text-[11px]" :class="library.settings.managed_root_state === 'ok' ? 'text-emerald-700' : library.settings.managed_root_state === 'missing' ? 'text-amber-700' : 'text-rose-700'">
+          <p class="mt-1 text-xs" :class="library.settings.managed_root_state === 'ok' ? 'text-emerald-700 font-medium' : library.settings.managed_root_state === 'missing' ? 'text-amber-700' : 'text-rose-700'">
             {{ rootStateLabel }} · 仅影响新导入
           </p>
         </template>
-        <button class="mt-2 text-xs text-muted transition hover:text-ink" @click="showStage0 = true">阶段 0 诊断…</button>
+        <button class="mt-2.5 text-xs text-muted transition hover:text-ink" @click="showStage0 = true">阶段 0 诊断…</button>
       </div>
     </aside>
 
@@ -837,13 +892,13 @@ onMounted(() => {
           <button
             class="rounded-xl border border-line bg-white px-4 py-2 text-sm font-medium transition hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
             :disabled="!canImport"
-            title="选择文件夹，保留子目录层级导入"
+            :title="activeFolderId === null ? '先选择目标目录，再选择文件夹（保留子目录层级导入）' : '选择文件夹，保留子目录层级导入'"
             @click="startFolderImport"
           >导入文件夹</button>
           <button
             class="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
             :disabled="!canImport"
-            :title="activeFolderId === null ? '请先在左侧选择一个目录' : '选择文件并导入到当前目录'"
+            :title="activeFolderId === null ? '先选择目标目录，再选择文件' : '选择文件并导入到当前目录'"
             @click="startImport"
           >导入文件</button>
         </div>
@@ -1044,31 +1099,31 @@ onMounted(() => {
 
     <Teleport to="body">
       <div
-        v-if="externalTargetDialog"
+        v-if="targetDialog !== null"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-        @click.self="externalTargetDialog = null"
+        @click.self="targetDialog = null"
       >
         <div class="w-[440px] rounded-2xl border border-line bg-white p-5 shadow-soft">
-          <h3 class="text-sm font-semibold">选择库内目标目录</h3>
+          <h3 class="text-sm font-semibold">{{ targetDialogTitle }}</h3>
           <p class="mt-1.5 break-all text-xs leading-5 text-muted">
-            {{ externalTargetDialog }} 中的文件将索引到所选目录（保留子目录层级）；只读索引，源文件不会被修改或删除。
+            {{ targetDialogHint }}
           </p>
           <div class="mt-3 max-h-64 overflow-y-auto rounded-xl border border-line p-1.5">
-            <p v-if="allFolderOptions.length === 0" class="px-2 py-1.5 text-xs text-muted">
+            <p v-if="targetDialogOptions.length === 0" class="px-2 py-1.5 text-xs text-muted">
               还没有可用目录，请先在左侧创建一个目录。
             </p>
             <button
-              v-for="option in allFolderOptions"
+              v-for="option in targetDialogOptions"
               :key="option.id"
               class="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-canvas"
               :title="option.label"
-              @click="confirmLinkExternal(option.id)"
+              @click="onTargetDialogPick(option.id)"
             >{{ option.label }}</button>
           </div>
           <div class="mt-4 flex justify-end">
             <button
               class="rounded-lg px-3 py-1.5 text-sm text-muted transition hover:bg-canvas"
-              @click="externalTargetDialog = null"
+              @click="targetDialog = null"
             >取消</button>
           </div>
         </div>
