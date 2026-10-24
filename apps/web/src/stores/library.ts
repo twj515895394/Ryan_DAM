@@ -161,8 +161,16 @@ function stopImportPolling(): void {
 }
 
 export async function importFiles(paths: string[], folderId: number, allowDuplicates = false): Promise<boolean> {
+  return startImportJob(() => api.createImport(paths, folderId, allowDuplicates));
+}
+
+export async function importFolder(sourceDir: string, folderId: number, allowDuplicates = false): Promise<boolean> {
+  return startImportJob(() => api.createFolderImport(sourceDir, folderId, allowDuplicates));
+}
+
+async function startImportJob(create: () => Promise<ImportJob>): Promise<boolean> {
   try {
-    const job = await api.createImport(paths, folderId, allowDuplicates);
+    const job = await create();
     library.importJob = job;
     stopImportPolling();
     importPollTimer = setInterval(async () => {

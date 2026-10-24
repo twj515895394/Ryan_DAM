@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.v1.deps import get_db
 from backend.app.core.errors import ApiError
 from backend.app.models.import_job import ImportJob, ImportJobItem
-from backend.app.schemas.import_job import ImportCreate, ImportJobItemOut, ImportJobOut
+from backend.app.schemas.import_job import FolderImportCreate, ImportCreate, ImportJobItemOut, ImportJobOut
 from backend.app.services import import_service
 
 router = APIRouter(tags=["imports"])
@@ -16,6 +16,14 @@ router = APIRouter(tags=["imports"])
 def create_import(payload: ImportCreate, db: Session = Depends(get_db)) -> ImportJobOut:
     job = import_service.create_import(
         db, paths=payload.paths, folder_id=payload.folder_id, allow_duplicates=payload.allow_duplicates
+    )
+    return _job_out(db, job.id)
+
+
+@router.post("/imports/folder", response_model=ImportJobOut, status_code=status.HTTP_202_ACCEPTED)
+def create_folder_import(payload: FolderImportCreate, db: Session = Depends(get_db)) -> ImportJobOut:
+    job = import_service.create_folder_import(
+        db, source_dir=payload.source_dir, folder_id=payload.folder_id, allow_duplicates=payload.allow_duplicates
     )
     return _job_out(db, job.id)
 

@@ -22,6 +22,7 @@ from backend.app.core.errors import ApiError
 from backend.app.models.asset import Asset
 from backend.app.models.folder import Folder
 from backend.app.models.import_job import ImportJob, ImportJobItem
+from backend.app.services.folder_service import ensure_folder_path
 from backend.app.services.settings_service import get_managed_root
 
 disk_usage = shutil.disk_usage
@@ -175,6 +176,60 @@ def create_import(
     return job
 
 
+def create_folder_import(
+    db: Session,
+    *,
+    source_dir: str,
+    folder_id: int,
+    allow_duplicates: bool = False,
+) -> ImportJob:
+    """Import a whole directory, mirroring its sub-hierarchy into logical folders."""
+    folder = db.get(Folder, folder_id)
+    if folder is None:
+        raise ApiError("not_found", "目标目录不存在或已被删除。", 404)
+    root = Path(source_dir)
+    if not root.is_dir():
+        raise ApiError("invalid_source", f"源文件夹不存在或不可访问：{source_dir}", 400)
+
+    files = sorted(p for p in root.rglob("*") if p.is_file())
+    if not files:
+        raise ApiError("invalid_source", "源文件夹内没有可导入的文件。", 400)
+
+    managed_root = get_managed_root(db)
+    _precheck_space(files, managed_root)
+
+    job = ImportJob(
+        job_type="managed_folder",
+        status="queued",
+        target_folder_id=folder_id,
+        allow_duplicates=allow_duplicates,
+        total_count=len(files),
+    )
+    db.add(job)
+    db.flush()
+    for path in files:
+        relative = path.relative_to(root)
+        target = ensure_folder_path(db, base=folder, parts=list(relative.parts[:-1]))
+        db.add(
+            ImportJobItem(
+                job_id=job.id,
+                source_path=str(path),
+                status="pending",
+                target_folder_id=target.id,
+            )
+        )
+    db.commit()
+    db.refresh(job)
+
+    factory = _factory_holder.get("factory")
+    job_worker = _factory_holder.get("worker")
+    if not isinstance(factory, sessionmaker) or not isinstance(job_worker, ImportWorker):
+        raise ApiError("db_unavailable", "导入服务尚未初始化。", 500)
+    job_worker.ensure_started(factory)
+    job_worker.submit(job.id)
+    return job
+
+
 _factory_holder: dict[str, object] = {}
 
 
@@ -257,7 +312,7 @@ def _process_item(session_factory: sessionmaker, job_id: int, item_id: int) -> N
             return
         item.status = "processing"
         session.commit()
-        target_folder_id = job.target_folder_id
+        target_folder_id = item.target_folder_id or job.target_folder_id
         allow_duplicates = job.allow_duplicates
 
     source = Path(item.source_path)

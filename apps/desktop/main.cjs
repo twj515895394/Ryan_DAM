@@ -235,6 +235,16 @@ ipcMain.handle("dialog:select-files", async (event) => {
   return result.filePaths;
 });
 
+ipcMain.handle("dialog:select-folder", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const result = await dialog.showOpenDialog(win, {
+    title: "选择要导入的文件夹（将保留子目录层级）",
+    properties: ["openDirectory", "dontAddToRecent"]
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
 ipcMain.handle("drag:create-sample", async () => {
   await fs.promises.mkdir(sampleDirectory, { recursive: true });
   const content = ["Ryan_DAM stage-0 native file drag test", "This is a generated test file. It is safe to delete.", `Created at: ${new Date().toISOString()}`].join("\r\n");

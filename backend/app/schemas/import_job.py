@@ -13,6 +13,14 @@ class ImportCreate(BaseModel):
     allow_duplicates: bool = False
 
 
+class FolderImportCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_dir: str = Field(min_length=1, max_length=1024)
+    folder_id: int
+    allow_duplicates: bool = False
+
+
 class ImportJobItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,6 +29,7 @@ class ImportJobItemOut(BaseModel):
     status: str
     error_message: str | None
     asset_id: int | None
+    target_folder_id: int | None
 
 
 class ImportJobOut(BaseModel):

@@ -87,6 +87,11 @@ export const api = {
       method: "POST",
       json: { paths, folder_id: folderId, allow_duplicates: allowDuplicates }
     }),
+  createFolderImport: (sourceDir: string, folderId: number, allowDuplicates = false) =>
+    request<ImportJob>("/api/v1/imports/folder", {
+      method: "POST",
+      json: { source_dir: sourceDir, folder_id: folderId, allow_duplicates: allowDuplicates }
+    }),
   getImport: (id: number) => request<ImportJob>(`/api/v1/imports/${id}`),
 
   listAssets: (params: { scope?: string; project_id?: number; folder_id?: number; page?: number; page_size?: number }) => {

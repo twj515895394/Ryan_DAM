@@ -16,6 +16,7 @@ import {
   deleteProject,
   fetchAssets,
   importFiles,
+  importFolder,
   library,
   loadAll,
   renameFolder,
@@ -124,6 +125,18 @@ async function startImport(): Promise<void> {
   await importFiles(paths, activeFolderId.value);
 }
 
+async function startFolderImport(): Promise<void> {
+  if (activeFolderId.value === null) return;
+  let folder: string | null = null;
+  try {
+    folder = await window.ryanDam.selectFolder();
+  } catch {
+    return;
+  }
+  if (!folder) return;
+  await importFolder(folder, activeFolderId.value);
+}
+
 async function refreshCurrentAssets(append = false, page = 1): Promise<void> {
   await fetchAssets(
     { scope: activeScope.value, projectId: activeProjectId.value, folderId: activeFolderId.value },
@@ -187,6 +200,10 @@ const rootStateLabel = computed(() => {
     default: return "未知";
   }
 });
+
+const canImport = computed(
+  () => activeFolderId.value !== null && !["queued", "running"].includes(library.importJob?.status ?? "")
+);
 
 onMounted(() => {
   void loadAll();
@@ -314,8 +331,14 @@ onMounted(() => {
         </div>
         <div class="flex items-center gap-2">
           <button
+            class="rounded-xl border border-line bg-white px-4 py-2 text-sm font-medium transition hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-40"
+            :disabled="!canImport"
+            title="选择文件夹，保留子目录层级导入"
+            @click="startFolderImport"
+          >导入文件夹</button>
+          <button
             class="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
-            :disabled="activeFolderId === null || ['queued', 'running'].includes(library.importJob?.status ?? '')"
+            :disabled="!canImport"
             :title="activeFolderId === null ? '请先在左侧选择一个目录' : '选择文件并导入到当前目录'"
             @click="startImport"
           >导入文件</button>

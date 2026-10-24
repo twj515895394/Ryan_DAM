@@ -37,6 +37,7 @@ class ImportJobItem(Base):
     status: Mapped[str] = mapped_column(String(16), default="pending")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
+    target_folder_id: Mapped[int | None] = mapped_column(ForeignKey("folders.id"), nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)

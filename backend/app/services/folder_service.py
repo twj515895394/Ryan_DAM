@@ -170,6 +170,34 @@ def move_folder(db: Session, folder_id: int, parent_id: int | None) -> Folder:
     return folder
 
 
+def ensure_folder_path(db: Session, *, base: Folder, parts: list[str]) -> Folder:
+    """Find-or-create nested child folders mirroring an imported source tree."""
+    current = base
+    for part in parts:
+        child = db.scalar(
+            select(Folder).where(
+                Folder.parent_id == current.id,
+                Folder.name == part,
+                Folder.scope_type == current.scope_type,
+            )
+        )
+        if child is None:
+            next_order = (
+                db.scalar(select(func.max(Folder.sort_order)).where(Folder.parent_id == current.id)) or 0
+            ) + 1
+            child = Folder(
+                name=part,
+                scope_type=current.scope_type,
+                project_id=current.project_id,
+                parent_id=current.id,
+                sort_order=next_order,
+            )
+            db.add(child)
+            db.flush()
+        current = child
+    return current
+
+
 def delete_folder(db: Session, folder_id: int) -> None:
     folder = get_folder_or_404(db, folder_id)
     child_count = db.scalar(select(func.count(Folder.id)).where(Folder.parent_id == folder_id)) or 0
