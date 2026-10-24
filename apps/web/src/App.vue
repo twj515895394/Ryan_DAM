@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 
 import FolderTree from "./components/FolderTree.vue";
+import ImportJobPanel from "./components/ImportJobPanel.vue";
 import NameDialog from "./components/NameDialog.vue";
 import Stage0Panel from "./components/Stage0Panel.vue";
 import type { FolderNode } from "./api/types";
@@ -11,6 +12,7 @@ import {
   createProjectFolder,
   deleteFolder,
   deleteProject,
+  importFiles,
   library,
   loadAll,
   renameFolder,
@@ -105,6 +107,18 @@ function askDeleteFolder(node: FolderNode): void {
   if (window.confirm(`确定删除文件夹「${node.name}」吗？只有空文件夹（无子目录、无资产）可以删除。`)) {
     void deleteFolder(node.id);
   }
+}
+
+async function startImport(): Promise<void> {
+  if (activeFolderId.value === null) return;
+  let paths: string[] = [];
+  try {
+    paths = await window.ryanDam.selectFiles();
+  } catch {
+    return;
+  }
+  if (paths.length === 0) return;
+  await importFiles(paths, activeFolderId.value);
 }
 
 async function onDialogConfirm(value: string): Promise<void> {
@@ -267,10 +281,11 @@ onMounted(() => {
         </div>
         <div class="flex items-center gap-2">
           <button
-            class="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white opacity-50"
-            title="导入功能将在阶段 2 提供"
-            disabled
-          >导入</button>
+            class="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+            :disabled="activeFolderId === null || ['queued', 'running'].includes(library.importJob?.status ?? '')"
+            :title="activeFolderId === null ? '请先在左侧选择一个目录' : '选择文件并导入到当前目录'"
+            @click="startImport"
+          >导入文件</button>
         </div>
       </header>
 
@@ -282,7 +297,7 @@ onMounted(() => {
           </h2>
           <p class="mt-2 text-sm leading-6 text-muted">
             {{ library.loaded
-              ? "文件导入、缩略图与画廊将在阶段 2/3 接入。当前阶段已打通目录树与本地数据库。"
+              ? "选中左侧目录后，通过顶部「导入文件」将文件复制进托管存储；缩略图与预览将在后续阶段接入。"
               : "如果长时间未连接，请打开左下角的「阶段 0 诊断」检查本地服务。" }}
           </p>
         </div>
@@ -305,6 +320,8 @@ onMounted(() => {
         </div>
       </Transition>
     </Teleport>
+
+    <ImportJobPanel />
 
     <NameDialog
       :open="dialog !== null"

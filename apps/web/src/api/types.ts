@@ -38,6 +38,31 @@ export interface Settings {
   managed_root_state: "ok" | "missing" | "unavailable";
 }
 
+export interface ImportJobItem {
+  id: number;
+  source_path: string;
+  status: "pending" | "processing" | "success" | "skipped" | "failed";
+  error_message: string | null;
+  asset_id: number | null;
+}
+
+export interface ImportJob {
+  id: number;
+  job_type: string;
+  status: "queued" | "running" | "completed" | "completed_with_errors" | "failed" | "interrupted";
+  target_folder_id: number | null;
+  total_count: number;
+  success_count: number;
+  skipped_count: number;
+  failed_count: number;
+  stage: string | null;
+  message: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  items: ImportJobItem[];
+}
+
 export interface ApiErrorBody {
   error?: { code?: string; message?: string };
 }

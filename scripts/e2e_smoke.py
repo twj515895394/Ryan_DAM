@@ -99,6 +99,28 @@ def main() -> None:
             patched = client.patch("/api/v1/settings", json={"managed_root": new_root})
             check("patch settings", patched.status_code == 200 and patched.json()["managed_root"] == new_root, patched.text)
 
+            # end-to-end managed import into the general folder
+            source = DATA_DIR / "e2e-source.png"
+            source.write_bytes(b"e2e-import-payload")
+            imported = client.post(
+                "/api/v1/imports", json={"paths": [str(source)], "folder_id": general_id}
+            )
+            check("create import", imported.status_code == 202, imported.text)
+            import_job_id = imported.json()["id"]
+            import_final: dict = {}
+            for _ in range(100):
+                import_final = client.get(f"/api/v1/imports/{import_job_id}").json()
+                if import_final["status"] in {"completed", "completed_with_errors", "failed"}:
+                    break
+                time.sleep(0.2)
+            check(
+                "import completes",
+                import_final.get("status") == "completed" and import_final.get("success_count") == 1,
+                str(import_final),
+            )
+            import_item = (import_final.get("items") or [{}])[0]
+            check("import produced asset", bool(import_item.get("asset_id")), str(import_item))
+
         # restart the backend to prove persistence
         httpx.post(f"{base}/shutdown", headers=headers, timeout=5)
         proc.wait(timeout=10)

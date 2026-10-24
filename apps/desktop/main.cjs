@@ -225,6 +225,16 @@ ipcMain.handle("backend:get-info", () => {
   return backendInfo;
 });
 
+ipcMain.handle("dialog:select-files", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const result = await dialog.showOpenDialog(win, {
+    title: "选择要导入的文件",
+    properties: ["openFile", "multiSelections", "dontAddToRecent"]
+  });
+  if (result.canceled) return [];
+  return result.filePaths;
+});
+
 ipcMain.handle("drag:create-sample", async () => {
   await fs.promises.mkdir(sampleDirectory, { recursive: true });
   const content = ["Ryan_DAM stage-0 native file drag test", "This is a generated test file. It is safe to delete.", `Created at: ${new Date().toISOString()}`].join("\r\n");

@@ -17,6 +17,7 @@ from backend.app.api.v1 import api_router
 from backend.app.core.errors import ApiError, api_error_handler
 from backend.app.db.migrations import run_migrations
 from backend.app.db.session import create_session_factory, create_sqlite_engine
+from backend.app.services.import_service import bind_worker_factory
 from backend.app.services.settings_service import seed_default_settings
 
 APP_VERSION = "0.1.0"
@@ -57,6 +58,7 @@ def create_app(api_token: str | None = None, db_path: str | None = None) -> Fast
     application.state.session_factory = None
     if db_path:
         _engine, application.state.session_factory = init_database(db_path)
+        bind_worker_factory(application.state.session_factory)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=sorted(ALLOWED_ORIGINS),

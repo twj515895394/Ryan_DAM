@@ -1,7 +1,7 @@
 import { reactive } from "vue";
 
 import { api, ApiRequestError } from "../api/client";
-import type { FolderNode, Project, Settings } from "../api/types";
+import type { FolderNode, ImportJob, Project, Settings } from "../api/types";
 
 export interface LibraryState {
   loaded: boolean;
@@ -10,6 +10,7 @@ export interface LibraryState {
   projectTrees: Record<number, FolderNode[]>;
   settings: Settings | null;
   notice: { kind: "error" | "success"; text: string } | null;
+  importJob: ImportJob | null;
 }
 
 export const library = reactive<LibraryState>({
@@ -18,7 +19,8 @@ export const library = reactive<LibraryState>({
   projects: [],
   projectTrees: {},
   settings: null,
-  notice: null
+  notice: null,
+  importJob: null
 });
 
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -144,4 +146,47 @@ export async function updateManagedRoot(path: string): Promise<boolean> {
     notify("error", errText(error));
     return false;
   }
+}
+
+const JOB_TERMINAL = new Set(["completed", "completed_with_errors", "failed", "interrupted"]);
+let importPollTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopImportPolling(): void {
+  if (importPollTimer) {
+    clearInterval(importPollTimer);
+    importPollTimer = null;
+  }
+}
+
+export async function importFiles(paths: string[], folderId: number, allowDuplicates = false): Promise<boolean> {
+  try {
+    const job = await api.createImport(paths, folderId, allowDuplicates);
+    library.importJob = job;
+    stopImportPolling();
+    importPollTimer = setInterval(async () => {
+      try {
+        const fresh = await api.getImport(job.id);
+        library.importJob = fresh;
+        if (JOB_TERMINAL.has(fresh.status)) {
+          stopImportPolling();
+          if (fresh.status === "completed") notify("success", "导入完成。");
+          else if (fresh.status === "completed_with_errors") notify("error", "导入完成，但部分文件失败。");
+          else if (fresh.status === "failed") notify("error", fresh.message ?? "导入失败。");
+        }
+      } catch {
+        stopImportPolling();
+        library.importJob = null;
+        notify("error", "无法获取导入任务状态。");
+      }
+    }, 800);
+    return true;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
+export function dismissImportJob(): void {
+  stopImportPolling();
+  library.importJob = null;
 }

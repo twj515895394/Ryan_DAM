@@ -1,4 +1,12 @@
-import type { ApiErrorBody, FolderCreatePayload, FolderNode, FolderOut, Project, Settings } from "./types";
+import type {
+  ApiErrorBody,
+  FolderCreatePayload,
+  FolderNode,
+  FolderOut,
+  ImportJob,
+  Project,
+  Settings
+} from "./types";
 
 interface BackendInfo {
   baseUrl: string;
@@ -72,6 +80,13 @@ export const api = {
   renameFolder: (id: number, name: string) =>
     request<FolderOut>(`/api/v1/folders/${id}`, { method: "PATCH", json: { name } }),
   deleteFolder: (id: number) => request<void>(`/api/v1/folders/${id}`, { method: "DELETE" }),
+
+  createImport: (paths: string[], folderId: number, allowDuplicates = false) =>
+    request<ImportJob>("/api/v1/imports", {
+      method: "POST",
+      json: { paths, folder_id: folderId, allow_duplicates: allowDuplicates }
+    }),
+  getImport: (id: number) => request<ImportJob>(`/api/v1/imports/${id}`),
 
   getSettings: () => request<Settings>("/api/v1/settings"),
   updateSettings: (managedRoot: string) =>
