@@ -56,10 +56,12 @@ async function getBackendInfo(): Promise<BackendInfo> {
 
 export class ApiRequestError extends Error {
   readonly code: string;
+  readonly status: number;
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, status: number) {
     super(message);
     this.code = code;
+    this.status = status;
   }
 }
 
@@ -85,7 +87,7 @@ async function request<T>(path: string, init: RequestInit & { json?: unknown } =
     } catch {
       // keep the HTTP status fallback
     }
-    throw new ApiRequestError(code, message);
+    throw new ApiRequestError(code, message, response.status);
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;

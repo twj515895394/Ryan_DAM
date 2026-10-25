@@ -1,4 +1,4 @@
-import { api } from "../api/client";
+import { api, ApiRequestError } from "../api/client";
 import { deleteProject } from "../stores/library";
 
 import type { ConfirmRequest } from "./useConfirmDialog";
@@ -60,11 +60,15 @@ export function useProjectDelete(ask: (request: ConfirmRequest) => void) {
           void deleteProject(projectId, true).then(afterDeleted);
         }
       });
-    } catch {
-      // 统计失败降级为默认级联确认，保证用户始终看到明确的破坏性操作说明
+    } catch (error) {
+      // 统计失败降级为级联确认；404 往往意味着本地服务版本过旧（升级后未重启），
+      // 此时必须如实提示重启，而不是做出后端无法兑现的级联承诺。
+      const staleBackend = error instanceof ApiRequestError && error.status === 404;
       ask({
         title: "删除项目？",
-        description: `确定删除项目「${name}」及其全部内容吗？其内的托管资产将移入回收站，外部素材仅移除索引。`,
+        description: staleBackend
+          ? `确定删除项目「${name}」及其全部内容吗？\n\n无法读取项目统计：本地服务版本可能过旧，请完全退出并重启 Ryan_DAM 后再试。仍将尝试级联删除：托管资产移入回收站，外部素材仅移除索引。`
+          : `确定删除项目「${name}」及其全部内容吗？其内的托管资产将移入回收站，外部素材仅移除索引。`,
         confirmText: "删除项目",
         intent: "danger",
         action: () => {
