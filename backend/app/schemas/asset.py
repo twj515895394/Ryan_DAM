@@ -15,7 +15,7 @@ class AssetOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    folder_id: int
+    folder_id: int | None = None
     name: str
     extension: str | None
     asset_type: str

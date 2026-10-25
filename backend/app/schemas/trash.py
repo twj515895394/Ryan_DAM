@@ -15,6 +15,14 @@ class TrashItem(BaseModel):
     source_type: str
     deleted_at: datetime | None
     original_folder: str
+    extension: str | None = None
+    mime_type: str | None = None
+    media_width: int | None = None
+    media_height: int | None = None
+    media_duration_ms: int | None = None
+    thumbnail_status: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class TrashList(BaseModel):

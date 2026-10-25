@@ -153,3 +153,18 @@ def test_non_image_asset_returns_404(iso_client, headers, app, tmp_path) -> None
 def test_thumbnail_requires_token(iso_client) -> None:
     response = iso_client.get("/api/v1/assets/1/thumbnail", headers={"Host": "127.0.0.1"})
     assert response.status_code == 401
+
+
+def test_trashed_asset_thumbnail_accessible(iso_client, headers, app, tmp_path) -> None:
+    asset_id = import_image(iso_client, headers, tmp_path, "will_trash.png", 200, 200)
+    assert wait_thumbnail_ready(app, asset_id) == "ready"
+
+    # Move to trash
+    del_res = iso_client.delete(f"/api/v1/assets/{asset_id}", headers=headers)
+    assert del_res.status_code == 204
+
+    # Thumbnail should still be accessible for previewing in trash
+    response = iso_client.get(f"/api/v1/assets/{asset_id}/thumbnail", headers=headers)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+

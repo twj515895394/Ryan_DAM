@@ -7,7 +7,7 @@ touches source files on disk.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from backend.app.api.v1.deps import get_db
@@ -31,8 +31,12 @@ def list_trash(db: Session = Depends(get_db)) -> TrashList:
 
 
 @router.post("/trash/{asset_id}/restore", status_code=204, response_model=None)
-def restore_trashed(asset_id: int, db: Session = Depends(get_db)) -> None:
-    trash_service.restore_asset(db, asset_id)
+def restore_trashed(
+    asset_id: int,
+    target_folder_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> None:
+    trash_service.restore_asset(db, asset_id, target_folder_id=target_folder_id)
 
 
 @router.delete("/trash/{asset_id}", status_code=204, response_model=None)

@@ -188,6 +188,7 @@ def test_move_guards(iso_client, headers, app, tmp_path) -> None:
     )
     assert same.status_code == 400
 
+    # 跨项目与跨库移动现在得到允许
     project = iso_client.post("/api/v1/projects", json={"name": "移动项目"}, headers=headers).json()
     project_folder = iso_client.post(
         "/api/v1/folders", json={"name": "项目内目录", "scope": "project", "project_id": project["id"]}, headers=headers
@@ -195,8 +196,8 @@ def test_move_guards(iso_client, headers, app, tmp_path) -> None:
     cross = iso_client.post(
         f"/api/v1/assets/{asset_id}/move", json={"folder_id": project_folder["id"]}, headers=headers
     )
-    assert cross.status_code == 400
-    assert "不能" in cross.json()["error"]["message"]
+    assert cross.status_code == 200
+    assert cross.json()["folder_id"] == project_folder["id"]
 
     unknown = iso_client.post(f"/api/v1/assets/{asset_id}/move", json={"folder_id": 987654}, headers=headers)
     assert unknown.status_code == 404

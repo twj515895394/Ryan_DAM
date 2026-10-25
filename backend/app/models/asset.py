@@ -19,7 +19,7 @@ class Asset(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    folder_id: Mapped[int] = mapped_column(ForeignKey("folders.id"), index=True)
+    folder_id: Mapped[int | None] = mapped_column(ForeignKey("folders.id"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
     extension: Mapped[str | None] = mapped_column(String(64), nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(128), nullable=True)

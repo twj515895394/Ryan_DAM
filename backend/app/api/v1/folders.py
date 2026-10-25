@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from backend.app.api.v1.deps import get_db
-from backend.app.schemas.folder import FolderCreate, FolderNode, FolderOut, FolderUpdate
+from backend.app.schemas.folder import FolderCreate, FolderNode, FolderOut, FolderStats, FolderUpdate
 from backend.app.services import folder_service
 
 router = APIRouter(tags=["folders"])
@@ -19,6 +19,11 @@ def folder_tree(
     db: Session = Depends(get_db),
 ) -> list[FolderNode]:
     return folder_service.build_tree(db, scope=scope, project_id=project_id)
+
+
+@router.get("/folders/{folder_id}/stats", response_model=FolderStats)
+def get_folder_stats(folder_id: int, db: Session = Depends(get_db)) -> FolderStats:
+    return folder_service.get_folder_stats(db, folder_id)
 
 
 @router.post("/folders", response_model=FolderOut, status_code=status.HTTP_201_CREATED)
@@ -45,5 +50,9 @@ def update_folder(folder_id: int, payload: FolderUpdate, db: Session = Depends(g
 
 
 @router.delete("/folders/{folder_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
-def delete_folder(folder_id: int, db: Session = Depends(get_db)) -> None:
-    folder_service.delete_folder(db, folder_id)
+def delete_folder(
+    folder_id: int,
+    cascade: bool = Query(default=False),
+    db: Session = Depends(get_db),
+) -> None:
+    folder_service.delete_folder(db, folder_id, cascade=cascade)

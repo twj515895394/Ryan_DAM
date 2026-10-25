@@ -54,15 +54,18 @@ def test_content_missing_asset_404(iso_client, headers) -> None:
     assert response.status_code == 404
 
 
-def test_content_trashed_asset_404(iso_client, headers, app, tmp_path) -> None:
+def test_content_trashed_asset_accessible(iso_client, headers, app, tmp_path) -> None:
     asset_id = import_bytes(iso_client, headers, "trashed.bin", b"trash-me", tmp_path)
-    with app.state.session_factory() as session:
-        asset = session.get(Asset, asset_id)
-        asset.status = "trashed"
-        session.commit()
+    res = iso_client.delete(f"/api/v1/assets/{asset_id}", headers=headers)
+    assert res.status_code == 204
 
     response = iso_client.get(f"/api/v1/assets/{asset_id}/content", headers=headers)
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert response.content == b"trash-me"
+
+    detail = iso_client.get(f"/api/v1/assets/{asset_id}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "trashed"
 
 
 def test_content_missing_file_404(iso_client, headers, app, tmp_path) -> None:
@@ -111,3 +114,26 @@ def test_open_asset_externally_requires_registered_file(iso_client, headers, app
 
     no_token = iso_client.post("/api/v1/assets/1/open", headers={"Host": "127.0.0.1"})
     assert no_token.status_code == 401
+
+
+def test_open_trashed_asset_still_accessible(iso_client, headers, app, tmp_path, monkeypatch) -> None:
+    """回收站资产在彻底删除前，用户仍可在系统默认应用中打开查看实体文件。"""
+    import os
+
+    opened: list[str] = []
+    monkeypatch.setattr(os, "startfile", lambda path: opened.append(path), raising=False)
+
+    asset_id = import_bytes(iso_client, headers, "trash-open.txt", b"trashed but openable", tmp_path)
+    res = iso_client.delete(f"/api/v1/assets/{asset_id}", headers=headers)
+    assert res.status_code == 204
+
+    # trashed 状态的资产在彻底删除前仍可通过 open 端点调用系统应用打开
+    response = iso_client.post(f"/api/v1/assets/{asset_id}/open", headers=headers)
+    assert response.status_code == 204
+    assert len(opened) == 1 and opened[0].endswith("trash-open.txt")
+
+    # 彻底删除后实体文件消失，open 端点应返回 404
+    permanently = iso_client.delete(f"/api/v1/trash/{asset_id}", headers=headers)
+    assert permanently.status_code == 204
+    gone = iso_client.post(f"/api/v1/assets/{asset_id}/open", headers=headers)
+    assert gone.status_code == 404

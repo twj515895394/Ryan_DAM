@@ -23,6 +23,8 @@ from backend.app.services import asset_edit_service, asset_query, tag_service, t
 router = APIRouter(tags=["assets"])
 
 PROMPT_ASSET_TYPES = ("image", "video")
+# 内容类端点（/thumbnail、/content、/open）双状态放行：回收站资产在彻底删除前仍可读取
+SERVABLE_STATUSES = ("active", "trashed")
 
 
 def _asset_out_with_tags(db: Session, asset: Asset) -> AssetOut:
@@ -97,6 +99,15 @@ def list_assets(
         out_item.has_prompt = orm_item.prompt_text is not None
     return page_out
 
+
+@router.get("/assets/{asset_id}", response_model=AssetOut)
+def get_asset(asset_id: int, db: Session = Depends(get_db)) -> AssetOut:
+    asset = db.get(Asset, asset_id)
+    if asset is None:
+        raise ApiError("not_found", "资产不存在或已被删除。", 404)
+    return _asset_out_with_tags(db, asset)
+
+
 @router.patch("/assets/{asset_id}", response_model=AssetOut)
 def rename_asset(asset_id: int, payload: RenameAssetPayload, db: Session = Depends(get_db)) -> AssetOut:
     asset = asset_edit_service.rename_asset(db, asset_id, payload.name)
@@ -121,7 +132,7 @@ def convert_to_managed(asset_id: int, db: Session = Depends(get_db)) -> AssetOut
 @router.get("/assets/{asset_id}/thumbnail")
 def get_asset_thumbnail(asset_id: int, db: Session = Depends(get_db)) -> FileResponse:
     asset = db.get(Asset, asset_id)
-    if asset is None or asset.status != "active":
+    if asset is None or asset.status not in SERVABLE_STATUSES:
         raise ApiError("not_found", "资产不存在或已被删除。", 404)
     thumb = thumbnail_service.get_thumbnail(db, asset)
     if thumb is None or not thumb.exists():
@@ -143,7 +154,7 @@ def get_asset_content(asset_id: int, db: Session = Depends(get_db)) -> FileRespo
         raise ApiError("not_found", "资产不存在或已被删除。", 404)
     if asset.status == "missing":
         raise ApiError("content_unavailable", "外部源文件缺失或不可访问，请重新扫描外部目录。", 404)
-    if asset.status != "active":
+    if asset.status not in SERVABLE_STATUSES:
         raise ApiError("not_found", "资产不存在或已被删除。", 404)
     path = FsPath(asset.file_path)
     if not path.is_file():
@@ -162,7 +173,8 @@ def open_asset_externally(asset_id: int, db: Session = Depends(get_db)) -> None:
         raise ApiError("not_found", "资产不存在或已被删除。", 404)
     if asset.status == "missing":
         raise ApiError("content_unavailable", "外部源文件缺失或不可访问，请重新扫描外部目录。", 404)
-    if asset.status != "active":
+    # 与 /content、/thumbnail 双状态策略一致：回收站资产在彻底删除前仍可由用户主动打开
+    if asset.status not in SERVABLE_STATUSES:
         raise ApiError("not_found", "资产不存在或已被删除。", 404)
     path = asset.file_path
     if not os.path.isfile(path):

@@ -91,13 +91,6 @@ def move_asset(db: Session, asset_id: int, target_folder_id: int) -> Asset:
     if asset.folder_id == target_folder_id:
         raise ApiError("already_in_folder", "资产已在该目录。", 400)
 
-    current = db.get(Folder, asset.folder_id)
-    if current is not None:
-        if current.scope_type != folder.scope_type:
-            raise ApiError("invalid_move", "通用资产库与项目资产库之间不能移动资产。", 400)
-        if current.scope_type == "project" and current.project_id != folder.project_id:
-            raise ApiError("invalid_move", "不能跨项目移动资产。", 400)
-
     asset.folder_id = target_folder_id
     db.commit()
     db.refresh(asset)

@@ -98,16 +98,6 @@ def bulk_move(db: Session, asset_ids: list[int], target_folder_id: int) -> list[
         if asset.folder_id == target_folder_id:
             results.append(ItemResult(asset_id, False, "资产已在该目录"))
             continue
-        # scope guard: a project asset may only move within the same project
-        if asset.folder_id is not None:
-            current = db.get(Folder, asset.folder_id)
-            if current is not None:
-                if current.scope_type != folder.scope_type:
-                    results.append(ItemResult(asset_id, False, "通用资产库与项目资产库之间不能移动"))
-                    continue
-                if current.scope_type == "project" and current.project_id != folder.project_id:
-                    results.append(ItemResult(asset_id, False, "不能跨项目移动资产"))
-                    continue
         asset.folder_id = target_folder_id
         results.append(ItemResult(asset_id, True))
     db.commit()

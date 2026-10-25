@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 from backend.app.core.errors import ApiError
 from backend.app.models.asset import Asset
 from backend.app.models.folder import Folder
+from backend.app.models.import_job import ImportJob, ImportJobItem
 from backend.app.models.project import Project
-from backend.app.schemas.folder import FolderNode
+from backend.app.schemas.folder import FolderNode, FolderStats
 
 MAX_FOLDER_NAME = 255
 _INVALID_NAME_CHARS = set('<>:"/\\|?*')
@@ -198,13 +199,112 @@ def ensure_folder_path(db: Session, *, base: Folder, parts: list[str]) -> Folder
     return current
 
 
-def delete_folder(db: Session, folder_id: int) -> None:
+def get_folder_subtree_ids(db: Session, folder_id: int) -> list[int]:
+    """Return [folder_id, ...all descendant folder ids] in topological order."""
+    all_ids = [folder_id]
+    current_parents = [folder_id]
+    while current_parents:
+        children = db.scalars(
+            select(Folder.id).where(Folder.parent_id.in_(current_parents))
+        ).all()
+        if not children:
+            break
+        all_ids.extend(children)
+        current_parents = list(children)
+    return all_ids
+
+
+def get_folder_stats(db: Session, folder_id: int) -> FolderStats:
     folder = get_folder_or_404(db, folder_id)
-    child_count = db.scalar(select(func.count(Folder.id)).where(Folder.parent_id == folder_id)) or 0
-    if child_count:
-        raise ApiError("folder_not_empty", f"目录「{folder.name}」仍包含 {child_count} 个子目录，请先处理子目录。", 409)
-    asset_count = db.scalar(select(func.count(Asset.id)).where(Asset.folder_id == folder_id)) or 0
-    if asset_count:
-        raise ApiError("folder_not_empty", f"目录「{folder.name}」仍包含 {asset_count} 个资产，删除目录前请先移走资产。", 409)
-    db.delete(folder)
+    subtree_ids = get_folder_subtree_ids(db, folder_id)
+    subfolder_count = len(subtree_ids) - 1
+
+    assets = db.scalars(select(Asset).where(Asset.folder_id.in_(subtree_ids))).all()
+    asset_count = len(assets)
+    managed_count = sum(1 for a in assets if a.source_type == "managed")
+    external_count = sum(1 for a in assets if a.source_type == "external")
+
+    return FolderStats(
+        folder_id=folder.id,
+        folder_name=folder.name,
+        subfolder_count=subfolder_count,
+        asset_count=asset_count,
+        managed_asset_count=managed_count,
+        external_asset_count=external_count,
+    )
+
+
+def delete_folder(db: Session, folder_id: int, cascade: bool = False) -> None:
+    folder = get_folder_or_404(db, folder_id)
+    if not cascade:
+        child_count = db.scalar(select(func.count(Folder.id)).where(Folder.parent_id == folder_id)) or 0
+        if child_count:
+            raise ApiError("folder_not_empty", f"目录「{folder.name}」仍包含 {child_count} 个子目录，请先处理子目录。", 409)
+        asset_count = db.scalar(select(func.count(Asset.id)).where(Asset.folder_id == folder_id)) or 0
+        if asset_count:
+            raise ApiError("folder_not_empty", f"目录「{folder.name}」仍包含 {asset_count} 个资产，删除目录前请先移走资产。", 409)
+
+        # Clear references to this folder from trashed assets and import jobs
+        for trashed in db.scalars(select(Asset).where(Asset.original_folder_id == folder_id)).all():
+            trashed.original_folder_id = None
+        for job in db.scalars(select(ImportJob).where(ImportJob.target_folder_id == folder_id)).all():
+            job.target_folder_id = None
+        for item in db.scalars(select(ImportJobItem).where(ImportJobItem.target_folder_id == folder_id)).all():
+            item.target_folder_id = None
+
+        db.delete(folder)
+        db.commit()
+        return
+
+    # Cascade mode:
+    from backend.app.services.trash_service import delete_asset_index, trash_asset
+    from backend.app.services.external_service import unlink_external_source
+    from backend.app.models.external_source import ExternalSource
+
+    subtree_ids = get_folder_subtree_ids(db, folder_id)
+
+    # 1. Unlink any ExternalSource whose target_folder_id is in subtree_ids
+    ext_sources = db.scalars(select(ExternalSource).where(ExternalSource.target_folder_id.in_(subtree_ids))).all()
+    for src in ext_sources:
+        unlink_external_source(db, src.id)
+
+    # 2. Process all assets in subtree_ids
+    assets = db.scalars(select(Asset).where(Asset.folder_id.in_(subtree_ids))).all()
+    for asset in assets:
+        if asset.source_type == "external":
+            delete_asset_index(db, asset)
+        else:
+            # Managed asset
+            if asset.status == "active":
+                trash_asset(db, asset.id)
+            # Ensure folder_id and original_folder_id are detached from deleted folders
+            asset.folder_id = None
+            asset.original_folder_id = None
+
+    # 3. Clear original_folder_id for any other trashed assets referencing subtree_ids
+    other_trashed = db.scalars(select(Asset).where(Asset.original_folder_id.in_(subtree_ids))).all()
+    for asset in other_trashed:
+        asset.original_folder_id = None
+
+    # 4. Clear ImportJob / ImportJobItem target_folder_id
+    for job in db.scalars(select(ImportJob).where(ImportJob.target_folder_id.in_(subtree_ids))).all():
+        job.target_folder_id = None
+    for item in db.scalars(select(ImportJobItem).where(ImportJobItem.target_folder_id.in_(subtree_ids))).all():
+        item.target_folder_id = None
+
+    db.flush()
+
+    # 5. Clear parent_id for child folders in subtree to break FK dependencies
+    for fid in subtree_ids:
+        f = db.get(Folder, fid)
+        if f is not None:
+            f.parent_id = None
+    db.flush()
+
+    # 6. Delete all folders in subtree_ids (deepest first)
+    for fid in reversed(subtree_ids):
+        f = db.get(Folder, fid)
+        if f is not None:
+            db.delete(f)
+
     db.commit()

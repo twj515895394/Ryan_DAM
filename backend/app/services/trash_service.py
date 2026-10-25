@@ -104,7 +104,7 @@ def trash_asset(db: Session, asset_id: int) -> None:
         raise
 
 
-def restore_asset(db: Session, asset_id: int) -> None:
+def restore_asset(db: Session, asset_id: int, target_folder_id: int | None = None) -> None:
     asset = db.get(Asset, asset_id)
     if asset is None or asset.status != "trashed":
         raise ApiError("not_found", "回收站中不存在该资产。", 404)
@@ -120,8 +120,21 @@ def restore_asset(db: Session, asset_id: int) -> None:
     asset.file_path = str(destination)
     asset.status = "active"
     asset.deleted_at = None
-    if asset.original_folder_id is not None:
+
+    if target_folder_id is not None:
+        target_folder = db.get(Folder, target_folder_id)
+        if target_folder is None:
+            raise ApiError("not_found", "指定的恢复目标目录不存在。", 404)
+        asset.folder_id = target_folder.id
+    elif asset.original_folder_id is not None and db.get(Folder, asset.original_folder_id) is not None:
         asset.folder_id = asset.original_folder_id
+    else:
+        fallback = db.scalar(select(Folder).where(Folder.scope_type == "general").order_by(Folder.id))
+        if fallback is None:
+            fallback = Folder(name="已恢复资产", scope_type="general", sort_order=1)
+            db.add(fallback)
+            db.flush()
+        asset.folder_id = fallback.id
     try:
         db.commit()
     except Exception:
@@ -189,6 +202,14 @@ def list_trash(db: Session) -> list[dict]:
             "source_type": asset.source_type,
             "deleted_at": asset.deleted_at,
             "original_folder": folder_name or "（目录已删除）",
+            "extension": asset.extension,
+            "mime_type": asset.mime_type,
+            "media_width": asset.media_width,
+            "media_height": asset.media_height,
+            "media_duration_ms": asset.media_duration_ms,
+            "thumbnail_status": asset.thumbnail_status,
+            "created_at": asset.created_at,
+            "updated_at": asset.updated_at,
         }
         for asset, folder_name in rows
     ]

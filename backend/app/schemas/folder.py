@@ -45,3 +45,13 @@ class FolderNode(BaseModel):
     parent_id: int | None
     sort_order: int
     children: list["FolderNode"] = []
+
+
+class FolderStats(BaseModel):
+    folder_id: int
+    folder_name: str
+    subfolder_count: int
+    asset_count: int
+    managed_asset_count: int
+    external_asset_count: int
+

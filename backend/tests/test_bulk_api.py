@@ -96,7 +96,7 @@ def test_bulk_move_with_scope_guards(iso_client, headers, tmp_path) -> None:
     ).json()
     assert again["ok_count"] == 0 and again["failed_count"] == 2
 
-    # project folder → scope guard refuses
+    # 跨项目与跨库移动现在得到允许
     project = iso_client.post("/api/v1/projects", json={"name": "批量项目"}, headers=headers).json()
     project_folder = iso_client.post(
         "/api/v1/folders", json={"name": "项目目录", "scope": "project", "project_id": project["id"]}, headers=headers
@@ -106,8 +106,8 @@ def test_bulk_move_with_scope_guards(iso_client, headers, tmp_path) -> None:
         json={"asset_ids": ids, "target_folder_id": project_folder["id"]},
         headers=headers,
     ).json()
-    assert cross["failed_count"] == 2
-    assert "不能" in (cross["items"][0]["error"] or "")
+    assert cross["ok_count"] == 2
+    assert cross["failed_count"] == 0
 
     unknown_folder = iso_client.post(
         "/api/v1/assets/bulk-move",

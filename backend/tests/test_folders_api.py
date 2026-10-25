@@ -133,3 +133,71 @@ def test_delete_leaf_folder(client, headers) -> None:
 def test_folder_in_missing_project_rejected(client, headers) -> None:
     response = client.post("/api/v1/folders", json={"name": "孤儿", "scope": "project", "project_id": 999}, headers=headers)
     assert response.status_code == 404
+
+
+def test_folder_stats_and_cascade_delete(iso_client, headers, tmp_path) -> None:
+    import time
+
+    def wait_import(job_id: int):
+        for _ in range(300):
+            res = iso_client.get(f"/api/v1/imports/{job_id}", headers=headers).json()
+            if res["status"] in {"completed", "failed"}:
+                assert res["status"] == "completed"
+                return res
+            time.sleep(0.02)
+        raise AssertionError("import timeout")
+
+    # Create Parent -> Child folder structure
+    parent = _create(iso_client, headers, {"name": "父级", "scope": "general"})
+    child = _create(iso_client, headers, {"name": "子级", "scope": "general", "parent_id": parent["id"]})
+
+    # Add file to parent
+    f1 = tmp_path / "f1.txt"
+    f1.write_text("file 1", encoding="utf-8")
+    j1 = iso_client.post("/api/v1/imports", json={"paths": [str(f1)], "folder_id": parent["id"]}, headers=headers).json()
+    wait_import(j1["id"])
+
+    # Add file to child
+    f2 = tmp_path / "f2.txt"
+    f2.write_text("file 2", encoding="utf-8")
+    j2 = iso_client.post("/api/v1/imports", json={"paths": [str(f2)], "folder_id": child["id"]}, headers=headers).json()
+    wait_import(j2["id"])
+
+    # Test folder stats
+    stats = iso_client.get(f"/api/v1/folders/{parent['id']}/stats", headers=headers)
+    assert stats.status_code == 200
+    data = stats.json()
+    assert data["folder_id"] == parent["id"]
+    assert data["folder_name"] == "父级"
+    assert data["subfolder_count"] == 1
+    assert data["asset_count"] == 2
+    assert data["managed_asset_count"] == 2
+    assert data["external_asset_count"] == 0
+
+    # Default delete without cascade should fail with 409
+    refused = iso_client.delete(f"/api/v1/folders/{parent['id']}", headers=headers)
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "folder_not_empty"
+
+    # Cascade delete should succeed with 204
+    cascade = iso_client.delete(f"/api/v1/folders/{parent['id']}?cascade=true", headers=headers)
+    assert cascade.status_code == 204
+
+    # Tree should now be empty
+    tree = iso_client.get("/api/v1/folders/tree", params={"scope": "general"}, headers=headers).json()
+    assert tree == []
+
+    # Assets should now be in trash
+    trash = iso_client.get("/api/v1/trash", headers=headers).json()
+    assert trash["total"] == 2
+    trashed_ids = [item["id"] for item in trash["items"]]
+
+    # Restore one asset: original folder was deleted, should fallback to auto-created or general folder
+    restored = iso_client.post(f"/api/v1/trash/{trashed_ids[0]}/restore", headers=headers)
+    assert restored.status_code == 204
+
+    # The restored asset is now active in general
+    assets = iso_client.get("/api/v1/assets", params={"scope": "general"}, headers=headers).json()
+    assert assets["total"] == 1
+    assert assets["items"][0]["id"] == trashed_ids[0]
+
