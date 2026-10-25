@@ -3,32 +3,33 @@
 > **必读：** 这是 Ryan_DAM 项目根目录 `.handoff/current.md` 的详细交接文档。接手者应先读本文件，再读 `docs/` 下的需求与设计；不要依赖聊天记录来判断实际代码状态。
 >
 > **最近核实时间：** 2026-10-25（ZCode 会话）  
-> **交接版本：** Handoff v5（前端回收站沉浸式预览与恢复/永久删除交互集成完成）  
+> **交接版本：** Handoff v6（项目级联删除完成——解除「仅空项目可删」限制）  
 > **目标仓库：** https://github.com/twj515895394/Ryan_DAM  
 > **主分支：** `main`  
-> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录级联删除（含迁移 0005、统计接口与递归级联、Apple HIG 确认弹窗）全面完成；回收站沉浸式预览已集成——行点击调出预览（媒体/文本/PDF 复用 AssetPreview），trashMode 提供「恢复到原目录 / 永久删除」，danger 确认与 Esc 层级齐备；typecheck + build + 123 pytest 全绿，5173 浏览器端到端冒烟通过。
+> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录级联删除（含迁移 0005、统计接口与递归级联、Apple HIG 确认弹窗）全面完成；回收站沉浸式预览已集成（行点击调出预览、trashMode 恢复/永久删除）；**项目删除已解除空项目限制**——非空项目弹出 Apple HIG 级联影响说明（托管→回收站、外部→仅移除索引、全部文件夹与子文件夹级联删除），与目录级联共用 `cascade_delete_folder_ids` 算法；typecheck + build + 125 pytest 全绿，5173 浏览器端到端冒烟通过。
 
 ---
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 前端回收站沉浸式预览与恢复/永久删除集成完成）
+### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 项目级联删除完成，解除「仅空项目可删」限制）
 
-> **最新会话交接：** [`.handoff/handoff-20261025-123500.md`](./handoff-20261025-123500.md)（交付明细、验证记录、codereview 结论与下一会话任务）——接手者务必先读它，再读本文件。
+> **最新会话交接：** [`.handoff/handoff-20261025-143000.md`](./handoff-20261025-143000.md)（交付明细、验证记录、codereview 结论与下一会话任务）——接手者务必先读它，再读本文件。上一会话（回收站沉浸式预览）交接见 [`.handoff/handoff-20261025-123500.md`](./handoff-20261025-123500.md)。
 
-- **Git 分支 / 状态：** `main`，本地原子提交（后端 `20d041d` / 前端 / 文档三组），未推送，开发期约定统一交付后再推。
+- **Git 分支 / 状态：** `main`，本地原子提交（后端 / 前端 / 文档各一组），未推送，开发期约定统一交付后再推。
 - **本会话已完成工作：**
-  1. **后端双状态放行收尾**：`/thumbnail`、`/content`、`/open` 统一以 `SERVABLE_STATUSES = ("active", "trashed")` 常量放行回收站资产；`/open` 首次支持 trashed；`test_content_api.py` 新增 2 项回归测试，全库 **123 passed**。
-  2. **前端回收站沉浸式预览链路**：`TrashView.vue` 整行可点（role=button + hover/active/focus-visible 三态）调出 `AssetPreview.vue` 沉浸预览（文本/图片/视频/音频/PDF 全复用）；`trashMode` 隐藏常规管理项、显示「回收站」信息块（原目录 + 删除时间），提供 44px 热区「恢复到原目录」（强调蓝）与「永久删除」（红描边 → danger ConfirmDialog，自动聚焦、Enter/Esc 键盘流）。
-  3. **App.vue 瘦身与 composables 抽取**：`useConfirmDialog` / `useFolderDelete` / `useDialogFlows` / `useTrashPreview`（id 化状态 + 删除后邻居前移竞态守卫）四组件落地；`AssetTagEditor.vue` 抽出标签 combobox；`ConfirmIntent` 类型经 `ConfirmDialog.vue` 导出复用；关键文件全部 < 800 行（App.vue 721 / AssetPreview 513）。
-  4. **codereview 全量审查通过**：0 致命；修复 3 条建议（跨视图预览叠加 watch 关闭、ConfirmIntent DRY、后端状态常量）；无硬编码。
-  5. **5173 浏览器端到端冒烟通过**：隔离后端 + 真实用户数据 0 接触，验证行点击→预览（文本正文渲染 / 图片缩放）→恢复→toast→回收站清空→永久删除 danger 确认→Esc 浮层归零全链路；测毕清理隔离数据与进程。
+  1. **级联算法抽为共享函数**：`folder_service.py` 将目录级联六步（解除外部源指向 → 托管资产入回收站并摘除目录引用 / 外部资产仅删索引 → 清回收站残留原目录引用 → 清导入任务目标引用 → 清 parent_ids → 删目录）抽为 `cascade_delete_folder_ids(db, root_ids)`，支持多根去重复用；`delete_folder(cascade=True)` 改为薄封装，行为不变。
+  2. **项目级联删除后端**：`project_service.get_project_stats`（子文件夹数 / 资产数 / 托管与外部资产数）+ `delete_project(cascade=)`——非空且未指定 cascade 仍 409 `project_not_empty`；cascade=True 时以项目根目录集合调用共享级联算法后删项目。新端点 `GET /api/v1/projects/{id}/stats`、`DELETE /api/v1/projects/{id}?cascade=true`，新增 `ProjectStats` schema。
+  3. **前端项目删除确认流**：新 composable `useProjectDelete.ts`（对齐 `useFolderDelete`）——先取统计，空项目弹轻量 danger 确认「确定删除空项目「X」吗？」；非空项目弹级联影响说明（包含 N 个文件夹、M 个资产；N₁ 个托管资产将移入回收站，N₂ 个外部素材将移除索引（源文件保留），所有文件夹与子文件夹将被级联删除），确认「级联删除」；统计接口异常时回退默认级联确认。`client.deleteProject(id, cascade)`、store 删除成功后并行刷新库/回收站/外部源，AppSidebar 按钮标题改「删除项目」。
+  4. **后端测试**：`test_project_stats`（空/嵌套统计 + 404）与 `test_project_cascade_delete`（stats 断言 → 无 cascade 409 → cascade 204 → 项目/目录树/外部源全清、托管资产进回收站且可恢复、外部源文件字节不动），全库 **125 passed**。
+  5. **5173 浏览器端到端冒烟通过**：隔离后端 + localStorage 桥，用户真实数据 0 接触。验证级联对话框文案与影响数字、确认后项目/目录/外部源消失且回收站徽标 +1、空项目轻量对话框、取消关闭；测毕清理隔离数据与进程，用户 vite（5173）全程未动。
 - **待处理问题记录（下个会话继续）：**
   - 用户实机验收（票 21 拖出 / 票 22 终验，需人工）；review 遗留小项清单见 §12 票 15–20 条目与最新交接文档。
 
 ### 0.0.1 迭代时间线（倒序）
 
-0. **前端回收站沉浸式预览集成（本会话，2026-10-25）**——回收站整行点击调出沉浸预览，trashMode 恢复/永久删除（danger 确认 + 44px 热区），App.vue 瘦身至 composables 四件套 + AssetTagEditor 抽取，`/open` 放行 trashed，123 pytest 全绿，5173 浏览器冒烟全链路通过。详见 [`.handoff/handoff-20261025-123500.md`](./handoff-20261025-123500.md)。
+0. **项目级联删除（本会话，2026-10-25）**——解除「仅允许删除没有任何文件夹的空项目」限制：`cascade_delete_folder_ids` 共享算法 + `GET /projects/{id}/stats` + `DELETE ?cascade` + `useProjectDelete` 影响说明确认弹窗（托管→回收站、外部→仅移除索引），125 pytest 全绿，5173 冒烟通过。详见 [`.handoff/handoff-20261025-143000.md`](./handoff-20261025-143000.md)。
+1. **前端回收站沉浸式预览集成（2026-10-25 上一会话）**——回收站整行点击调出沉浸预览，trashMode 恢复/永久删除（danger 确认 + 44px 热区），App.vue 瘦身至 composables 四件套 + AssetTagEditor 抽取，`/open` 放行 trashed，123 pytest 全绿，5173 浏览器冒烟全链路通过。详见 [`.handoff/handoff-20261025-123500.md`](./handoff-20261025-123500.md)。
 1. **目录级联删除与回收站媒体流放行（2026-10-25 上一会话）**——Alembic 0005 迁移解开 `folder_id` 外键约束、目录资产统计接口、级联删除与回退承接机制、受控放行回收站 content 与 thumbnail 流、前端 Apple HIG 级联删除确认弹窗。详见 [`.handoff/handoff-20261025-113000.md`](./handoff-20261025-113000.md)。
 2. **顶栏交互重构与层叠遮挡修复（2026-10-25 上一会话）**——搜索框平滑扩展与 `⌘K`、连体式胶囊排序控件、毛玻璃独立筛选面板、移除浮动过滤条实现零布局抖动（Zero CLS）、Header 与浮层 z-index 提升解决卡片穿透遮挡。详见 [`.handoff/handoff-20261025-101500.md`](./handoff-20261025-101500.md)。
 3. **Apple HIG 规范落地与跨库移动（2026-10-25 上一会话）**——全面废除 `window.confirm`，改用全项目统一的 Apple HIG `ConfirmDialog`；更新 `AGENTS.md` 和设计规范；解禁跨项目/跨通用库资产移动限制；新增单文件不超过 800 行的架构硬性约束。详见 [`.handoff/handoff-20261025-085144.md`](./handoff-20261025-085144.md)。
@@ -520,7 +521,17 @@ npm run package:win
 
 ## 12. 迭代记录
 
-### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 前端回收站沉浸式预览与恢复/永久删除集成）
+### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 项目级联删除，解除空项目限制）
+
+- **Git 分支 / 提交：** `main` 本地三组原子提交（后端 / 前端 / 文档），全部未推送。
+- **开发目标：** 用户反馈「删除项目」弹窗仍限制"仅允许删除没有任何文件夹的空项目"，要求非空项目也能连同文件夹、子文件夹与文件一起删除；语义对齐既有目录级联（托管→回收站、外部→仅移除索引、源文件永不删除）。
+- **实际交付：** 见 [`.handoff/handoff-20261025-143000.md`](./handoff-20261025-143000.md) §1。要点：`cascade_delete_folder_ids(db, root_ids)` 共享级联算法（多根去重）、`get_project_stats` + `ProjectStats` schema、`GET /projects/{id}/stats`、`DELETE /projects/{id}?cascade=true`（非空未 cascade 仍 409 `project_not_empty`）、前端 `useProjectDelete`（空项目轻确认 / 非空级联影响说明 + 异常回退）、`client.deleteProject(id, cascade)`、store 删除后并行刷新库/回收站/外部源。
+- **修改文件：** `backend/app/services/folder_service.py`、`project_service.py`、`backend/app/schemas/project.py`、`backend/app/api/v1/projects.py`、`backend/tests/test_projects_api.py`；`apps/web/src/composables/useProjectDelete.ts`（新）、`api/client.ts`、`api/types.ts`、`stores/library.ts`、`App.vue`、`components/AppSidebar.vue`。
+- **运行验证：** `npm run typecheck` ✅ / `npm run build:web` ✅ 1.97s / `.venv/Scripts/python.exe -m pytest backend/tests` ✅ **125 passed**（新增 2 项）/ 5173 浏览器冒烟（隔离后端 + localStorage 桥，真实数据 0 接触）✅：级联对话框文案与数字准确、确认后项目/目录/外部源消失且回收站 +1、空项目轻对话框、取消关闭；测毕清理隔离数据与进程。
+- **未完成 / 已知问题：** codereview 0 致命 0 建议；无硬编码；关键文件全部 < 800 行（project_service 100 / folder_service 322 / useProjectDelete 78 / App.vue 715）。
+- **下一步第一任务（1–3 个）：** ①用户实机验收票 21（拖出）/票 22（终验）；②review 遗留小项批量小修复；③如需 GitHub Issues 发布用 `to-issues`。
+
+### 上一迭代（2026-10-25，ZCode 会话 · 前端回收站沉浸式预览与恢复/永久删除集成）
 
 - **Git 分支 / 提交：** `main` 本地三组原子提交（`20d041d` 后端 / 前端 / 文档），全部未推送；本批提交同时收编了 101500（顶栏重构）与 113000（级联删除后端）两个会话遗留的未提交工作（均已在上一会话验证通过）。
 - **开发目标：** 完成 113000 交接指定的唯一任务——回收站 TrashView 沉浸式预览与恢复/永久删除交互集成，并按 apple-design/codereview 规范全量审查。
