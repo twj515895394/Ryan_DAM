@@ -23,6 +23,8 @@ const promptDraft = ref("");
 const promptCopied = ref(false);
 let promptCopyTimer: ReturnType<typeof setTimeout> | null = null;
 
+// immediate: 卡片入口会在本组件挂载前就把 open 置为 true（AssetPreview setup 期
+// 同步响应 autoOpenPrompt），此时 open 没有"变化"可监听，必须挂载即初始化一次
 watch(
   () => props.open,
   (isOpen) => {
@@ -33,7 +35,8 @@ watch(
       promptError.value = "";
       promptText.value = null;
     }
-  }
+  },
+  { immediate: true }
 );
 
 async function initPrompt(): Promise<void> {
@@ -100,7 +103,9 @@ async function copyPrompt(): Promise<void> {
     >
       <div class="w-[560px] max-w-[92vw] rounded-2xl bg-white p-5 shadow-soft">
         <div class="flex items-center justify-between">
-          <h3 class="truncate text-sm font-semibold text-ink">提示词 · {{ assetName }}</h3>
+          <h3 class="truncate text-sm font-semibold text-ink">
+            {{ promptEditing ? (hasPrompt ? "编辑提示词" : "添加提示词") : "提示词" }} · {{ assetName }}
+          </h3>
           <button
             class="rounded-lg px-2 py-1 text-xs text-muted transition hover:bg-canvas hover:text-ink"
             @click="emit('close')"
