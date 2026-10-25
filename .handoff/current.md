@@ -3,34 +3,36 @@
 > **必读：** 这是 Ryan_DAM 项目根目录 `.handoff/current.md` 的详细交接文档。接手者应先读本文件，再读 `docs/` 下的需求与设计；不要依赖聊天记录来判断实际代码状态。
 >
 > **最近核实时间：** 2026-10-25（ZCode 会话）  
-> **交接版本：** Handoff v13（「其他」分类：代码文件脱离文档，迁移 0008；承 v12 侧栏目录置顶、v11 代码文件文本预览/缩略图 LRU 缓存）  
+> **交接版本：** Handoff v14（预览同目录上下切换增强：跨分页遍历 + 位置指示 + ↑/↓；承 v13「其他」分类/迁移 0008、v12 侧栏目录置顶、v11 代码文件文本预览/缩略图 LRU 缓存）  
 > **目标仓库：** https://github.com/twj515895394/Ryan_DAM  
 > **主分支：** `main`  
-> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录与项目级联删除全面完成（`cascade_delete_folder_ids` 共享算法 + Apple HIG 影响说明确认弹窗）；**用户报告的删除项目 409 已定位为陈旧后端进程**（Electron 派生的 Python 服务无热重载，旧进程静默忽略 `?cascade=true`），代码无缺陷，**用户完全重启桌面应用后即可正常级联删除**，前端已加固为遇 404 如实提示重启；md 文档预览支持 GFM 表格；导入任务面板 5 秒自动关闭；卡片提示词入口双修复；**侧栏铅笔升级为「编辑文件夹」弹窗（名称 + 描述 + Apple HIG 琥珀锁定开关）**——迁移 0006 增 `folders.locked/description`，锁定目录拦截直接删除与目录/项目级联（409 `folder_locked` 点名锁定目录），锁只拦删除、不向下继承；typecheck + build + **131 pytest** 全绿，5173 浏览器冒烟锁定/拦截/解锁/级联全链路通过。**需完全重启桌面应用使 0006 迁移与守卫生效（前端 vite 热更新即可，后端进程必须重启）**；最新：**侧栏紧凑化 + 可拖拽宽度**（目录行 24px、缩进 13px/层、截断悬停全名；把手 1:1 跟手拖拽钳制 [220,480]、键盘/双击调节、localStorage 持久化；顺带修复无效类 `h-7.5/py-0.2` 与冒烟揪出的 STORAGE_KEY 损坏字面量），纯前端、刷新即生效；最新：**代码文件文本预览 + 缩略图缓存**——后端 `CODE_EXTS`（47 种源码/配置/日志扩展）并入文档分类（新导入/外扫的 `.py`/`.ts`/`.yml` 等注册为文档），前端沉浸预览按等宽 `font-mono` 文本渲染代码且**存量已存为「文件」的代码资产按扩展名回退同样可预览**；新增 `useThumbnailObjectUrl` 模块级 LRU 缓存（240 条）共享给资产卡与回收站行，目录切换/滚动重挂零网络请求、`failed` 负缓存防反复 404。typecheck + build + **134 pytest** 全绿，5173 冒烟（代码预览、存量回退、缓存零新增请求）全通过；最新：**侧栏目录置顶**——目录行悬停操作区新加图钉按钮（`+` 与铅笔之间），点击置顶/解除置顶，置顶目录**始终排在同层最上方**（全局排序 `pinned desc → sort_order → id`，build_tree 保序 → 任意层级生效），名称右侧常驻蓝色图钉徽标（镜像锁定徽标模式、accent 语义色区分琥珀锁定）；迁移 0007 增 `folders.pinned`，`PATCH {pinned}` 走 `update_folder_info` 哨兵，改名/锁定 PATCH 不重置置顶。**需用户完全重启桌面应用使 0007 迁移与置顶排序生效（后端进程必须重启；前端刷新即生效）**；最新：**「其他」分类**——用户反馈 `.py` 全挂在「文档」下：顶栏分类栏加「其他」chip，代码/配置/日志扩展不再并入文档（`guess_asset_type` 归 `other`），**迁移 0008 把存量误标 document 的代码资产自动改回 other**（冻结扩展名快照、幂等），卡片/预览/回收站 other 标签「文件」→「其他」；代码预览经 v11 的 other 扩展名回退通道**原样可用**。typecheck + build + **135 pytest** 全绿；迁移 E2E（0007 旧库→启动自动升 0008 改类）+ 5173 冒烟（chip 过滤/卡片标签/代码预览仍渲染且面板「类型：其他」）全通过。**同样需完全重启桌面应用使 0008 改类生效**。
+> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录与项目级联删除全面完成（`cascade_delete_folder_ids` 共享算法 + Apple HIG 影响说明确认弹窗）；**用户报告的删除项目 409 已定位为陈旧后端进程**（Electron 派生的 Python 服务无热重载，旧进程静默忽略 `?cascade=true`），代码无缺陷，**用户完全重启桌面应用后即可正常级联删除**，前端已加固为遇 404 如实提示重启；md 文档预览支持 GFM 表格；导入任务面板 5 秒自动关闭；卡片提示词入口双修复；**侧栏铅笔升级为「编辑文件夹」弹窗（名称 + 描述 + Apple HIG 琥珀锁定开关）**——迁移 0006 增 `folders.locked/description`，锁定目录拦截直接删除与目录/项目级联（409 `folder_locked` 点名锁定目录），锁只拦删除、不向下继承；typecheck + build + **131 pytest** 全绿，5173 浏览器冒烟锁定/拦截/解锁/级联全链路通过。**需完全重启桌面应用使 0006 迁移与守卫生效（前端 vite 热更新即可，后端进程必须重启）**；最新：**侧栏紧凑化 + 可拖拽宽度**（目录行 24px、缩进 13px/层、截断悬停全名；把手 1:1 跟手拖拽钳制 [220,480]、键盘/双击调节、localStorage 持久化；顺带修复无效类 `h-7.5/py-0.2` 与冒烟揪出的 STORAGE_KEY 损坏字面量），纯前端、刷新即生效；最新：**代码文件文本预览 + 缩略图缓存**——后端 `CODE_EXTS`（47 种源码/配置/日志扩展）并入文档分类（新导入/外扫的 `.py`/`.ts`/`.yml` 等注册为文档），前端沉浸预览按等宽 `font-mono` 文本渲染代码且**存量已存为「文件」的代码资产按扩展名回退同样可预览**；新增 `useThumbnailObjectUrl` 模块级 LRU 缓存（240 条）共享给资产卡与回收站行，目录切换/滚动重挂零网络请求、`failed` 负缓存防反复 404。typecheck + build + **134 pytest** 全绿，5173 冒烟（代码预览、存量回退、缓存零新增请求）全通过；最新：**侧栏目录置顶**——目录行悬停操作区新加图钉按钮（`+` 与铅笔之间），点击置顶/解除置顶，置顶目录**始终排在同层最上方**（全局排序 `pinned desc → sort_order → id`，build_tree 保序 → 任意层级生效），名称右侧常驻蓝色图钉徽标（镜像锁定徽标模式、accent 语义色区分琥珀锁定）；迁移 0007 增 `folders.pinned`，`PATCH {pinned}` 走 `update_folder_info` 哨兵，改名/锁定 PATCH 不重置置顶。**需用户完全重启桌面应用使 0007 迁移与置顶排序生效（后端进程必须重启；前端刷新即生效）**；最新：**「其他」分类**——用户反馈 `.py` 全挂在「文档」下：顶栏分类栏加「其他」chip，代码/配置/日志扩展不再并入文档（`guess_asset_type` 归 `other`），**迁移 0008 把存量误标 document 的代码资产自动改回 other**（冻结扩展名快照、幂等），卡片/预览/回收站 other 标签「文件」→「其他」；代码预览经 v11 的 other 扩展名回退通道**原样可用**。typecheck + build + **135 pytest** 全绿；迁移 E2E（0007 旧库→启动自动升 0008 改类）+ 5173 冒烟（chip 过滤/卡片标签/代码预览仍渲染且面板「类型：其他」）全通过。**同样需完全重启桌面应用使 0008 改类生效**；最新：**预览同目录上下切换增强**——沉浸预览切换早已存在（按钮 + ←/→）但只在本页 50 项内回绕：`stepPreview` 重写为分页感知，到末尾自动追加下一页再前进（**切换可遍历整个目录**），按钮间加 `n / total` 位置指示（单资产目录整组隐藏），`↑/↓` 并入切换；typecheck + build + **135 pytest** 全绿，5173 冒烟（50 边界自动追加 51/55、全量遍历、双向回绕、↑/↓、单图隐藏按钮、截图目检）全通过。**纯前端、刷新即生效**（迁移 0006–0008 的重启要求不变）。
 
 ---
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 「其他」分类：代码文件脱离文档类别）
+### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 预览同目录上下切换增强）
 
-> **最新会话交接：** [`.handoff/handoff-20261025-194335.md`](./handoff-20261025-194335.md)——接手者务必先读它，再读本文件。上一票（侧栏目录置顶）交接见 [`.handoff/handoff-20261025-192450.md`](./handoff-20261025-192450.md)。
+> **最新会话交接：** [`.handoff/handoff-20261025-195603.md`](./handoff-20261025-195603.md)——接手者务必先读它，再读本文件。上一票（「其他」分类）交接见 [`.handoff/handoff-20261025-194335.md`](./handoff-20261025-194335.md)。
 
-- **Git 分支 / 状态：** `main`，本地两组原子提交（`7d78aff` backend / `b9c71a4` web）+ 文档提交，未推送，开发期约定统一交付后再推。
-- **本会话已完成工作（前后端）：**
-  1. **需求**：截图圈顶栏分类栏——「这个分类再加一个其他。代码类的不要加到文档类别里」（目录里 .py 全显示「文档 · 7.4 KB」）。
-  2. **分类**：`guess_asset_type` 撤销 v11 的 `CODE_EXTS ⊂ DOC_EXTS`——代码/配置/日志扩展自然归 `other`；「文档」回归纯文档（pdf/txt/md/json/csv/office）；`CODE_EXTS` 常量保留作预览与迁移的参照清单。
-  3. **存量改类**：迁移 `0008_asset_code_to_other`（0007→0008）把 `document` 且扩展名 ∈ 代码清单的存量资产 UPDATE 为 `other`；迁移内**冻结扩展名快照**（数据迁移不依赖应用代码）；`reclassify_code_documents(conn)` 幂等、downgrade 反向。
-  4. **前端**：`AppHeader` 快捷分段栏加「其他」chip（`asset_type=other` 后端早已支持）；`AssetCard`/`AssetPreview`/`TrashView` other 标签「文件」→「其他」；代码预览经 v11 other 扩展名回退通道**零改动仍可用**。
-  5. **验证与冒烟**：typecheck ✅ / build:web ✅ 1.99s / **135 passed** ✅（+1 迁移数据测试含幂等断言）；**迁移 E2E**：脚本造 0007 旧库 + 误标 document 的 `legacy_script.py`/`doc_report.pdf` → 后端启动自动升 0008 → API document 只剩 pdf、other 见 legacy；`POST /imports` 新 `demo.py` → other；5173 冒烟：chips 含「其他」、三卡片标签正确、文档/其他/全部 chip 过滤互斥正确、demo.py 预览等宽代码（marker 命中、无「无法播放」）面板「类型：其他」。**两个关键坑**：①资产列表过滤参数名是 `asset_type` 非 `type`（传错被 FastAPI 静默忽略返回全量，不同过滤值返回相同即识破信号）；②根 `npm run dev` 连 Electron 一起拉起且 `-k first` 互杀（Electron 退即杀 vite），保持 5173 常活必须 `npm run dev:web`。
-  6. **codereview**：0 致命 0 需修（快照与清单时点一致并注明、幂等 + 参数化 SQL、预览通道未动有实机证据）。
+- **Git 分支 / 状态：** `main`，本地 `0269505`（web）+ 文档提交；连同此前积压 `7d78aff`/`b9c71a4` 等，均未推送（开发期约定统一交付后再推）。
+- **本会话已完成工作（纯前端）：**
+  1. **需求**：「预览图片和视频的窗口，加一个同目录下可以进行上下图片切换预览的功能吧」+ 沉浸预览截图。诊断：同目录切换**早已存在**（头部 ← 上一项 / 下一项 → + ←/→ 键 → `stepPreview` 在已加载列表内循环），真实缺口是：只在已加载 50 项内回绕（分页边界遍历不到）、无位置指示（功能不可见）、只绑 ←/→。
+  2. **跨分页遍历**：`stepPreview` 重写为 **async 分页感知**——到达末尾且 `items.length < total` 时 `await refreshCurrentAssets(true, page + 1)` 追加下一页再前进（`Math.min` 钳制防追加失败越界），`steppingPreview` 锁防连按并发翻页；真正到头/到尾才环形回绕。切换从此可遍历整个目录。
+  3. **位置指示**：`AssetPreview` 新 props `position`/`total`，按钮间渲染 `n / total`（`text-xs tabular-nums text-white/60`，截图 `.handoff/preview-nav-indicator.png`）；`(total ?? 0) > 1` 才渲染整组按钮——单资产目录不再显示无意义切换；回收站预览同样传指示（`trashPreviewPosition` 按 id 在 `library.trash` 定位）。
+  4. **↑/↓ 键**：`ArrowUp`→prev、`ArrowDown`→next（预览内切换优先于媒体容器滚动，滚轮仍可滚）。顺手修正 v13 后过时注释（代码扩展名现注册为 other）。
+  5. **验证与冒烟**：typecheck ✅ / build:web ✅ 2.15s / **135 passed** ✅（无后端改动）；**5173 冒烟**（隔离后端 `.pnav-smoke`：55 张 stdlib 手写彩色 PNG 的翻页相册 + 单图相册）：P06=`50/55` 按 → **跨页自动追加** P05=`51/55`；连按至 `55/55`→回绕 `1/55`；↑/↓ 回绕 ✅；单图预览按钮与指示器**均不渲染**（`.tabular-nums` 精确 DOM 验证，正则会被面板日期误报）✅；截图目检 ✅。**冒烟坑**：IAB `getByText('中文')` 定位侧栏节点超时→改 `playwright.evaluate` DOM click；`tab.playwright.keyboard` 不存在→`window.dispatchEvent(new KeyboardEvent(...))` 合成按键；`tab.screenshot()` 无参返回字节对象→`Buffer.from(buf)` 落盘；bootstrap import 必须 `pathToFileURL`（Windows 裸路径报 protocol 'c:'）。
+  6. **codereview**：0 致命 0 需修（并发锁 + 钳制、append 不破坏 `previewIndex`、回收站指示与 `stepTrashPreview` 列表一致、行数 ~658/~539 <800、无原生弹窗）。
 - **待处理问题记录（下个会话继续）：**
-  - **用户动作**：**完全重启桌面应用**使 0008 存量改类生效（连同 0007 置顶、0006 锁定一并验收）。
-  - 候选（未点名不做）：「代码」单独一档 chip；`.log`/`.env` 文本预览按需调整。
+  - **用户动作（积压）**：**完全重启桌面应用**使 0006/0007/0008 迁移一并生效；本票纯前端**刷新即生效**。
+  - 候选（未点名不做）：预览滑动切换动画、触摸板手势。
+  - 全部验收通过后统一 `git push`。
 
 ### 0.0.1 迭代时间线（倒序）
 
-0. **「其他」分类：代码文件脱离文档类别（本票，2026-10-25）**——用户圈顶栏分类栏：「再加一个其他。代码类的不要加到文档类别里」。`guess_asset_type` 撤销 `CODE_EXTS ⊂ DOC_EXTS`（代码/配置/日志归 other，文档回归纯文档）；迁移 0008 幂等把存量误标 document 的代码资产改回 other（迁移内冻结扩展名快照）；`AppHeader` 加「其他」chip，卡片/预览/回收站 other 标签「文件」→「其他」；代码预览经 v11 other 回退通道零改动可用。135 pytest 全绿（+1）；迁移 E2E（0007 旧库启动自动升 0008 改类 + 新导入归 other）+ 5173 冒烟（chip 过滤互斥、标签、预览「类型：其他」）全通过；codereview 0 致命。坑：列表过滤参数名是 `asset_type` 非 `type`（错名被静默忽略）；保活 5173 必须 `npm run dev:web`（根 `dev` 与 Electron 互杀）。**需完全重启桌面应用使存量改类生效。**详见 [`.handoff/handoff-20261025-194335.md`](./handoff-20261025-194335.md)。
+0. **预览同目录上下切换增强：跨分页遍历 + 位置指示 + ↑/↓（本票，2026-10-25）**——用户：「预览图片和视频的窗口，加一个同目录下可以进行上下图片切换预览的功能吧」。诊断切换早已存在（按钮 + ←/→），真实缺口：只在本页 50 项内回绕、无位置指示、缺 ↑/↓。`stepPreview` 重写为 async 分页感知（末尾自动追加下一页再前进、`steppingPreview` 锁、真边界才回绕——切换遍历整个目录）；`AssetPreview` 新 props `position`/`total` 渲染按钮间 `n / total` 指示、`total > 1` 才显示整组按钮（单图目录隐藏）、回收站同样支持；`ArrowUp/Down` 并入切换。135 pytest 全绿；5173 冒烟（50 边界自动追加 51/55、全量遍历、双向回绕、↑/↓、单图隐藏、截图目检）全通过；codereview 0 致命。坑：IAB 中文 `getByText` 不稳改 evaluate DOM click；`playwright.keyboard` 不存在用合成 KeyboardEvent；指示器正则会被面板日期误报须 `.tabular-nums` 精确定位。**纯前端刷新即生效；0006–0008 迁移的重启要求积压。**详见 [`.handoff/handoff-20261025-195603.md`](./handoff-20261025-195603.md)。
+1. **「其他」分类：代码文件脱离文档类别（上一票，2026-10-25）**——用户圈顶栏分类栏：「再加一个其他。代码类的不要加到文档类别里」。`guess_asset_type` 撤销 `CODE_EXTS ⊂ DOC_EXTS`（代码/配置/日志归 other，文档回归纯文档）；迁移 0008 幂等把存量误标 document 的代码资产改回 other（迁移内冻结扩展名快照）；`AppHeader` 加「其他」chip，卡片/预览/回收站 other 标签「文件」→「其他」；代码预览经 v11 other 回退通道零改动可用。135 pytest 全绿（+1）；迁移 E2E（0007 旧库启动自动升 0008 改类 + 新导入归 other）+ 5173 冒烟（chip 过滤互斥、标签、预览「类型：其他」）全通过；codereview 0 致命。坑：列表过滤参数名是 `asset_type` 非 `type`（错名被静默忽略）；保活 5173 必须 `npm run dev:web`（根 `dev` 与 Electron 互杀）。**需完全重启桌面应用使存量改类生效。**详见 [`.handoff/handoff-20261025-194335.md`](./handoff-20261025-194335.md)。
 1. **侧栏目录置顶：图钉切换 + 同层置顶排序（上一票，2026-10-25）**——迁移 0007 增 `folders.pinned`（NOT NULL default false，0006 同款 batch 模式）；`list_folders` 全局 `pinned desc → sort_order → id`，build_tree 保序 → 任意层级置顶在前；`PATCH {pinned}` 走 `update_folder_info` 哨兵，改名/锁定不重置。侧栏目录行悬停加图钉按钮（`+` 与铅笔之间，置顶态 `text-accent`、`active:scale-95`、`@click.stop`），名称右侧常驻蓝色图钉徽标（镜像锁徽标）；`FolderTree → AppSidebar → App.vue` emit 链，保存成功 `loadAll` 即时重排。134 pytest 全绿（+2），5173 冒烟（解除/再置顶即时重排、刷新持久、截图目检）全通过；codereview 0 致命。**用户需完全重启桌面应用使迁移与排序生效。**冒烟揪出长跑 vite 陈旧模块教训：`curl /src/App.vue` 返回 SPA 回退 HTML，不能作模块新鲜性判据，须 vnode 探针 + 重启 vite。详见 [`.handoff/handoff-20261025-192450.md`](./handoff-20261025-192450.md)。
 1. **代码文件文本预览 + 缩略图前端 object URL LRU 缓存（上一会话，2026-10-25）**——后端 `CODE_EXTS`（47 种源码/配置/日志扩展）并入 `DOC_EXTS`，新导入/外扫的 `.py`/`.ts`/`.yml` 等注册为文档；`AssetPreview.vue` 增 `CODE_PREVIEW_EXTS`、`docKind` 对 document 与**存量 other 按扩展名回退 text**（用户现有 `.py` 无需重导入即可预览）、等宽 `font-mono [tab-size:4]` code 渲染分支。新组合式 `useThumbnailObjectUrl`：模块级 LRU（240 条）共享 object URL 给资产卡与回收站行，重挂复用零网络请求、卸载不 revoke、`failed` 负缓存；AssetCard/TrashRowThumb 加载逻辑收敛至此。132 pytest 全绿（+1），5173 冒烟：代码预览 marker、存量 other 回退、首屏 4 次 `/thumbnail` 且目录切换往返零新增请求、reload 基线复现；codereview 0 致命。前端刷新即生效，新分类需重启后端进程对新导入生效。详见 [`.handoff/handoff-20261025-184747.md`](./handoff-20261025-184747.md)。
 1. **侧栏密度紧凑化 + 可拖拽调节宽度（上一会话，2026-10-25）**——目录/项目/外部/标签/回收站行统一 24px、缩进 13px/层、截断名称 `title` 悬停；修复无效类 `h-7.5/py-0.2`；新 `useSidebarResize` 组合式：把手指针 1:1 拖拽 `--sidebar-w`（每帧零重渲染）、钳制 [220,480]、键盘 ←/→/Home、双击复位、localStorage 持久化；`role=separator` 把手带悬停/聚焦高亮与 aria。冒烟揪出并修复 STORAGE_KEY 损坏字面量（U+2026）。typecheck/build/131 pytest 全绿，5173 冒烟（行高/缩进/拖拽/钳制/持久化/截图目检）全通过；codereview 0 致命。纯前端、刷新即生效。详见 [`.handoff/handoff-20261025-171829.md`](./handoff-20261025-171829.md)。
@@ -530,7 +532,17 @@ npm run package:win
 
 ## 12. 迭代记录
 
-### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 「其他」分类：代码文件脱离文档类别）
+### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 预览同目录上下切换增强：跨分页遍历 + 位置指示 + ↑/↓）
+
+- **Git 分支 / 提交：** `main` 本地 `0269505`（web）+ 文档提交，连同积压提交未推送。
+- **开发目标：** 用户：「预览图片和视频的窗口，加一个同目录下可以进行上下图片切换预览的功能吧」。诊断：切换早已存在（头部按钮 + ←/→），缺口是只在本页 50 项内回绕、无位置指示、缺 ↑/↓。
+- **实际交付：** 见 [`.handoff/handoff-20261025-195603.md`](./handoff-20261025-195603.md)。`App.vue` `stepPreview` async 分页感知重写（末尾自动追加下一页再前进、`steppingPreview` 锁、真边界回绕）+ `previewPosition/previewTotal/trashPreviewPosition/trashPreviewTotal` computed 传入两处预览；`AssetPreview.vue` 新 props `position`/`total`、按钮间 `n / total` 指示、`total > 1` 才渲染按钮组（单图目录隐藏）、`ArrowUp/Down` 并入 prev/next、修正 v13 过时注释。
+- **修改文件：** `apps/web/src/App.vue`、`apps/web/src/components/AssetPreview.vue`。
+- **运行验证：** typecheck ✅ / build:web ✅ 2.15s / pytest ✅ **135 passed**（纯前端）/ 5173 冒烟（隔离后端 `.pnav-smoke` 种子 55 张手写 PNG + 单图目录）：P06=`50/55` → 按 → 跨页自动追加 P05=`51/55`、全量遍历 `55/55`、双向回绕、↑/↓、单图按钮与指示器不渲染（`.tabular-nums` 精确验证）、截图 `.handoff/preview-nav-indicator.png` 目检 ✅；测毕杀后端删种子；vite 5173=200。
+- **未完成 / 已知问题：** codereview 0 致命 0 需修。冒烟坑：IAB 中文 `getByText` 不稳（evaluate DOM click 替代）、`playwright.keyboard` 不存在（合成 KeyboardEvent）、`tab.screenshot()` 无参（`Buffer.from` 落盘）、指示器正则被面板日期误报（用 class 精确选择）。**纯前端刷新即生效；用户仍积压「完全重启桌面应用」使 0006/0007/0008 生效。**
+- **下一步第一任务（1–3 个）：** ①**用户完全重启桌面应用**后实机验收预览切换 + 其他分类 + 置顶 + 锁定；②候选（未点名不做）：预览滑动切换动画/触摸板手势；③全部通过后统一 `git push`。
+
+### 上一次迭代（更新日期 2026-10-25，ZCode 会话 · 「其他」分类：代码文件脱离文档类别）
 
 - **Git 分支 / 提交：** `main` 本地 `7d78aff` backend / `b9c71a4` web + 文档提交，未推送。
 - **开发目标：** 用户圈顶栏分类栏（全部/图片/视频/音频/文档）：「这个分类再加一个其他。代码类的不要加到文档类别里」——`.py` 等代码文件不再归文档，顶栏加「其他」chip。
