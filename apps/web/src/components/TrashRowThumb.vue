@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from "vue";
-
-import { api } from "../api/client";
+import { useThumbnailObjectUrl } from "../composables/useThumbnailCache";
 import AssetIcon from "./AssetIcon.vue";
 
 const props = defineProps<{
@@ -10,42 +8,11 @@ const props = defineProps<{
   thumbnailStatus?: string | null;
 }>();
 
-const objectUrl = ref<string | null>(null);
-let loadToken = 0;
-
-function clear(): void {
-  if (objectUrl.value) {
-    URL.revokeObjectURL(objectUrl.value);
-    objectUrl.value = null;
-  }
-}
-
-async function loadThumbnail(): Promise<void> {
-  clear();
-  const type = props.assetType;
-  const fetchable =
-    type === "image" || type === "video" || (type === "audio" && props.thumbnailStatus === "ready");
-  if (!fetchable) return;
-  const token = ++loadToken;
-  try {
-    const url = await api.fetchThumbnailObjectUrl(props.assetId);
-    if (token !== loadToken) {
-      URL.revokeObjectURL(url); // a newer load superseded this one
-      return;
-    }
-    objectUrl.value = url;
-  } catch {
-    // generation pending or failed: keep the type icon fallback
-  }
-}
-
-watch(
-  () => [props.assetId, props.thumbnailStatus],
-  () => void loadThumbnail(),
-  { immediate: true }
+const objectUrl = useThumbnailObjectUrl(
+  () => props.assetId,
+  () => props.assetType,
+  () => props.thumbnailStatus
 );
-
-onUnmounted(clear);
 </script>
 
 <template>

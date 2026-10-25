@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed } from "vue";
 
-import { api } from "../api/client";
+import { useThumbnailObjectUrl } from "../composables/useThumbnailCache";
 import AssetIcon from "./AssetIcon.vue";
 import type { AssetOut } from "../api/types";
 
@@ -43,8 +43,11 @@ function onCheckboxClick(e: MouseEvent): void {
 
 const canUsePrompt = computed(() => props.asset.asset_type === "image" || props.asset.asset_type === "video");
 
-const objectUrl = ref<string | null>(null);
-let loadToken = 0;
+const objectUrl = useThumbnailObjectUrl(
+  () => props.asset.id,
+  () => props.asset.asset_type,
+  () => props.asset.thumbnail_status
+);
 
 const typeLabel = computed(() => {
   switch (props.asset.asset_type) {
@@ -75,40 +78,6 @@ const durationLabel = computed(() => {
   const ss = String(seconds).padStart(2, "0");
   return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
 });
-
-function clear(): void {
-  if (objectUrl.value) {
-    URL.revokeObjectURL(objectUrl.value);
-    objectUrl.value = null;
-  }
-}
-
-async function loadThumbnail(): Promise<void> {
-  clear();
-  const type = props.asset.asset_type;
-  const fetchable =
-    type === "image" || type === "video" || (type === "audio" && props.asset.thumbnail_status === "ready");
-  if (!fetchable) return;
-  const token = ++loadToken;
-  try {
-    const url = await api.fetchThumbnailObjectUrl(props.asset.id);
-    if (token !== loadToken) {
-      URL.revokeObjectURL(url); // a newer load superseded this one
-      return;
-    }
-    objectUrl.value = url;
-  } catch {
-    // generation pending or failed: keep the type icon fallback
-  }
-}
-
-watch(
-  () => [props.asset.id, props.asset.thumbnail_status],
-  () => void loadThumbnail(),
-  { immediate: true }
-);
-
-onUnmounted(clear);
 </script>
 
 <template>

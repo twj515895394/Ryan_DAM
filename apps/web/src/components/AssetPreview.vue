@@ -45,15 +45,30 @@ const fitWindow = ref(true);
 let loadToken = 0;
 
 const TEXT_PREVIEW_EXTS = new Set(["txt", "md", "json", "csv"]);
+// 与后端 import_service.CODE_EXTS 保持一致；代码/配置/日志按等宽文本预览。
+const CODE_PREVIEW_EXTS = new Set([
+  "py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "vue", "svelte",
+  "html", "htm", "css", "scss", "less", "yml", "yaml", "xml",
+  "toml", "ini", "cfg", "conf", "properties", "sh", "bash", "zsh",
+  "bat", "cmd", "ps1", "sql", "java", "c", "h", "cpp", "hpp", "cc",
+  "cs", "go", "rs", "rb", "php", "swift", "kt", "lua", "pl", "r",
+  "gradle", "proto", "graphql", "log",
+]);
 const OFFICE_EXTS = new Set(["doc", "docx", "xls", "xlsx", "ppt", "pptx"]);
 
 const docKind = computed<"none" | "pdf" | "text" | "office" | "other">(() => {
   const ext = (props.asset.extension ?? "").toLowerCase();
-  if (props.asset.asset_type !== "document") return "none";
-  if (ext === "pdf") return "pdf";
-  if (TEXT_PREVIEW_EXTS.has(ext)) return "text";
-  if (OFFICE_EXTS.has(ext)) return "office";
-  return "other";
+  if (props.asset.asset_type === "document") {
+    if (ext === "pdf") return "pdf";
+    if (TEXT_PREVIEW_EXTS.has(ext) || CODE_PREVIEW_EXTS.has(ext)) return "text";
+    if (OFFICE_EXTS.has(ext)) return "office";
+    return "other";
+  }
+  // 代码扩展并入文档分类之前入库的存量资产仍是 "other"，同样按文本预览。
+  if (props.asset.asset_type === "other" && (TEXT_PREVIEW_EXTS.has(ext) || CODE_PREVIEW_EXTS.has(ext))) {
+    return "text";
+  }
+  return "none";
 });
 
 const textPreview = computed(() => {
@@ -69,6 +84,7 @@ const textPreview = computed(() => {
   }
   if (ext === "csv") return { kind: "csv" as const, body: raw };
   if (ext === "md") return { kind: "md" as const, body: raw };
+  if (CODE_PREVIEW_EXTS.has(ext)) return { kind: "code" as const, body: raw };
   return { kind: "plain" as const, body: raw };
 });
 
@@ -333,6 +349,7 @@ onUnmounted(() => {
               </tbody>
             </table>
             <pre v-else-if="textPreview.kind === 'json'" class="whitespace-pre-wrap break-all font-mono text-xs leading-6">{{ textPreview.body }}</pre>
+            <pre v-else-if="textPreview.kind === 'code'" class="whitespace-pre-wrap break-all font-mono text-xs leading-6 [tab-size:4]">{{ textPreview.body }}</pre>
             <pre v-else-if="textPreview.kind === 'plain'" class="whitespace-pre-wrap break-words text-sm leading-7">{{ textPreview.body }}</pre>
             <!-- eslint-disable-next-line vue/no-v-html -->
             <div v-else class="markdown-preview text-sm leading-7" v-html="renderMarkdown(textPreview.body)" />
