@@ -71,9 +71,16 @@ function toggleTagSelection(tagId: number): void {
   <aside class="flex w-[var(--sidebar-w)] shrink-0 flex-col border-r border-line bg-canvas/40 backdrop-blur-sm">
     <div class="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
       <div class="flex items-center gap-2">
-        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white shadow-xs">
-          <SidebarIcon name="grid" class="h-4 w-4" />
-        </div>
+        <svg class="h-8 w-8 shrink-0" viewBox="0 0 64 64" role="img" aria-label="Ryan DAM 标识">
+          <defs>
+            <linearGradient id="rd-brand-tile" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#3A3A42" />
+              <stop offset="1" stop-color="#18181E" />
+            </linearGradient>
+          </defs>
+          <rect width="64" height="64" rx="14" fill="url(#rd-brand-tile)" />
+          <text x="32" y="41.5" text-anchor="middle" fill="#ffffff" font-family="'Segoe UI', system-ui, -apple-system, Arial, sans-serif" font-size="27" font-weight="700" font-style="italic">RD</text>
+        </svg>
         <div>
           <h1 class="text-sm font-semibold tracking-tight text-ink">Ryan DAM</h1>
           <p class="text-[10.5px] leading-3 text-muted">个人 AI 资产管理器</p>

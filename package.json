@@ -42,7 +42,7 @@
     "extraResources": [
       { "from": "backend/dist", "to": "backend", "filter": ["ryan-dam-api.exe"] }
     ],
-    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
+    "win": { "icon": "build/icon.ico", "target": [{ "target": "nsis", "arch": ["x64"] }] },
     "nsis": {
       "oneClick": false,
       "perMachine": false,

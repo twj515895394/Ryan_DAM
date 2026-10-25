@@ -5,6 +5,9 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 app.setName("Ryan_DAM");
+// Must match electron-builder build.appId so Windows attributes the taskbar button
+// to our shortcut (RD icon) instead of the default Electron host icon.
+app.setAppUserModelId("com.ryandam.desktop");
 // RYAN_DAM_USER_DATA lets dev/test runs isolate all local data (DB, logs, window state).
 const localDataRoot = process.env.RYAN_DAM_USER_DATA || process.env.LOCALAPPDATA || app.getPath("appData");
 app.setPath("userData", path.join(localDataRoot, "Ryan_DAM"));
@@ -15,6 +18,8 @@ const logFile = path.join(logDirectory, "desktop.log");
 const windowStateFile = path.join(userDataPath, "window-state.json");
 const sampleDirectory = path.join(userDataPath, "stage0-poc");
 const samplePath = path.join(sampleDirectory, "sample-upload.txt");
+const appIconPath = path.join(__dirname, "assets", "icon.png");
+const dragIconPath = path.join(__dirname, "assets", "drag-icon.png");
 
 let mainWindow = null;
 let backendProcess = null;
@@ -202,6 +207,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     x: state.x, y: state.y, width: state.width, height: state.height,
     minWidth: 960, minHeight: 640, show: false, backgroundColor: "#F5F5F7", title: "Ryan_DAM",
+    icon: appIconPath,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true
@@ -268,8 +274,7 @@ ipcMain.on("drag:start-sample", (event) => {
     log("ERROR", "Drag requested before a sample file was created.");
     return;
   }
-  const iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect x="8" y="4" width="42" height="54" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="3"/><path d="M18 22h22M18 31h22M18 40h15" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/></svg>';
-  const icon = nativeImage.createFromDataURL("data:image/svg+xml;charset=utf-8," + encodeURIComponent(iconSvg));
+  const icon = nativeImage.createFromPath(dragIconPath);
   event.sender.startDrag({ file: dragSamplePath, icon });
 });
 
