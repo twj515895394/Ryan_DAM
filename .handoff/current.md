@@ -3,34 +3,35 @@
 > **必读：** 这是 Ryan_DAM 项目根目录 `.handoff/current.md` 的详细交接文档。接手者应先读本文件，再读 `docs/` 下的需求与设计；不要依赖聊天记录来判断实际代码状态。
 >
 > **最近核实时间：** 2026-10-25（ZCode 会话）  
-> **交接版本：** Handoff v10（侧栏密度紧凑化：24px 行高 + 13px/层缩进 + 名称 tooltip + 可拖拽调节宽度把手）  
+> **交接版本：** Handoff v11（代码文件文本预览 + 缩略图前端 object URL LRU 缓存；承 v10 侧栏紧凑化/可拖拽宽度、v9 文件夹编辑锁定弹窗）  
 > **目标仓库：** https://github.com/twj515895394/Ryan_DAM  
 > **主分支：** `main`  
-> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录与项目级联删除全面完成（`cascade_delete_folder_ids` 共享算法 + Apple HIG 影响说明确认弹窗）；**用户报告的删除项目 409 已定位为陈旧后端进程**（Electron 派生的 Python 服务无热重载，旧进程静默忽略 `?cascade=true`），代码无缺陷，**用户完全重启桌面应用后即可正常级联删除**，前端已加固为遇 404 如实提示重启；md 文档预览支持 GFM 表格；导入任务面板 5 秒自动关闭；卡片提示词入口双修复；**侧栏铅笔升级为「编辑文件夹」弹窗（名称 + 描述 + Apple HIG 琥珀锁定开关）**——迁移 0006 增 `folders.locked/description`，锁定目录拦截直接删除与目录/项目级联（409 `folder_locked` 点名锁定目录），锁只拦删除、不向下继承；typecheck + build + **131 pytest** 全绿，5173 浏览器冒烟锁定/拦截/解锁/级联全链路通过。**需完全重启桌面应用使 0006 迁移与守卫生效（前端 vite 热更新即可，后端进程必须重启）**；最新：**侧栏紧凑化 + 可拖拽宽度**（目录行 24px、缩进 13px/层、截断悬停全名；把手 1:1 跟手拖拽钳制 [220,480]、键盘/双击调节、localStorage 持久化；顺带修复无效类 `h-7.5/py-0.2` 与冒烟揪出的 STORAGE_KEY 损坏字面量），纯前端、刷新即生效。
+> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录与项目级联删除全面完成（`cascade_delete_folder_ids` 共享算法 + Apple HIG 影响说明确认弹窗）；**用户报告的删除项目 409 已定位为陈旧后端进程**（Electron 派生的 Python 服务无热重载，旧进程静默忽略 `?cascade=true`），代码无缺陷，**用户完全重启桌面应用后即可正常级联删除**，前端已加固为遇 404 如实提示重启；md 文档预览支持 GFM 表格；导入任务面板 5 秒自动关闭；卡片提示词入口双修复；**侧栏铅笔升级为「编辑文件夹」弹窗（名称 + 描述 + Apple HIG 琥珀锁定开关）**——迁移 0006 增 `folders.locked/description`，锁定目录拦截直接删除与目录/项目级联（409 `folder_locked` 点名锁定目录），锁只拦删除、不向下继承；typecheck + build + **131 pytest** 全绿，5173 浏览器冒烟锁定/拦截/解锁/级联全链路通过。**需完全重启桌面应用使 0006 迁移与守卫生效（前端 vite 热更新即可，后端进程必须重启）**；最新：**侧栏紧凑化 + 可拖拽宽度**（目录行 24px、缩进 13px/层、截断悬停全名；把手 1:1 跟手拖拽钳制 [220,480]、键盘/双击调节、localStorage 持久化；顺带修复无效类 `h-7.5/py-0.2` 与冒烟揪出的 STORAGE_KEY 损坏字面量），纯前端、刷新即生效；最新：**代码文件文本预览 + 缩略图缓存**——后端 `CODE_EXTS`（47 种源码/配置/日志扩展）并入文档分类（新导入/外扫的 `.py`/`.ts`/`.yml` 等注册为文档），前端沉浸预览按等宽 `font-mono` 文本渲染代码且**存量已存为「文件」的代码资产按扩展名回退同样可预览**；新增 `useThumbnailObjectUrl` 模块级 LRU 缓存（240 条）共享给资产卡与回收站行，目录切换/滚动重挂零网络请求、`failed` 负缓存防反复 404。typecheck + build + **132 pytest** 全绿，5173 冒烟（代码预览、存量回退、缓存零新增请求）全通过。前端刷新即生效；新分类需重启桌面应用后端进程后对新导入生效。
 
 ---
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 侧栏密度紧凑化 + 可拖拽调节宽度）
+### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 代码文件文本预览 + 缩略图前端 object URL LRU 缓存）
 
-> **最新会话交接：** [`.handoff/handoff-20261025-171829.md`](./handoff-20261025-171829.md)（设计决策、交付明细、验证记录、冒烟揪出的 STORAGE_KEY 损坏缺陷与下一会话任务）——接手者务必先读它，再读本文件。上一会话（文件夹编辑弹窗：锁定 + 描述）交接见 [`.handoff/handoff-20261025-165908.md`](./handoff-20261025-165908.md)。
+> **最新会话交接：** [`.handoff/handoff-20261025-184747.md`](./handoff-20261025-184747.md)（现状诊断、设计决策、交付明细、验证记录、codereview 结论与下一会话任务）——接手者务必先读它，再读本文件。上一会话（侧栏紧凑化 + 可拖拽宽度）交接见 [`.handoff/handoff-20261025-171829.md`](./handoff-20261025-171829.md)。
 
-- **Git 分支 / 状态：** `main`，本地单组原子提交（本会话 `f6c251c` web），未推送，开发期约定统一交付后再推。
-- **本会话已完成工作（纯前端，后端 0 改动）：**
-  1. **需求**：侧栏目录上下间距与逐层缩进过大、层级一深名称即截断；要求左侧区域可拖拽调节宽度。附加 `$apple-design` `$design-taste-frontend`。
-  2. **密度紧凑化**：目录/项目/外部/标签/回收站行高统一 24px（Finder 式），行间 `space-y-px`；缩进 20px/层 → **13px/层**（`ml-2 border-l pl-1`）；目录/项目/标签名 `truncate` + `:title` 悬停全名；顺带修复**无效 Tailwind v3 类 `h-7.5`（3 处）与 `py-0.2`**（默认刻度不存在，此前静默无样式）。
-  3. **可拖拽宽度**：新组合式 `useSidebarResize.ts`（94 行）——布局根节点 CSS 变量 `--sidebar-w`（默认 256、钳制 [220,480]），拖拽期 `setProperty` 直改变量每帧零重渲染、指针 1:1 跟手，松手 commit `localStorage['ryan-dam-sidebar-width']`；键盘 ←/→ ±16px、Home/双击复位；`aside` 改 `w-[var(--sidebar-w)]`；App.vue 插入 `role="separator"` 把手（8px 热区、悬停/聚焦/按下蓝色高亮条、aria + tabindex）。
-  4. **验证与冒烟**：typecheck ✅ / build:web ✅ 1.93s / **131 passed** ✅；5173 冒烟（隔离后端 62841 + localStorage 桥 + 六层嵌套种子目录，真实数据 0 接触）——行高实测 24px、逐层偏移差 13px、cua 真实拖拽跟手/钳制 480 与 220/双击复位、刷新持久化 320→320、悬停高亮 `rgba(37,99,235,0.35)`、截图目检通过；测毕杀进程、删 `.sidebar-smoke`、清桥接与标签页。
-  5. **冒烟揪出真实缺陷（已修）**：`useSidebarResize.ts` 的 `STORAGE_KEY` 字面量曾被写成含 U+2026 的 `ryan-…-width`（首建文件时引入），持久化写错键、刷新丢宽度；经 localStorage 键码点转储定位并复测通过。
-  6. **codereview**：0 致命、0 需修（Vue 样式 patch 比对前 vnode 不拉回拖拽宽度、group-active/focus 成立、App.vue 761 行 <800）。
+- **Git 分支 / 状态：** `main`，本地两组原子提交（本会话 `d49b851` backend + `1d1c3cf` web），未推送，开发期约定统一交付后再推。
+- **本会话已完成工作（前后端）：**
+  1. **需求**：①代码类文件（截图 `qc_case.py`）此前落到「浏览器无法直接播放」兜底，要求像文本一样预览；②询问列表图片/视频缩略图是否有缓存机制以加快显示。
+  2. **诊断**：后端缩略图早有盘缓存（`thumbnail_service` 磁盘 JPEG + size/mtime 指纹 sidecar + FileResponse）；缺口在前端——`AssetCard`/`TrashRowThumb` 每次挂载都重新 fetch blob、卸载 revoke，重挂即重复请求。
+  3. **代码预览**：后端 `import_service.py` 新增 `CODE_EXTS`（47 种源码/配置/日志扩展）并入 `DOC_EXTS` → 新导入/外扫注册为文档；前端 `AssetPreview.vue` 增 `CODE_PREVIEW_EXTS` + `docKind` 对 `document`/存量 `other` 双分支回退 text + `textPreview.code` kind + 等宽 `font-mono [tab-size:4]` 模板分支（存量已存为「文件」的 `.py` 无需重导入即生效）。
+  4. **缩略图缓存**：新组合式 `useThumbnailObjectUrl`（`useThumbnailCache.ts`，114 行）——模块级 `Map` LRU（上限 240）长期持有 object URL，重挂复用、卸载绝不 revoke、逐出才 revoke；`thumbnail_status=failed` 负缓存、离开 failed 自动清除；AssetCard/TrashRowThumb 删除各自加载代码收敛至此（AssetCard −45 行、TrashRowThumb 43→23 行）。
+  5. **验证与冒烟**：typecheck ✅ / build:web ✅ 5.70s / **132 passed** ✅（+1 `guess_asset_type` 代码扩展用例）；5173 冒烟（隔离后端 59073 + localStorage 桥 + 种子 3 PNG/1 MP4/`qc_case.py`(document)/`legacy_py.py`(SQL 改 other 模拟存量)，真实数据 0 接触）——qc_case.py 等宽代码预览且「无法播放」消失（截图目检）、legacy_py.py 存量回退预览、首屏 4 次 `/thumbnail`、目录切换往返 6 卡重挂 4 缩略图重渲染**网络请求仍为 4（零新增）**、reload 清缓存后基线复现；测毕杀进程、删 `.code-preview-smoke`、清桥接与标签页。
+  6. **codereview**：0 致命、0 需修（`wantText` 自动覆盖 code kind、other 分支仅文本/代码扩展可预览、`onScopeDispose` 不误伤缓存、LRU 逐出不打屏、前后端扩展名清单逐项一致、误删的 `</script>` 由 typecheck 拦截并修复）。
 - **待处理问题记录（下个会话继续）：**
-  - **用户动作**：实机验收侧栏紧凑观感与拖拽手感（**纯前端，Electron 无需重启，刷新即生效**）；连同前会话：完全重启桌面应用后验收锁定/级联链路、票 21/22。
-  - 可选打磨（未开票）：拖拽中宽度数值气泡、侧栏折叠为图标条——需用户点名。
+  - **用户动作**：重启桌面应用后端进程使新分类对**新导入**生效（前端刷新即生效；现有 `qc_case.py` 即使不重启也已可按 other 回退预览）；连同前会话：完全重启后验收锁定/级联链路、票 21/22、侧栏拖拽手感。
+  - 候选增强（未点名不做）：代码预览语法高亮（引依赖，违简约）；代码文件 typeLabel 显示「代码」；缩略图换源即时失效（URL 带版本参数需后端配合）。
 
 ### 0.0.1 迭代时间线（倒序）
 
-0. **侧栏密度紧凑化 + 可拖拽调节宽度（本会话，2026-10-25）**——目录/项目/外部/标签/回收站行统一 24px、缩进 13px/层、截断名称 `title` 悬停；修复无效类 `h-7.5/py-0.2`；新 `useSidebarResize` 组合式：把手指针 1:1 拖拽 `--sidebar-w`（每帧零重渲染）、钳制 [220,480]、键盘 ←/→/Home、双击复位、localStorage 持久化；`role=separator` 把手带悬停/聚焦高亮与 aria。冒烟揪出并修复 STORAGE_KEY 损坏字面量（U+2026）。typecheck/build/131 pytest 全绿，5173 冒烟（行高/缩进/拖拽/钳制/持久化/截图目检）全通过；codereview 0 致命。纯前端、刷新即生效。详见 [`.handoff/handoff-20261025-171829.md`](./handoff-20261025-171829.md)。
+0. **代码文件文本预览 + 缩略图前端 object URL LRU 缓存（本会话，2026-10-25）**——后端 `CODE_EXTS`（47 种源码/配置/日志扩展）并入 `DOC_EXTS`，新导入/外扫的 `.py`/`.ts`/`.yml` 等注册为文档；`AssetPreview.vue` 增 `CODE_PREVIEW_EXTS`、`docKind` 对 document 与**存量 other 按扩展名回退 text**（用户现有 `.py` 无需重导入即可预览）、等宽 `font-mono [tab-size:4]` code 渲染分支。新组合式 `useThumbnailObjectUrl`：模块级 LRU（240 条）共享 object URL 给资产卡与回收站行，重挂复用零网络请求、卸载不 revoke、`failed` 负缓存；AssetCard/TrashRowThumb 加载逻辑收敛至此。132 pytest 全绿（+1），5173 冒烟：代码预览 marker、存量 other 回退、首屏 4 次 `/thumbnail` 且目录切换往返零新增请求、reload 基线复现；codereview 0 致命。前端刷新即生效，新分类需重启后端进程对新导入生效。详见 [`.handoff/handoff-20261025-184747.md`](./handoff-20261025-184747.md)。
+1. **侧栏密度紧凑化 + 可拖拽调节宽度（上一会话，2026-10-25）**——目录/项目/外部/标签/回收站行统一 24px、缩进 13px/层、截断名称 `title` 悬停；修复无效类 `h-7.5/py-0.2`；新 `useSidebarResize` 组合式：把手指针 1:1 拖拽 `--sidebar-w`（每帧零重渲染）、钳制 [220,480]、键盘 ←/→/Home、双击复位、localStorage 持久化；`role=separator` 把手带悬停/聚焦高亮与 aria。冒烟揪出并修复 STORAGE_KEY 损坏字面量（U+2026）。typecheck/build/131 pytest 全绿，5173 冒烟（行高/缩进/拖拽/钳制/持久化/截图目检）全通过；codereview 0 致命。纯前端、刷新即生效。详见 [`.handoff/handoff-20261025-171829.md`](./handoff-20261025-171829.md)。
 1. **文件夹编辑弹窗：锁定开关 + 描述（上一会话，2026-10-25）**——侧栏铅笔升级为「编辑文件夹」弹窗（名称 + 描述 + Apple HIG 琥珀锁定开关，一次组合 PATCH）；迁移 0006 增 `folders.locked/description`；锁定目录拦截直接删除与目录/项目级联（409 `folder_locked` 点名锁定目录），锁只拦删除、不向下继承；树行琥珀锁徽标 + × 禁用 tooltip + `useFolderDelete` 前置兜底。131 pytest 全绿（+6），5173 冒烟锁定/拦截/解锁/级联/描述持久化全链路通过；codereview 0 致命。**用户需完全重启桌面应用使迁移与守卫生效。**详见 [`.handoff/handoff-20261025-165908.md`](./handoff-20261025-165908.md)。
 1. **卡片提示词入口双修复（上一会话，2026-10-25）**——①无提示词资产点卡片「+ 提示词」弹出空查看框而非添加框：`PromptModal` 的 `open` watch 缺 `immediate`，卡片入口挂载即 `open=true` 无变化可监听，`initPrompt` 永不执行；加 `{ immediate: true }` 修复，标题按意图显示添加/编辑/查看。②实心蓝徽标突兀：重设计为深色毛玻璃芯片（`bg-black/55` + `backdrop-blur-sm`，与时长角标同材质），有提示词图标常驻、无提示词悬停显现，`focus-visible` 键盘可达，失效徽标同排不重叠。125 pytest 全绿，5173 四场景冒烟通过；codereview 对比度与焦点 2 建议已落实。详见 [`.handoff/handoff-20261025-163052.md`](./handoff-20261025-163052.md)。
 1. **项目删除 409 诊断 + 预览/导入优化（2026-10-25 上一会话）**——diagnosing-bugs 流程确诊 409 为陈旧后端进程（时间线取证 + worktree RED/GREEN diff loop），前端加固为 404 如实重启提示；md 预览支持 GFM 表格（对齐 + 横向滚动卡片）；导入任务面板完成 5 秒自动关闭。125 pytest 全绿，5173 三项冒烟通过。**用户需完全重启桌面应用使级联项目删除生效。**详见 [`.handoff/handoff-20261025-145000.md`](./handoff-20261025-145000.md)。
@@ -527,7 +528,16 @@ npm run package:win
 
 ## 12. 迭代记录
 
-### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 侧栏密度紧凑化 + 可拖拽调节宽度）
+### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 代码文件文本预览 + 缩略图前端 object URL LRU 缓存）
+
+- **Git 分支 / 提交：** `main` 本地两组原子提交（`d49b851` backend / `1d1c3cf` web），未推送。
+- **开发目标：** ①代码类文件（用户截图 `qc_case.py`）此前落到「浏览器无法直接播放」兜底，要像文本一样预览；②回答并补齐「列表图片/视频缩略图缓存」——后端盘缓存（JPEG + size/mtime 指纹 sidecar）早已存在，缺口在前端每次挂载重新 fetch blob、无跨挂载缓存。
+- **实际交付：** 见 [`.handoff/handoff-20261025-184747.md`](./handoff-20261025-184747.md) §3–4。后端：`CODE_EXTS`（47 源码/配置/日志扩展）并入 `DOC_EXTS`，`guess_asset_type` 零改动生效（import/外扫共用），测试 +1。前端：`AssetPreview.vue` `CODE_PREVIEW_EXTS` + `docKind` document/存量 other 双分支回退 text + 等宽 `font-mono [tab-size:4]` code 分支；新 `useThumbnailObjectUrl`（`useThumbnailCache.ts` 114 行）模块级 LRU 240 条共享 object URL + `failed` 负缓存，AssetCard（−45 行）/TrashRowThumb（43→23 行）收敛接入。
+- **修改文件：** `backend/app/services/import_service.py`、`backend/tests/test_imports_api.py`；`apps/web/src/composables/useThumbnailCache.ts`（新）、`apps/web/src/components/{AssetPreview,AssetCard,TrashRowThumb}.vue`。
+- **运行验证：** `npm run typecheck` ✅ / `npm run build:web` ✅ 5.70s / pytest ✅ **132 passed**（+1）/ 5173 冒烟（隔离后端 59073，种子 3 PNG + 1 MP4 + qc_case.py(document) + legacy_py.py(SQL 改 other 模拟存量)）✅ 代码等宽预览 marker 命中且「无法播放」消失、存量 other 回退预览、首屏 4 次 `/thumbnail`、目录切换往返 6 卡重挂网络请求仍 4（零新增）、reload 基线复现、截图目检；测毕杀进程、删 `.code-preview-smoke`、清桥接关标签页。
+- **未完成 / 已知问题：** codereview 0 致命 0 需修；已知取舍：源文件替换且后端重生成缩略图后缓存显示旧图至 LRU 逐出（512px 列表场景可接受）；后端未加显式 Cache-Control（避免陈旧，前端内存缓存已消除重复请求）。**用户需重启桌面应用后端进程使新分类对新导入生效；现有 `.py` 资产前端刷新即已可预览。**
+
+### 上一次迭代（更新日期 2026-10-25，ZCode 会话 · 侧栏密度紧凑化 + 可拖拽调节宽度）
 
 - **Git 分支 / 提交：** `main` 本地单组原子提交（`f6c251c` web + docs），未推送。
 - **开发目标：** 侧栏目录上下间距与逐层缩进过大、深层名称截断；左侧区域需支持拖拽调节宽度。附 `$apple-design` `$design-taste-frontend`（dense 产品 UI 仅采纳密度/工艺部分）。
@@ -536,7 +546,7 @@ npm run package:win
 - **运行验证：** `npm run typecheck` ✅ / `npm run build:web` ✅ 1.93s / pytest ✅ 131 passed（回归）/ 5173 冒烟（隔离后端 62841，六层嵌套种子目录）✅ 行高 24px 实测、逐层 13px、真实指针拖拽跟手 + 上下钳制 + 双击复位 + 刷新持久化、悬停高亮实测、截图目检；测毕杀进程、删 `.sidebar-smoke`、清桥接关标签页。vite 5173 会话后保持运行。
 - **未完成 / 已知问题：** codereview 0 致命 0 需修；冒烟中揪出并修复 `STORAGE_KEY` 损坏字面量（U+2026）；纯前端改动，Electron 无需重启，刷新即生效。
 
-### 上一次迭代（更新日期 2026-10-25，ZCode 会话 · 文件夹「编辑文件夹」弹窗：锁定开关 + 描述，级联删除锁定拦截）
+### 上上次迭代（更新日期 2026-10-25，ZCode 会话 · 文件夹「编辑文件夹」弹窗：锁定开关 + 描述，级联删除锁定拦截）
 
 - **Git 分支 / 提交：** `main` 本地三组原子提交（`f611783` backend / `c234b43` web / 文档），全部未推送。
 - **开发目标：** 侧栏文件夹铅笔从「重命名文件夹」升级为「编辑文件夹」弹窗，可编辑目录信息；第一功能 = 锁定开关：锁定后该目录不能被删除（含父级/项目级联），但子目录与资产仍可单独删除。grill-me 定案：级联遇锁定整次拦截 409、锁只拦删除（重命名/移动允许）、字段 = 名称 + 锁定 + 描述。
