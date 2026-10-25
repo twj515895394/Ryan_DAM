@@ -312,22 +312,13 @@ onUnmounted(() => {
             class="rounded-lg bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
             @click="fitWindow = !fitWindow"
           >{{ fitWindow ? "原始尺寸" : "适应窗口" }}</button>
-          <template v-if="(total ?? 0) > 1">
-            <button
-              class="rounded-lg bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
-              @click="emit('prev')"
-            >← 上一项</button>
-            <p class="select-none px-0.5 text-xs tabular-nums text-white/60">{{ position }} / {{ total }}</p>
-            <button
-              class="rounded-lg bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
-              @click="emit('next')"
-            >下一项 →</button>
-          </template>
+          <p v-if="(total ?? 0) > 1" class="select-none px-0.5 text-xs tabular-nums text-white/60">{{ position }} / {{ total }}</p>
         </div>
       </header>
 
       <div class="flex min-h-0 flex-1 gap-0 px-5 pb-5">
-        <div class="relative flex min-w-0 flex-1 items-center justify-center overflow-auto rounded-2xl bg-black/40">
+        <div class="relative min-w-0 flex-1">
+          <div class="absolute inset-0 flex items-center justify-center overflow-auto rounded-2xl bg-black/40">
           <p v-if="loading" class="text-sm text-white/70">正在加载…</p>
           <p v-else-if="errorMessage" class="rounded-xl bg-rose-500/20 px-4 py-2.5 text-sm text-rose-100">
             {{ errorMessage }}
@@ -404,6 +395,24 @@ onUnmounted(() => {
             <span class="text-4xl">{{ asset.asset_type === 'audio' ? '🎵' : asset.asset_type === 'video' ? '🎬' : '📄' }}</span>
             <p class="text-sm">该类型预览将在后续阶段接入</p>
           </div>
+        </div>
+        <!-- 边缘悬浮翻页：贴媒体区左右垂直居中，44px 命中热区，随缩放平移始终钉在视口边缘 -->
+        <template v-if="(total ?? 0) > 1">
+          <button
+            class="absolute left-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-neutral-700 shadow-lg backdrop-blur-sm transition hover:bg-white active:scale-95"
+            aria-label="上一项"
+            @click="emit('prev')"
+          >
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <button
+            class="absolute right-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-neutral-700 shadow-lg backdrop-blur-sm transition hover:bg-white active:scale-95"
+            aria-label="下一项"
+            @click="emit('next')"
+          >
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </template>
         </div>
 
         <aside class="ml-4 flex w-72 shrink-0 flex-col overflow-y-auto rounded-2xl bg-white p-5">
