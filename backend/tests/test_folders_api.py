@@ -301,6 +301,54 @@ def test_folder_description_persist_strip_and_clear(client, headers) -> None:
     assert too_long.status_code == 422
 
 
+def test_pinned_folder_sorts_first_at_its_level(client, headers) -> None:
+    _create(client, headers, {"name": "韩系跳舞穿搭", "scope": "general"})
+    _create(client, headers, {"name": "法Q啊", "scope": "general"})
+    drafts = _create(client, headers, {"name": "未整理草稿", "scope": "general"})
+
+    tree = client.get("/api/v1/folders/tree", params={"scope": "general"}, headers=headers).json()
+    assert [n["name"] for n in tree] == ["韩系跳舞穿搭", "法Q啊", "未整理草稿"]
+    assert all(not n["pinned"] for n in tree)
+
+    pinned = client.patch(f"/api/v1/folders/{drafts['id']}", json={"pinned": True}, headers=headers)
+    assert pinned.status_code == 200
+    assert pinned.json()["pinned"] is True
+
+    tree = client.get("/api/v1/folders/tree", params={"scope": "general"}, headers=headers).json()
+    assert [n["name"] for n in tree] == ["未整理草稿", "韩系跳舞穿搭", "法Q啊"]
+
+    # 置顶只作用于所在层：其子目录不受影响，同级内部保持原 sort_order 相对序
+    _create(client, headers, {"name": "子目录A", "scope": "general", "parent_id": drafts["id"]})
+    child_b = _create(client, headers, {"name": "子目录B", "scope": "general", "parent_id": drafts["id"]})
+    tree = client.get("/api/v1/folders/tree", params={"scope": "general"}, headers=headers).json()
+    assert [n["name"] for n in tree[0]["children"]] == ["子目录A", "子目录B"]
+    # 置顶只作用于所在层：B 在其所在层排最前，根层顺序不变
+    client.patch(f"/api/v1/folders/{child_b['id']}", json={"pinned": True}, headers=headers)
+    tree = client.get("/api/v1/folders/tree", params={"scope": "general"}, headers=headers).json()
+    assert [n["name"] for n in tree] == ["未整理草稿", "韩系跳舞穿搭", "法Q啊"]
+    assert [n["name"] for n in tree[0]["children"]] == ["子目录B", "子目录A"]
+
+    unpinned = client.patch(f"/api/v1/folders/{drafts['id']}", json={"pinned": False}, headers=headers)
+    assert unpinned.json()["pinned"] is False
+    tree = client.get("/api/v1/folders/tree", params={"scope": "general"}, headers=headers).json()
+    assert [n["name"] for n in tree] == ["韩系跳舞穿搭", "法Q啊", "未整理草稿"]
+
+
+def test_pinned_defaults_false_and_survives_other_patches(client, headers) -> None:
+    folder = _create(client, headers, {"name": "默认未置顶", "scope": "general"})
+    assert folder["pinned"] is False
+    # 未提供 pinned 的 PATCH（改名/锁定）不得悄悄重置置顶状态
+    client.patch(f"/api/v1/folders/{folder['id']}", json={"pinned": True}, headers=headers)
+    renamed = client.patch(
+        f"/api/v1/folders/{folder['id']}", json={"name": "改名不丢置顶", "locked": True}, headers=headers
+    )
+    assert renamed.json()["pinned"] is True
+    assert renamed.json()["locked"] is True
+    tree = client.get("/api/v1/folders/tree", params={"scope": "general"}, headers=headers).json()
+    assert tree[0]["pinned"] is True
+    assert tree[0]["name"] == "改名不丢置顶"
+
+
 def test_folder_edit_dialog_combined_patch(client, headers) -> None:
     folder = _create(client, headers, {"name": "编辑我", "scope": "general"})
     edited = client.patch(

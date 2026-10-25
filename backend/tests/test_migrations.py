@@ -27,9 +27,9 @@ def test_fresh_database_migrates_all_tables(tmp_path) -> None:
     inspector = inspect(engine)
     assert EXPECTED_TABLES.issubset(set(inspector.get_table_names()))
     folder_columns = {c["name"] for c in inspector.get_columns("folders")}
-    assert {"locked", "description"} <= folder_columns
+    assert {"pinned", "locked", "description"} <= folder_columns
     version = engine.connect().exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-    assert version == "0006"
+    assert version == "0007"
 
 
 def test_migrations_are_idempotent(tmp_path) -> None:

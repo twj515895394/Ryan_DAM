@@ -116,10 +116,11 @@ def get_folder_or_404(db: Session, folder_id: int) -> Folder:
 
 
 def build_tree(db: Session, *, scope: str, project_id: int | None = None) -> list[FolderNode]:
+    # pinned desc 在前：同层同级里置顶目录始终排最上（子节点按行序归组，全局序在兄弟组内即层内序）
     rows = db.scalars(
         select(Folder)
         .where(_scope_filter(scope, project_id))
-        .order_by(Folder.sort_order, Folder.id)
+        .order_by(Folder.pinned.desc(), Folder.sort_order, Folder.id)
     ).all()
     nodes: dict[int, FolderNode] = {}
     roots: list[FolderNode] = []
@@ -131,6 +132,7 @@ def build_tree(db: Session, *, scope: str, project_id: int | None = None) -> lis
             project_id=row.project_id,
             parent_id=row.parent_id,
             sort_order=row.sort_order,
+            pinned=row.pinned,
             locked=row.locked,
             description=row.description,
             children=[],
@@ -192,11 +194,14 @@ def update_folder_info(
     db: Session,
     folder_id: int,
     *,
+    pinned: bool | None = None,
     locked: bool | None = None,
     description: str | None | object = FOLDER_INFO_UNSET,
 ) -> Folder:
-    """编辑弹窗信息：locked 传 None 表示不改动；description 未提供不改动、显式 None/空白清空。"""
+    """编辑弹窗信息：pinned/locked 传 None 表示不改动；description 未提供不改动、显式 None/空白清空。"""
     folder = get_folder_or_404(db, folder_id)
+    if pinned is not None:
+        folder.pinned = pinned
     if locked is not None:
         folder.locked = locked
     if description is not FOLDER_INFO_UNSET:

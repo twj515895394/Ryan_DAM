@@ -46,10 +46,11 @@ def update_folder(folder_id: int, payload: FolderUpdate, db: Session = Depends(g
         folder = folder_service.rename_folder(db, folder_id, changes["name"])
     if "parent_id" in changes:
         folder = folder_service.move_folder(db, folder_id, changes["parent_id"])
-    if "locked" in changes or "description" in changes:
+    if "pinned" in changes or "locked" in changes or "description" in changes:
         folder = folder_service.update_folder_info(
             db,
             folder_id,
+            pinned=changes.get("pinned"),
             locked=changes.get("locked"),
             description=changes["description"] if "description" in changes else folder_service.FOLDER_INFO_UNSET,
         )
