@@ -117,7 +117,7 @@ def test_project_cascade_delete(iso_client, headers, tmp_path) -> None:
     ext_file.write_text("# ref", encoding="utf-8")
     link = iso_client.post(
         "/api/v1/external-sources",
-        json={"root_path": str(ext_root), "target_folder_id": parent["id"]},
+        json={"root_path": str(ext_root), "target_folder_id": parent["id"], "create_mount_folder": False},
         headers=headers,
     )
     assert link.status_code == 201

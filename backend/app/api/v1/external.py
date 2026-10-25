@@ -29,6 +29,8 @@ def create_external_source(payload: ExternalSourceCreate, db: Session = Depends(
         db,
         root_path=payload.root_path,
         target_folder_id=payload.target_folder_id,
+        target_project_id=payload.target_project_id,
+        create_mount_folder=payload.create_mount_folder,
         display_name=payload.display_name,
     )
     rows = external_service.list_external_sources(db)
@@ -49,5 +51,5 @@ def scan_external_source(source_id: int, db: Session = Depends(get_db)) -> ScanR
 def unlink_external_source(source_id: int, db: Session = Depends(get_db)) -> UnlinkResult:
     """Unlink: drop the still-external index rows, keep converted ones, never
     touch source files."""
-    removed = external_service.unlink_external_source(db, source_id)
-    return UnlinkResult(removed=removed)
+    removed, mount_removed = external_service.unlink_external_source(db, source_id)
+    return UnlinkResult(removed=removed, mount_folder_removed=mount_removed)

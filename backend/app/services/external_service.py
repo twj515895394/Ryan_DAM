@@ -17,14 +17,21 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.errors import ApiError
 from backend.app.models.asset import Asset
 from backend.app.models.external_source import ExternalSource
-from backend.app.services.folder_service import ensure_folder_path, get_folder_or_404
+from backend.app.models.folder import Folder
+from backend.app.services.folder_service import (
+    ensure_folder_path,
+    get_folder_or_404,
+    get_folder_subtree_ids,
+)
 from backend.app.services.import_service import guess_asset_type
+from backend.app.services.project_service import get_project_or_404
 from backend.app.services.settings_service import get_managed_root
 from backend.app.services.trash_service import get_asset_or_404
 
@@ -61,21 +68,97 @@ def get_source_or_404(db: Session, source_id: int) -> ExternalSource:
     return source
 
 
+def _unique_folder_name(db: Session, base: str, *, scope: str, project_id: int | None, parent_id: int | None) -> str:
+    """First free sibling name for the auto-created mount folder ('x', 'x (2)', ...)."""
+    stem = base[:248]
+
+    def taken(name: str) -> bool:
+        stmt = select(Folder.id).where(
+            Folder.name == name, Folder.scope_type == scope, Folder.parent_id == parent_id
+        )
+        if scope == "project":
+            stmt = stmt.where(Folder.project_id == project_id)
+        else:
+            stmt = stmt.where(Folder.project_id.is_(None))
+        return db.scalar(stmt) is not None
+
+    if not taken(stem):
+        return stem
+    for suffix in range(2, 100):
+        candidate = f"{stem} ({suffix})"
+        if not taken(candidate):
+            return candidate
+    raise ApiError("duplicate_name", f"同层重名目录过多，无法为「{stem}」生成可用名称。", 409)
+
+
+def _create_child_folder(
+    db: Session, *, scope: str, project_id: int | None, parent_id: int | None, name: str
+) -> Folder:
+    next_order = (
+        db.scalar(select(func.max(Folder.sort_order)).where(Folder.parent_id == parent_id)) or 0
+    ) + 1
+    folder = Folder(
+        name=name, scope_type=scope, project_id=project_id, parent_id=parent_id, sort_order=next_order
+    )
+    db.add(folder)
+    db.flush()
+    return folder
+
+
 def create_external_source(
-    db: Session, *, root_path: str, target_folder_id: int, display_name: str | None = None
+    db: Session,
+    *,
+    root_path: str,
+    target_folder_id: int | None = None,
+    target_project_id: int | None = None,
+    create_mount_folder: bool = True,
+    display_name: str | None = None,
 ) -> tuple[ExternalSource, dict[str, int]]:
+    """Link a disk directory into the library.
+
+    By default the linked directory itself becomes a library folder (named
+    after it, de-duplicated with a ' (2)' suffix) under the chosen target
+    node — any project / the general library / an existing folder. With
+    create_mount_folder=False the content is indexed directly into the chosen
+    folder (legacy behaviour, a folder target is required)."""
     root = _normalize_root(root_path)
-    get_folder_or_404(db, target_folder_id)
+    if target_folder_id is not None:
+        parent = get_folder_or_404(db, target_folder_id)
+        scope, project_id = parent.scope_type, parent.project_id
+    elif target_project_id is not None:
+        project = get_project_or_404(db, target_project_id)
+        parent, scope, project_id = None, "project", project.id
+    else:
+        parent, scope, project_id = None, "general", None
+    if parent is None and not create_mount_folder:
+        raise ApiError(
+            "validation_error", "以资产库/项目顶层为关联目标时，必须新建同名目录挂载内容。", 422
+        )
     duplicate = db.scalar(
         select(ExternalSource).where(func.lower(ExternalSource.root_path) == str(root).lower())
     )
     if duplicate is not None:
         raise ApiError("duplicate_name", f"该目录已关联过：{duplicate.root_path}", 409)
 
+    mount_folder = create_mount_folder
+    if create_mount_folder:
+        mount = _create_child_folder(
+            db,
+            scope=scope,
+            project_id=project_id,
+            parent_id=parent.id if parent is not None else None,
+            name=_unique_folder_name(
+                db, root.name, scope=scope, project_id=project_id, parent_id=parent.id if parent else None
+            ),
+        )
+    else:
+        mount = parent
+
     source = ExternalSource(
         root_path=str(root),
         display_name=(display_name or "").strip() or root.name,
-        target_folder_id=target_folder_id,
+        target_folder_id=mount.id,
+        mount_folder=mount_folder,
         status="active",
     )
     db.add(source)
@@ -197,6 +280,7 @@ def list_external_sources(db: Session) -> list[dict]:
             "display_name": source.display_name,
             "target_folder_id": source.target_folder_id,
             "target_folder_name": folder_name,
+            "mount_folder": source.mount_folder,
             "last_scan_at": source.last_scan_at,
             "status": source.status,
             "asset_count": counts.get(source.id, 0),
@@ -206,26 +290,54 @@ def list_external_sources(db: Session) -> list[dict]:
     ]
 
 
-def unlink_external_source(db: Session, source_id: int) -> int:
+def _prune_mount_subtree(db: Session, folder_id: int) -> bool:
+    """Delete the auto-created mount folder and its mirrored descendants, but
+    only when the whole subtree holds no assets (of any kind — trashed or
+    converted managed ones included) and contains no locked folder.
+    Returns True when the tree was removed."""
+    mount = db.get(Folder, folder_id)
+    if mount is None:
+        return False
+    subtree = get_folder_subtree_ids(db, folder_id)
+    asset_rows = db.scalar(select(func.count(Asset.id)).where(Asset.folder_id.in_(subtree)))
+    if asset_rows:
+        return False
+    locked = db.scalar(select(Folder.id).where(Folder.id.in_(subtree), Folder.locked.is_(True)))
+    if locked is not None:
+        return False
+    # children before parents; flush per row so SQLite's FK checks see the
+    # self-referencing parent_id rows disappear bottom-up
+    for fid in reversed(subtree):
+        db.execute(sa_delete(Folder).where(Folder.id == fid))
+    return True
+
+
+def unlink_external_source(db: Session, source_id: int) -> tuple[int, bool]:
     """Remove the link and every index row that is STILL external.
 
     Assets already converted to managed keep their records (business
-    invariant); source files on disk are never touched.
+    invariant); source files on disk are never touched. When the link flow
+    had auto-created the mount folder, its now-empty mirrored subtree is
+    pruned; anything with assets or locked folders stays in place.
     """
     from backend.app.services.trash_service import delete_asset_index
 
     source = get_source_or_404(db, source_id)
     external_assets = db.scalars(
         select(Asset).where(
-            Asset.external_source_id == source.id,
             Asset.source_type == "external",
+            Asset.external_source_id == source.id,
         )
     ).all()
     for asset in external_assets:
         delete_asset_index(db, asset)
+    db.flush()  # session is autoflush=False: drop pending index rows before the subtree asset count
+    mount_folder, mount_id = source.mount_folder, source.target_folder_id
     db.delete(source)
+    db.flush()  # the source row holds the FK on the mount folder — remove it first
+    mount_removed = _prune_mount_subtree(db, mount_id) if mount_folder else False
     db.commit()
-    return len(external_assets)
+    return len(external_assets), mount_removed
 
 
 def _hash_file(path: Path) -> str:

@@ -5,10 +5,11 @@ import time
 TERMINAL = {"completed", "completed_with_errors", "failed", "interrupted"}
 
 
-def _link(iso_client, headers, root, folder_id: int) -> dict:
+def _link(iso_client, headers, root, folder_id: int, create_mount: bool = False) -> dict:
+    """Legacy default: index straight into the chosen folder (create_mount_folder=False)."""
     response = iso_client.post(
         "/api/v1/external-sources",
-        json={"root_path": str(root), "target_folder_id": folder_id},
+        json={"root_path": str(root), "target_folder_id": folder_id, "create_mount_folder": create_mount},
         headers=headers,
     )
     assert response.status_code == 201, response.text
@@ -421,3 +422,207 @@ def test_scan_skips_managed_root_subtree(iso_client, headers, tmp_path) -> None:
     assert external_names == {"outside.txt"}
     external_paths = [item["file_path"] for item in items if item["source_type"] == "external"]
     assert all("managed-assets" not in path for path in external_paths)
+
+
+# ── mount-folder linking: the linked directory itself becomes a folder node ──
+
+
+def _tree_nodes(iso_client, headers, scope="general", project_id=None):
+    params = {"scope": scope}
+    if project_id is not None:
+        params["project_id"] = project_id
+    return iso_client.get("/api/v1/folders/tree", params=params, headers=headers).json()
+
+
+def _find_node(nodes, name):
+    for node in nodes:
+        if node["name"] == name:
+            return node
+        hit = _find_node(node["children"], name)
+        if hit:
+            return hit
+    return None
+
+
+def test_mount_link_creates_named_folder_under_chosen_folder(iso_client, headers, tmp_path) -> None:
+    root = tmp_path / "挂载素材库"
+    (root / "inner").mkdir(parents=True)
+    (root / "top.png").write_bytes(b"p1")
+    (root / "inner" / "deep.txt").write_text("d", encoding="utf-8")
+    parent = iso_client.post("/api/v1/folders", json={"name": "挂载父级", "scope": "general"}, headers=headers).json()
+
+    response = iso_client.post(
+        "/api/v1/external-sources",
+        json={"root_path": str(root), "target_folder_id": parent["id"], "create_mount_folder": True},
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["scan"]["added"] == 2
+    source = body["source"]
+    assert source["mount_folder"] is True
+    assert source["target_folder_name"] == "挂载素材库"
+
+    tree = _tree_nodes(iso_client, headers)
+    mount = _find_node(tree, "挂载素材库")
+    inner = _find_node(tree, "inner")
+    assert mount is not None and inner is not None
+    assert inner["id"] in {c["id"] for c in mount["children"]}
+    # content hangs under the named mount folder, not directly in the picked folder
+    assert _assets_in(iso_client, headers, parent["id"]) == []
+    assert [a["name"] for a in _assets_in(iso_client, headers, mount["id"])] == ["top.png"]
+    assert [a["name"] for a in _assets_in(iso_client, headers, inner["id"])] == ["deep.txt"]
+
+
+def test_mount_link_at_general_root(iso_client, headers, tmp_path) -> None:
+    root = tmp_path / "顶层挂载库"
+    root.mkdir()
+    (root / "x.txt").write_text("x", encoding="utf-8")
+
+    response = iso_client.post(
+        "/api/v1/external-sources",
+        json={"root_path": str(root), "create_mount_folder": True},
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    source = response.json()["source"]
+    tree = _tree_nodes(iso_client, headers)
+    mount = next((n for n in tree if n["name"] == "顶层挂载库"), None)
+    assert mount is not None, "linked directory becomes a top-level folder of the general library"
+    assert source["target_folder_id"] == mount["id"]
+    assert [a["name"] for a in _assets_in(iso_client, headers, mount["id"])] == ["x.txt"]
+
+
+def test_mount_link_as_project_top_level(iso_client, headers, tmp_path) -> None:
+    project = iso_client.post("/api/v1/projects", json={"name": "挂载项目"}, headers=headers).json()
+    root = tmp_path / "项目素材"
+    root.mkdir()
+    (root / "one.txt").write_text("1", encoding="utf-8")
+
+    response = iso_client.post(
+        "/api/v1/external-sources",
+        json={"root_path": str(root), "target_project_id": project["id"], "create_mount_folder": True},
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    source = response.json()["source"]
+    tree = _tree_nodes(iso_client, headers, scope="project", project_id=project["id"])
+    mount = next((n for n in tree if n["name"] == "项目素材"), None)
+    assert mount is not None, "linked directory hangs as a first-level folder of the project"
+    assert source["target_folder_id"] == mount["id"]
+    # scope isolation: nothing leaks into the general library tree
+    assert _find_node(_tree_nodes(iso_client, headers), "项目素材") is None
+
+
+def test_mount_name_collision_gets_suffix(iso_client, headers, tmp_path) -> None:
+    (tmp_path / "one" / "素材").mkdir(parents=True)
+    (tmp_path / "two" / "素材").mkdir(parents=True)
+    (tmp_path / "one" / "素材" / "a.txt").write_text("a", encoding="utf-8")
+    (tmp_path / "two" / "素材" / "b.txt").write_text("b", encoding="utf-8")
+    folder = iso_client.post("/api/v1/folders", json={"name": "重名目标", "scope": "general"}, headers=headers).json()
+
+    first = iso_client.post(
+        "/api/v1/external-sources",
+        json={"root_path": str(tmp_path / "one" / "素材"), "target_folder_id": folder["id"]},
+        headers=headers,
+    ).json()["source"]
+    second = iso_client.post(
+        "/api/v1/external-sources",
+        json={"root_path": str(tmp_path / "two" / "素材"), "target_folder_id": folder["id"]},
+        headers=headers,
+    ).json()["source"]
+
+    tree = _tree_nodes(iso_client, headers)
+    parent_node = _find_node(tree, "重名目标")
+    child_names = {c["name"] for c in parent_node["children"]}
+    assert {"素材", "素材 (2)"} <= child_names
+    assert {first["target_folder_name"], second["target_folder_name"]} == {"素材", "素材 (2)"}
+
+
+def test_link_without_target_requires_mount(iso_client, headers, tmp_path) -> None:
+    root = tmp_path / "无目标库"
+    root.mkdir()
+    response = iso_client.post(
+        "/api/v1/external-sources",
+        json={"root_path": str(root), "create_mount_folder": False},
+        headers=headers,
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+def test_unlink_prunes_empty_mount_subtree(iso_client, headers, tmp_path) -> None:
+    root = tmp_path / "待清理库"
+    (root / "sub").mkdir(parents=True)
+    (root / "sub" / "f.txt").write_text("f", encoding="utf-8")
+    parent = iso_client.post("/api/v1/folders", json={"name": "清理父级", "scope": "general"}, headers=headers).json()
+    source_id = iso_client.post(
+        "/api/v1/external-sources",
+        json={"root_path": str(root), "target_folder_id": parent["id"]},
+        headers=headers,
+    ).json()["source"]["id"]
+    assert _find_node(_tree_nodes(iso_client, headers), "待清理库") is not None
+
+    response = iso_client.delete(f"/api/v1/external-sources/{source_id}", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["removed"] == 1
+    assert response.json()["mount_folder_removed"] is True
+
+    tree = _tree_nodes(iso_client, headers)
+    assert _find_node(tree, "待清理库") is None, "empty mount tree (incl. mirrored 'sub') is pruned"
+    assert _find_node(tree, "清理父级") is not None, "the user-chosen parent survives"
+    # disk files untouched
+    assert (root / "sub" / "f.txt").read_text(encoding="utf-8") == "f"
+
+
+def test_unlink_keeps_mount_subtree_with_converted_asset(iso_client, headers, app, tmp_path) -> None:
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.app.models.asset import Asset
+
+    root = tmp_path / "保留库"
+    root.mkdir()
+    (root / "keep.txt").write_text("keep", encoding="utf-8")
+    (root / "gone.txt").write_text("gone", encoding="utf-8")
+    link = iso_client.post(
+        "/api/v1/external-sources",
+        json={"root_path": str(root), "create_mount_folder": True},
+        headers=headers,
+    ).json()
+    source_id = link["source"]["id"]
+    mount_id = link["source"]["target_folder_id"]
+
+    session_factory: sessionmaker = app.state.session_factory
+    with session_factory() as session:
+        row = session.query(Asset).filter(Asset.name == "keep.txt").one()
+        row.source_type = "managed"
+        row.external_source_id = None
+        session.commit()
+
+    response = iso_client.delete(f"/api/v1/external-sources/{source_id}", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["removed"] == 1
+    assert response.json()["mount_folder_removed"] is False
+
+    tree = _tree_nodes(iso_client, headers)
+    assert _find_node(tree, "保留库") is not None, "a subtree holding a converted asset must survive"
+    assert [a["name"] for a in _assets_in(iso_client, headers, mount_id)] == ["keep.txt"]
+
+
+def test_unlink_keeps_locked_mount_folder(iso_client, headers, tmp_path) -> None:
+    root = tmp_path / "锁定挂载库"
+    root.mkdir()
+    (root / "z.txt").write_text("z", encoding="utf-8")
+    link = iso_client.post(
+        "/api/v1/external-sources",
+        json={"root_path": str(root), "create_mount_folder": True},
+        headers=headers,
+    ).json()
+    source_id = link["source"]["id"]
+    mount_id = link["source"]["target_folder_id"]
+    assert iso_client.patch(f"/api/v1/folders/{mount_id}", json={"locked": True}, headers=headers).status_code == 200
+
+    response = iso_client.delete(f"/api/v1/external-sources/{source_id}", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["mount_folder_removed"] is False
+    assert _find_node(_tree_nodes(iso_client, headers), "锁定挂载库") is not None
