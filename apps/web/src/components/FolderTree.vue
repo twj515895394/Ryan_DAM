@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { inject, provide, ref, type Ref } from "vue";
 
 import type { FolderNode } from "../api/types";
 import SidebarIcon from "./SidebarIcon.vue";
@@ -21,13 +21,70 @@ const emit = defineEmits<{
   (e: "toggle-pin", node: FolderNode): void;
 }>();
 
-const collapsed = ref(new Set<number>());
+// ── 折叠状态整树共享（provide/inject 沿递归实例下传）────────────────
+// 双击目录行只展开「下一级」需要跨层写子孙节点的折叠位，故每个根
+// FolderTree 实例建一份 Set，嵌套实例注入同一份。
+interface TreeCollapseState {
+  collapsed: Ref<Set<number>>;
+}
 
-function toggle(node: FolderNode): void {
+// 必须用字符串 key：`<script setup>` 顶层的 `const` 编译后位于 setup() 内，
+// 每个实例都会新建一个 Symbol，父子实例的 Symbol 永不相等导致 inject 静默落空。
+// 字符串按值比较，跨实例稳定命中。
+const COLLAPSE_STATE_KEY = "ryan-dam-folder-tree-collapse-state";
+
+function createCollapseState(): TreeCollapseState {
+  return { collapsed: ref(new Set<number>()) };
+}
+
+const collapseState =
+  props.depth === 0
+    ? createCollapseState()
+    : inject(COLLAPSE_STATE_KEY, null) ?? createCollapseState();
+provide(COLLAPSE_STATE_KEY, collapseState);
+const collapsed = collapseState.collapsed;
+
+function withCollapsed(mutate: (next: Set<number>) => void): void {
   const next = new Set(collapsed.value);
-  if (next.has(node.id)) next.delete(node.id);
-  else next.add(node.id);
+  mutate(next);
   collapsed.value = next;
+}
+
+function descendantsWithChildren(node: FolderNode): number[] {
+  const ids: number[] = [];
+  const walk = (n: FolderNode): void => {
+    for (const child of n.children) {
+      if (child.children.length > 0) ids.push(child.id);
+      walk(child);
+    }
+  };
+  walk(node);
+  return ids;
+}
+
+/** 箭头点击：保持原有语义——展开时整个子树恢复全部展开。 */
+function toggleChevron(node: FolderNode): void {
+  withCollapsed((next) => {
+    if (next.has(node.id)) {
+      next.delete(node.id);
+      for (const id of descendantsWithChildren(node)) next.delete(id);
+    } else {
+      next.add(node.id);
+    }
+  });
+}
+
+/** 双击目录行：只展开/收起下一级——展开时把直接子目录折叠，逐层点开。 */
+function toggleOneLevel(node: FolderNode): void {
+  if (node.children.length === 0) return;
+  withCollapsed((next) => {
+    if (next.has(node.id)) {
+      next.delete(node.id);
+      for (const child of node.children) next.add(child.id);
+    } else {
+      next.add(node.id);
+    }
+  });
 }
 </script>
 
@@ -45,14 +102,16 @@ function toggle(node: FolderNode): void {
         role="button"
         tabindex="0"
         @click="emit('select', node)"
+        @dblclick="toggleOneLevel(node)"
         @keydown.enter="emit('select', node)"
       >
-        <!-- 折叠/展开箭头 -->
+        <!-- 折叠/展开箭头（整树全展开语义） -->
         <button
           v-if="node.children.length > 0"
           class="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted hover:text-ink"
           :aria-label="collapsed.has(node.id) ? '展开目录' : '折叠目录'"
-          @click.stop="toggle(node)"
+          @click.stop="toggleChevron(node)"
+          @dblclick.stop
         >
           <SidebarIcon
             name="chevron-right"
@@ -71,7 +130,11 @@ function toggle(node: FolderNode): void {
 
         <!-- 目录名称 + 置顶/锁定徽记 -->
         <span class="flex min-w-0 flex-1 items-center gap-1">
-          <span class="truncate" :title="node.name">{{ node.name }}</span>
+          <span
+            class="truncate"
+            :title="node.children.length > 0 ? `${node.name}（双击逐层展开/收起子目录）` : node.name"
+            >{{ node.name }}</span
+          >
           <span v-if="node.pinned" class="shrink-0 text-accent" title="已置顶：始终排在同层最上方">
             <SidebarIcon name="pin" class="h-3 w-3" />
           </span>
@@ -81,7 +144,7 @@ function toggle(node: FolderNode): void {
         </span>
 
         <!-- 悬停操作按钮组 -->
-        <span class="hidden shrink-0 items-center gap-0.5 group-hover:flex">
+        <span class="hidden shrink-0 items-center gap-0.5 group-hover:flex" @dblclick.stop>
           <button
             class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-accent hover:shadow-xs"
             title="新建子文件夹"
