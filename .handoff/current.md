@@ -3,7 +3,7 @@
 > **必读：** 这是 Ryan_DAM 项目根目录 `.handoff/current.md` 的详细交接文档。接手者应先读本文件，再读 `docs/` 下的需求与设计；不要依赖聊天记录来判断实际代码状态。
 >
 > **最近核实时间：** 2026-10-25（ZCode 会话）  
-> **交接版本：** Handoff v18（外部关联目录「全部刷新」：区头一键串行重扫所有源 + 汇总 toast + 扫描旋转/禁用指示；承 v17 侧栏目录树双击逐层展开/收起、v16 外部目录关联重构/迁移 0009、v15 预览边缘圆形悬浮按钮、v14 预览同目录切换增强、v13「其他」分类/迁移 0008、v12 侧栏目录置顶、v11 代码文件文本预览/缩略图 LRU 缓存）  
+> **交接版本：** Handoff v19（RD 品牌图标全套接线：`scripts/generate-icons.py` 一脚本产全套 + exe/任务栏/安装器/窗口/拖拽/favicon/侧栏标识；承 v18 外部关联目录「全部刷新」、v17 侧栏目录树双击逐层展开/收起、v16 外部目录关联重构/迁移 0009、v15 预览边缘圆形悬浮按钮、v14 预览同目录切换增强、v13「其他」分类/迁移 0008、v12 侧栏目录置顶、v11 代码文件文本预览/缩略图 LRU 缓存）  
 > **目标仓库：** https://github.com/twj515895394/Ryan_DAM  
 > **主分支：** `main`  
 > **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录与项目级联删除全面完成（`cascade_delete_folder_ids` 共享算法 + Apple HIG 影响说明确认弹窗）；**用户报告的删除项目 409 已定位为陈旧后端进程**（Electron 派生的 Python 服务无热重载，旧进程静默忽略 `?cascade=true`），代码无缺陷，**用户完全重启桌面应用后即可正常级联删除**，前端已加固为遇 404 如实提示重启；md 文档预览支持 GFM 表格；导入任务面板 5 秒自动关闭；卡片提示词入口双修复；**侧栏铅笔升级为「编辑文件夹」弹窗（名称 + 描述 + Apple HIG 琥珀锁定开关）**——迁移 0006 增 `folders.locked/description`，锁定目录拦截直接删除与目录/项目级联（409 `folder_locked` 点名锁定目录），锁只拦删除、不向下继承；typecheck + build + **131 pytest** 全绿，5173 浏览器冒烟锁定/拦截/解锁/级联全链路通过。**需完全重启桌面应用使 0006 迁移与守卫生效（前端 vite 热更新即可，后端进程必须重启）**；最新：**侧栏紧凑化 + 可拖拽宽度**（目录行 24px、缩进 13px/层、截断悬停全名；把手 1:1 跟手拖拽钳制 [220,480]、键盘/双击调节、localStorage 持久化；顺带修复无效类 `h-7.5/py-0.2` 与冒烟揪出的 STORAGE_KEY 损坏字面量），纯前端、刷新即生效；最新：**代码文件文本预览 + 缩略图缓存**——后端 `CODE_EXTS`（47 种源码/配置/日志扩展）并入文档分类（新导入/外扫的 `.py`/`.ts`/`.yml` 等注册为文档），前端沉浸预览按等宽 `font-mono` 文本渲染代码且**存量已存为「文件」的代码资产按扩展名回退同样可预览**；新增 `useThumbnailObjectUrl` 模块级 LRU 缓存（240 条）共享给资产卡与回收站行，目录切换/滚动重挂零网络请求、`failed` 负缓存防反复 404。typecheck + build + **134 pytest** 全绿，5173 冒烟（代码预览、存量回退、缓存零新增请求）全通过；最新：**侧栏目录置顶**——目录行悬停操作区新加图钉按钮（`+` 与铅笔之间），点击置顶/解除置顶，置顶目录**始终排在同层最上方**（全局排序 `pinned desc → sort_order → id`，build_tree 保序 → 任意层级生效），名称右侧常驻蓝色图钉徽标（镜像锁定徽标模式、accent 语义色区分琥珀锁定）；迁移 0007 增 `folders.pinned`，`PATCH {pinned}` 走 `update_folder_info` 哨兵，改名/锁定 PATCH 不重置置顶。**需用户完全重启桌面应用使 0007 迁移与置顶排序生效（后端进程必须重启；前端刷新即生效）**；最新：**「其他」分类**——用户反馈 `.py` 全挂在「文档」下：顶栏分类栏加「其他」chip，代码/配置/日志扩展不再并入文档（`guess_asset_type` 归 `other`），**迁移 0008 把存量误标 document 的代码资产自动改回 other**（冻结扩展名快照、幂等），卡片/预览/回收站 other 标签「文件」→「其他」；代码预览经 v11 的 other 扩展名回退通道**原样可用**。typecheck + build + **135 pytest** 全绿；迁移 E2E（0007 旧库→启动自动升 0008 改类）+ 5173 冒烟（chip 过滤/卡片标签/代码预览仍渲染且面板「类型：其他」）全通过。**同样需完全重启桌面应用使 0008 改类生效**；最新：**预览同目录上下切换增强**——沉浸预览切换早已存在（按钮 + ←/→）但只在本页 50 项内回绕：`stepPreview` 重写为分页感知，到末尾自动追加下一页再前进（**切换可遍历整个目录**），按钮间加 `n / total` 位置指示（单资产目录整组隐藏），`↑/↓` 并入切换；typecheck + build + **135 pytest** 全绿，5173 冒烟（50 边界自动追加 51/55、全量遍历、双向回绕、↑/↓、单图隐藏按钮、截图目检）全通过。**纯前端、刷新即生效**（迁移 0006–0008 的重启要求不变）；最新：**预览翻页改边缘圆形悬浮按钮**——用户反馈右上角文字按钮不顺手：移除头部「← 上一项 / 下一项 →」，改为媒体区左右边缘垂直居中的白底圆形箭头（`h-11 w-11` 44px 命中热区、`bg-white/85` 毛玻璃、原始尺寸平移时视口锚定不滚走），右上角仅留 `n / total` 指示；键盘与跨分页逻辑不变；typecheck + build + **135 pytest** 全绿，5173 冒烟（点击切换、几何、单图隐藏、截图与参考图风格一致）全通过。**纯前端、刷新即生效**；最新：**外部目录关联重构（本票 v16）**——关联磁盘目录时**磁盘目录本身成为库内同名目录节点**（重名自动「 (2)」后缀），内容挂其下保留子目录层级；目标选择器改**树形**（通用资产库/项目/目录全层级、可折叠），可直接挂载到**项目一级或通用库顶层**无需预先建目录；弹窗带 Apple HIG 开关「在所选节点下新建同名目录」（默认开；关闭=旧行为直接索进所选目录、顶层目标置灰）；迁移 0009 增 `external_sources.mount_folder`（存量源保持旧语义）；解除关联时**自动清理空的挂载目录树**（保守：子树含任何资产——含回收/已转托管——或任一 locked 目录则整树保留；磁盘文件永不触碰）。typecheck + build + **143 pytest** 全绿，5173 冒烟（挂载/树形/开关/重名/项目一级/清理/旧语义回归）全链路通过。**需完全重启桌面应用使 0009 迁移生效（连同积压 0006–0008；前端刷新即生效）**；最新：**侧栏目录树双击逐层展开（v17）**——双击目录行=收起整棵子树、再双击=**只展开直接子级**（逐层点开），单击箭头=收起、再点=**恢复整棵子树全部层级**（含此前逐层折叠隐藏的深度节点，全展开语义）；折叠状态经 provide/inject 整棵根树共享（**关键坑：`<script setup>` 顶层 Symbol 常量每实例新建，inject 静默落空——key 必须用字符串**）。纯前端、刷新即生效；最新：**外部关联目录「全部刷新」（本票 v18）**——区头新按钮一键**串行重扫所有外部源**（复用单源 scan 端点、后端零改动），汇总单条 toast「全部刷新完成：共 N 个目录，新增 X…」，个别目录失败不中断其余并计入；扫描中**区头图标旋转 + 按钮禁用、行内图标各自旋转**即「标识」；单刷加防重入。纯前端、刷新即生效。
@@ -12,9 +12,18 @@
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 外部关联目录「全部刷新」）
+### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · RD 品牌图标全套接线）
 
-> **最新会话交接：** [`.handoff/handoff-20261025-210716.md`](./handoff-20261025-210716.md)——接手者务必先读它，再读本文件。上一票（侧栏目录树双击逐层展开）交接见 [`.handoff/handoff-20261025-210043.md`](./handoff-20261025-210043.md)。
+> **最新会话交接：** [`.handoff/handoff-20261025-222500.md`](./handoff-20261025-222500.md)——接手者务必先读它，再读本文件。上一票（外部关联目录「全部刷新」）交接见 [`.handoff/handoff-20261025-210716.md`](./handoff-20261025-210716.md)。
+
+- **Git：** `main`，本票 1 代码提交 + docs 提交；连同 v11–v18 积压均未推送。
+- **本票：** 用户定调设计「以 RD 字母标，参照 ZCode 简洁风格」。新 `scripts/generate-icons.py`（Pillow 渲染：深色渐变圆角 tile + 白色斜体粗体 RD）一次产出全套入库：`build/icon.ico`（16–256，接 `build.win.icon`→exe/快捷方式/任务栏/卸载器）、`apps/desktop/assets/icon.png`（BrowserWindow 窗口图标）+ `drag-icon.png`（原生拖出跟随图标，替换旧占位 SVG）、`public/favicon.ico`+`favicon-32.png`（5173 标签页）、`brand/logo-1024.png` 母版。`main.cjs` 补 `setAppUserModelId("com.ryandam.desktop")`（与 build.appId 一致，任务栏图标归属）；`index.html` favicon 链接（Vite 构建已验证重写相对路径+复制 dist）；侧栏品牌位换 32px 内联 SVG RD 标识。
+- **验证：** node --check / typecheck / build:web / **143 pytest** 全绿；`electron-builder --win --dir` 打包成功且**提取 exe 内嵌图标目检=RD**；16/24/32 小尺寸目检可辨；favicon 5173 返回 200+正确 MIME；验证产物已清理。
+- **待处理：** 新窗口/任务栏图标需**重启桌面应用**可见（与 0006–0009 迁移重启积压合并）；侧栏标识与 favicon 刷新即生效；覆盖安装旧图标残留=Windows 图标缓存（`ie4uinitcache -refresh`）非缺陷；全部验收后统一 push。
+
+### 0.0.0 上一迭代摘要（v18 外部关联目录「全部刷新」）
+
+> 会话交接见 [`.handoff/handoff-20261025-210716.md`](./handoff-20261025-210716.md)；侧栏目录树双击逐层展开见 [`.handoff/handoff-20261025-210043.md`](./handoff-20261025-210043.md)。
 
 - **Git：** `main`，本票 2 个本地提交（web `2414f77` / docs）；连同 v11–v17 积压均未推送。
 - **本票（v18，纯前端 3 文件，后端零改动）：**
@@ -25,9 +34,9 @@
   5. **冒烟增量坑**：毫秒级瞬态 UI 用 MutationObserver 取证；隔离后端 token 变量名是 `RYAN_DAM_API_TOKEN`；外部源种子直接 API + `X-Ryan-Dam-Token` 头无需 picker 桩。
 - **待处理（不变）：** 用户完全重启桌面应用使 0006–0009 迁移生效；v17/v18 刷新即生效；全部验收后统一 push。
 
-### 0.0.0 上一迭代摘要（v17 侧栏目录树双击逐层展开/收起）
+### 0.0.0b 更早迭代摘要（v17 侧栏目录树双击逐层展开/收起）
 
-> 上一票会话交接见 [`.handoff/handoff-20261025-210043.md`](./handoff-20261025-210043.md)；外部目录关联重构见 [`.handoff/handoff-20261025-204604.md`](./handoff-20261025-204604.md)。
+> 会话交接见 [`.handoff/handoff-20261025-210043.md`](./handoff-20261025-210043.md)；外部目录关联重构见 [`.handoff/handoff-20261025-204604.md`](./handoff-20261025-204604.md)。
 
 - **Git：** `main`，本票 2 个本地提交（web / docs）；连同 v11–v16 积压均未推送（统一交付后再推）。
 - **本票（v17，纯前端，仅 `FolderTree.vue`）：**
@@ -61,7 +70,8 @@
 
 ### 0.0.1 迭代时间线（倒序）
 
-0. **外部关联目录「全部刷新」（本票 v18，2026-10-25）**——详见 [`.handoff/handoff-20261025-210716.md`](./handoff-20261025-210716.md)。要点：区头一键**串行重扫所有外部源**（复用单源 scan 端点、后端零改动）；汇总单条 toast（新增/变更/失效/恢复，失败目录计入并转 error）；扫描中**区头图标旋转+禁用、行内图标各自 spin**即「标识」；单刷防重入；MutationObserver 录瞬态指示翻转取证；token 变量名 `RYAN_DAM_API_TOKEN`。typecheck/build/143 pytest 全绿；5173 冒烟全通过；codereview 0 致命（已知 App.vue 819>800 行待瘦身）。纯前端、刷新即生效。
+0. **RD 品牌图标全套接线（本票 v19，2026-10-25）**——详见 [`.handoff/handoff-20261025-222500.md`](./handoff-20261025-222500.md)。要点：深色渐变圆角 tile+白色斜体「RD」字母标（用户指定，参照 ZCode）；`scripts/generate-icons.py`（Pillow）一脚本产全套入库（ico 16–256 / 窗口 png / 拖拽 png / favicon / 1024 母版）；接线 `build.win.icon`、`BrowserWindow.icon`、`setAppUserModelId`（=build.appId，任务栏归属）、真实拖拽图标、index.html favicon、侧栏内联 SVG 标识；node-check/typecheck/build/**143 pytest** 全绿；`electron-builder --dir` 打包成功且 exe 内嵌图标提取目检=RD ✅；Vite 产物确认 favicon 重写相对路径+复制 dist ✅。坑：覆盖安装旧图标=Windows 图标缓存非缺陷。**需重启桌面应用见新窗口/任务栏图标（并入 0006–0009 重启积压）；侧栏/favicon 刷新即生效。**
+0. **外部关联目录「全部刷新」（v18，2026-10-25）**——详见 [`.handoff/handoff-20261025-210716.md`](./handoff-20261025-210716.md)。要点：区头一键**串行重扫所有外部源**（复用单源 scan 端点、后端零改动）；汇总单条 toast（新增/变更/失效/恢复，失败目录计入并转 error）；扫描中**区头图标旋转+禁用、行内图标各自 spin**即「标识」；单刷防重入；MutationObserver 录瞬态指示翻转取证；token 变量名 `RYAN_DAM_API_TOKEN`。typecheck/build/143 pytest 全绿；5173 冒烟全通过；codereview 0 致命（已知 App.vue 819>800 行待瘦身）。纯前端、刷新即生效。
 1. **侧栏目录树双击逐层展开/收起（v17，2026-10-25）**——详见 [`.handoff/handoff-20261025-210043.md`](./handoff-20261025-210043.md)。要点：双击目录行收起整棵子树、再双击**只展开直接子级**（逐层点开）；单击箭头收起、再点**恢复整棵子树全部层级**（含此前逐层折叠隐藏的深度节点）；折叠 Set 经 provide/inject 整棵根树共享、箭头/按钮组 `@dblclick.stop` 防误触；目录名 title 提示双击用法。**关键坑：`<script setup>` 顶层 `const Symbol(...)` 编译进 setup() 每实例新建，父子 inject key 永不相等且静默落空不告警——provide/inject key 必须用字符串**（诊断：vnode setupState 两层集合对比 + `window.__ftLog` 打点 + fetch Vite 编译产物实锤）。typecheck/build/143 pytest 全绿；5173 冒烟五场景全通过；codereview 0 致命。纯前端、刷新即生效。
 1. **外部目录关联：同名挂载目录 + 树形目标选择器（v16，2026-10-25）**——详见 [`.handoff/handoff-20261025-204604.md`](./handoff-20261025-204604.md)。要点：磁盘目录关联=库内同名目录挂载（重名 `x (2)`）、树形选择器（通用库/项目/目录全层级）、直接挂项目一级/通用顶层、开关关=旧直索语义、unlink 保守清理空挂载树、迁移 0009 `mount_folder`；143 pytest + 5173 全链路冒烟全绿；**需完全重启桌面应用（0006–0009）**。
 1. **预览翻页改边缘圆形悬浮按钮（v15，2026-10-25）**——用户：「加这种图标不是更好吗 你把上下页放右上角 操作起来没这么方便啊」+ 白圆钮参考图。头部移除「← 上一项 / 下一项 →」文字按钮（右上角仅留 `n / total` 指示），媒体区左右边缘加 44px 白底毛玻璃圆形描边箭头（`left-3 / right-3 top-1/2 z-10`、`bg-white/85 shadow-lg active:scale-95`、`aria-label`）；滚动容器外包 relative 包装 + 容器 `absolute inset-0` 实现**视口锚定**（原始尺寸平移不滚走）；`total > 1` 门控与键盘/跨分页逻辑不变。typecheck/build/135 pytest 全绿；5173 冒烟（几何 44×44/边缘 12px/垂直居中、点击切换 `2 / 55`↔`1 / 55`、单图隐藏、截图目检风格一致）全通过；codereview 0 致命。坑：模板加包装 div 忘补闭合 → `[vite:vue] missing end tag` 且行号指向根节点（改嵌套先 build）。详见 [`.handoff/handoff-20261025-200229.md`](./handoff-20261025-200229.md)。
@@ -566,7 +576,17 @@ npm run package:win
 
 ## 12. 迭代记录
 
-### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 外部关联目录「全部刷新」）
+### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · RD 品牌图标全套接线）
+
+- **Git 分支 / 提交：** `main` 本地 1 代码提交 + docs 提交，连同积压提交未推送。
+- **开发目标：** 用户：设计项目 Logo 用于桌面端，先排查替换点位与格式清单并确认「你可以先改好。图标就以 RD 这样来设计，比如 zcode 的图标也很简单」（附 ZCode 深色字母 tile 参考图）。
+- **实际交付：** 见 [`.handoff/handoff-20261025-222500.md`](./handoff-20261025-222500.md)。设计=深色垂直渐变（#3A3A42→#18181E）圆角方块 tile + 白色 Arial Bold Italic「RD」。`scripts/generate-icons.py`（新，Pillow）一次渲染并导出全套入库：`build/icon.ico`（16–256）、`apps/desktop/assets/icon.png`（512）、`apps/desktop/assets/drag-icon.png`（64）、`public/favicon.ico`+`favicon-32.png`、`brand/logo-1024.png` 母版。接线：`package.json` `build.win.icon`；`main.cjs` `BrowserWindow.icon` + `setAppUserModelId("com.ryandam.desktop")` + 拖拽图标换真实 PNG；`index.html` favicon 双链接；`AppSidebar.vue` 品牌位换 32px 内联 SVG RD 标识（role=img+aria）。后端零改动。
+- **修改文件：** `package.json`、`index.html`、`apps/desktop/main.cjs`、`apps/web/src/components/AppSidebar.vue`；新增 `scripts/generate-icons.py`、`brand/`、`build/`、`public/`、`apps/desktop/assets/`。
+- **运行验证：** node --check ✅ / typecheck ✅ / build:web ✅ 3.46s（产物确认 favicon 重写为 `./` 相对路径+复制 dist）/ pytest ✅ **143** / `npx electron-builder --win --dir` 打包成功，PowerShell 提取 `Ryan_DAM.exe` 内嵌图标目检=RD tile（非 Electron 默认）✅，验证后清理 win-unpacked / 16/24/32/64 小尺寸放大目检可辨 / 5173 两 favicon 200+正确 MIME。
+- **未完成 / 已知问题：** 覆盖安装同名 exe 后资源管理器旧图标残留=Windows 图标缓存（`ie4uinitcache -refresh`），非打包缺陷；SVG 标识用文本渲染（Segoe UI 斜体），极端字体缺失环境回退系统字体（不影响位图图标）；NSIS 安装向导位图（installerSidebar/Header BMP）未做——默认即可，用户点名再加。
+- **下一步第一任务（1–3 个）：** ①**用户完全重启桌面应用**：一并验收 0006–0009 迁移 + 新窗口/任务栏/exe 图标（任务栏应显示 RD 而非 Electron 默认蓝原子）；②票 21 正式资产拖出直接复用 `assets/drag-icon.png`；③全部通过后统一 `git push`。
+
+### 上一迭代（更新日期 2026-10-25，ZCode 会话 · 外部关联目录「全部刷新」）
 
 - **Git 分支 / 提交：** `main` 本地 `2414f77`（web）+ 文档提交，连同积压提交未推送。
 - **开发目标：** 用户：「这个外部关联目录 加一个全部刷新的功能和标识吧 现在只能一个一个刷新」（侧栏每行悬停才有单刷按钮）。
