@@ -20,6 +20,7 @@ import { useDialogFlows } from "./composables/useDialogFlows";
 import { useFolderDelete } from "./composables/useFolderDelete";
 import { useProjectDelete } from "./composables/useProjectDelete";
 import { useTrashPreview } from "./composables/useTrashPreview";
+import { useSidebarResize } from "./composables/useSidebarResize";
 
 import type { ExternalSource, FolderEditPayload, FolderNode } from "./api/types";
 import {
@@ -54,6 +55,15 @@ type TargetDialogRequest =
 
 const targetDialog = ref<TargetDialogRequest | null>(null);
 const showStage0 = ref(false);
+
+// 侧栏可拖拽宽度：拖拽期间直接改布局根节点的 --sidebar-w CSS 变量，松手才持久化
+const layoutEl = ref<HTMLElement | null>(null);
+const {
+  initialWidth: sidebarWidth,
+  onPointerDown: onSidebarResizeStart,
+  onKeyDown: onSidebarResizeKey,
+  onDoubleClick: resetSidebarWidth
+} = useSidebarResize(layoutEl);
 const showSettingsDialog = ref(false);
 const activeScope = ref<"general" | "project">("general");
 const activeProjectId = ref<number | null>(null);
@@ -553,7 +563,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-screen overflow-hidden bg-canvas text-ink">
+  <div ref="layoutEl" class="flex h-screen overflow-hidden bg-canvas text-ink" :style="{ '--sidebar-w': sidebarWidth + 'px' }">
     <!-- 侧边栏子组件（含标签折叠/展开与渐进式展示） -->
     <AppSidebar
       :active-scope="activeScope"
@@ -578,6 +588,22 @@ onUnmounted(() => {
       @delete-tag="(id, name) => askDeleteTag(id, name)"
       @open-settings="showSettingsDialog = true"
     />
+
+    <!-- 侧栏宽度调节把手：指针拖拽 1:1 跟手，键盘 ←/→ 步进、Home 复位、双击复位 -->
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="拖拽调节侧栏宽度"
+      tabindex="0"
+      class="group/sep relative z-30 -mx-1 w-2 shrink-0 cursor-col-resize touch-none outline-none"
+      @pointerdown="onSidebarResizeStart"
+      @keydown="onSidebarResizeKey"
+      @dblclick="resetSidebarWidth"
+    >
+      <div
+        class="absolute inset-y-0 left-1/2 w-[3px] -translate-x-1/2 rounded-full bg-transparent transition-colors duration-150 group-hover/sep:bg-accent/35 group-focus/sep:bg-accent/50 group-active/sep:bg-accent/60"
+      />
+    </div>
 
     <div class="flex min-w-0 flex-1 flex-col">
       <!-- 顶栏子组件（含搜索防抖、筛选弹层、排序与导入） -->

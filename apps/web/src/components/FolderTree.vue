@@ -31,10 +31,10 @@ function toggle(node: FolderNode): void {
 </script>
 
 <template>
-  <ul class="space-y-0.5">
+  <ul class="space-y-px">
     <li v-for="node in nodes" :key="node.id">
       <div
-        class="group flex h-7 items-center gap-1.5 rounded-md px-2 transition-colors duration-100"
+        class="group flex h-6 items-center gap-1 rounded-md px-1.5 transition-colors duration-100"
         :class="[
           depth === 0 ? 'text-[13px]' : 'text-xs text-ink/80',
           activeId === node.id
@@ -70,7 +70,7 @@ function toggle(node: FolderNode): void {
 
         <!-- 目录名称 + 锁定徽记 -->
         <span class="flex min-w-0 flex-1 items-center gap-1">
-          <span class="truncate">{{ node.name }}</span>
+          <span class="truncate" :title="node.name">{{ node.name }}</span>
           <span v-if="node.locked" class="shrink-0 text-amber-500" title="已锁定：该文件夹不会被删除">
             <SidebarIcon name="lock" class="h-3 w-3" />
           </span>
@@ -105,7 +105,7 @@ function toggle(node: FolderNode): void {
       </div>
 
       <!-- 子目录递归缩进 -->
-      <div v-if="node.children.length > 0 && !collapsed.has(node.id)" class="ml-3.5 border-l border-line/70 pl-1.5">
+      <div v-if="node.children.length > 0 && !collapsed.has(node.id)" class="ml-2 border-l border-line/70 pl-1">
         <FolderTree
           :nodes="node.children"
           :active-id="activeId"
