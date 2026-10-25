@@ -42,6 +42,7 @@ import {
   loadTags,
   loadTrash,
   moveAssetToFolder,
+  refreshAllExternalSources,
   rescanExternalSource,
   toggleAssetSelection,
   unlinkExternalSource,
@@ -634,6 +635,7 @@ onUnmounted(() => {
       @delete-project="(id, name) => askDeleteProject(id, name)"
       @link-external="startLinkExternal"
       @rescan-external="rescanExternalSource"
+      @refresh-all-external="refreshAllExternalSources"
       @unlink-external="askUnlinkExternal"
       @create-tag="dialog = { kind: 'tag-create' }"
       @rename-tag="(id, name) => (dialog = { kind: 'tag-rename', tagId: id, initial: name })"

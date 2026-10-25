@@ -40,6 +40,7 @@ export interface LibraryState {
   selectedAssetIds: number[];
   trash: TrashItem[];
   externalSources: ExternalSource[];
+  externalScanning: number[];
 }
 
 export const library = reactive<LibraryState>({
@@ -55,7 +56,8 @@ export const library = reactive<LibraryState>({
   tags: [],
   selectedAssetIds: [],
   trash: [],
-  externalSources: []
+  externalSources: [],
+  externalScanning: []
 });
 
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -543,6 +545,8 @@ export async function linkExternalSource(
 }
 
 export async function rescanExternalSource(sourceId: number): Promise<void> {
+  if (library.externalScanning.includes(sourceId)) return;
+  library.externalScanning.push(sourceId);
   try {
     const scan = await api.scanExternalSource(sourceId);
     await Promise.all([loadExternalSources(), refreshCurrentAssetsQuiet()]);
@@ -554,7 +558,41 @@ export async function rescanExternalSource(sourceId: number): Promise<void> {
     notify("success", parts.length ? `重新扫描完成：${parts.join("，")}。` : "重新扫描完成：没有变化。");
   } catch (error) {
     notify("error", errText(error));
+  } finally {
+    library.externalScanning = library.externalScanning.filter((id) => id !== sourceId);
   }
+}
+
+// 全部刷新：串行重扫所有外部关联目录（复用单源扫描端点，互不阻塞 UI），
+// 汇总各目录的新增/变更/失效/恢复；个别目录失败不中断其余目录。
+export async function refreshAllExternalSources(): Promise<void> {
+  if (library.externalScanning.length > 0 || library.externalSources.length === 0) return;
+  const targets = [...library.externalSources];
+  const totals = { added: 0, updated: 0, missing: 0, reactivated: 0 };
+  let failed = 0;
+  for (const source of targets) {
+    library.externalScanning = [...library.externalScanning, source.id];
+    try {
+      const scan = await api.scanExternalSource(source.id);
+      totals.added += scan.added;
+      totals.updated += scan.updated;
+      totals.missing += scan.missing;
+      totals.reactivated += scan.reactivated;
+    } catch {
+      failed += 1;
+    } finally {
+      library.externalScanning = library.externalScanning.filter((id) => id !== source.id);
+    }
+    await Promise.all([loadExternalSources(), refreshCurrentAssetsQuiet()]);
+  }
+  const parts: string[] = [];
+  if (totals.added) parts.push(`新增 ${totals.added}`);
+  if (totals.updated) parts.push(`变更 ${totals.updated}`);
+  if (totals.missing) parts.push(`失效 ${totals.missing}`);
+  if (totals.reactivated) parts.push(`恢复 ${totals.reactivated}`);
+  const failedText = failed ? `，${failed} 个目录扫描失败` : "";
+  const changeText = parts.length ? `，${parts.join("，")}` : "，均无变化";
+  notify(failed ? "error" : "success", `全部刷新完成：共 ${targets.length} 个目录${changeText}${failedText}。`);
 }
 
 export async function unlinkExternalSource(sourceId: number): Promise<boolean> {

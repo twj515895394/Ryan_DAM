@@ -26,6 +26,7 @@ const emit = defineEmits<{
   (e: "delete-project", id: number, name: string): void;
   (e: "link-external"): void;
   (e: "rescan-external", id: number): void;
+  (e: "refresh-all-external"): void;
   (e: "unlink-external", source: ExternalSource): void;
   (e: "create-tag"): void;
   (e: "rename-tag", id: number, name: string): void;
@@ -197,13 +198,24 @@ function toggleTagSelection(tagId: number): void {
       <section class="mt-2.5 space-y-0.5">
         <div class="flex items-center justify-between px-2 pb-0.5 pt-0.5">
           <span class="text-[11px] font-semibold uppercase tracking-wider text-muted/70">外部关联目录</span>
-          <button
-            class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-black/5 hover:text-accent"
-            title="关联外部目录（索引现有文件，不复制源文件）"
-            @click="emit('link-external')"
-          >
-            <SidebarIcon name="plus" class="h-3 w-3" />
-          </button>
+          <span class="flex items-center gap-0.5">
+            <button
+              v-if="library.externalSources.length > 0"
+              class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-black/5 hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+              title="全部刷新（重新扫描所有外部关联目录，检测新增/变更/失效）"
+              :disabled="library.externalScanning.length > 0"
+              @click="emit('refresh-all-external')"
+            >
+              <SidebarIcon name="refresh" class="h-3 w-3" :class="library.externalScanning.length > 0 ? 'animate-spin' : ''" />
+            </button>
+            <button
+              class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-black/5 hover:text-accent"
+              title="关联外部目录（索引现有文件，不复制源文件）"
+              @click="emit('link-external')"
+            >
+              <SidebarIcon name="plus" class="h-3 w-3" />
+            </button>
+          </span>
         </div>
         <div v-if="library.externalSources.length === 0" class="px-2 py-0.5 text-[11px] leading-4 text-muted/60">
           关联外部文件夹后，可在此统一检索和预览，不占用额外磁盘空间
@@ -218,11 +230,16 @@ function toggleTagSelection(tagId: number): void {
             <span class="text-[11px] text-muted">{{ source.asset_count }}</span>
             <span class="hidden shrink-0 items-center gap-0.5 group-hover/src:flex">
               <button
-                class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-accent hover:shadow-xs"
+                class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-accent hover:shadow-xs disabled:cursor-not-allowed"
                 title="重新扫描（检测新增/变更/失效）"
+                :disabled="library.externalScanning.length > 0"
                 @click.stop="emit('rescan-external', source.id)"
               >
-                <SidebarIcon name="refresh" class="h-3 w-3" />
+                <SidebarIcon
+                  name="refresh"
+                  class="h-3 w-3"
+                  :class="library.externalScanning.includes(source.id) ? 'animate-spin text-accent' : ''"
+                />
               </button>
               <button
                 class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-rose-600 hover:shadow-xs"
