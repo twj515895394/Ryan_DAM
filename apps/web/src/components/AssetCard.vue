@@ -173,17 +173,39 @@ onUnmounted(clear);
         v-if="asset.source_type === 'external'"
         class="absolute right-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 shadow-xs"
       >外部链接</span>
-      <span
-        v-if="asset.status === 'missing'"
-        class="absolute bottom-1.5 left-2 rounded bg-rose-600/90 px-1.5 py-0.5 text-[10px] font-medium text-white"
-        title="源文件缺失，重新扫描外部目录可检测恢复"
-      >失效</span>
-      <button
-        v-if="canUsePrompt"
-        class="absolute bottom-1.5 left-1.5 hidden rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-accent group-hover:block"
-        :title="asset.has_prompt ? '查看提示词' : '添加提示词'"
-        @click.stop="emit('prompt', asset)"
-      >{{ asset.has_prompt ? "查看提示词" : "+ 提示词" }}</button>
+      <!-- 左下角信息/操作芯片行：失效状态与提示词入口同排，互不遮挡 -->
+      <div class="absolute bottom-1.5 left-1.5 z-10 flex items-center gap-1.5">
+        <span
+          v-if="asset.status === 'missing'"
+          class="rounded-full bg-rose-600/90 px-2 py-1 text-[10px] font-medium leading-none text-white"
+          title="源文件缺失，重新扫描外部目录可检测恢复"
+        >失效</span>
+        <button
+          v-if="canUsePrompt"
+          type="button"
+          class="flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-1 text-[10px] font-medium leading-none text-white shadow-xs backdrop-blur-sm transition-all duration-150 hover:bg-black/75"
+          :class="asset.has_prompt ? '' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'"
+          :title="asset.has_prompt ? '查看提示词' : '添加提示词'"
+          @click.stop="emit('prompt', asset)"
+        >
+          <svg
+            class="h-3 w-3 shrink-0"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M6.4 1.9 7.6 5.1 10.8 6.3 7.6 7.5 6.4 10.7 5.2 7.5 2 6.3 5.2 5.1Z" />
+            <path d="M11.4 9.9 12 11.5 13.6 12.1 12 12.7 11.4 14.3 10.8 12.7 9.2 12.1 10.8 11.5Z" />
+          </svg>
+          <span :class="asset.has_prompt ? 'hidden group-hover:inline' : ''">{{
+            asset.has_prompt ? "查看提示词" : "+ 提示词"
+          }}</span>
+        </button>
+      </div>
     </div>
     <div class="px-3 py-2.5">
       <p class="truncate text-sm font-medium" :title="asset.name">{{ asset.name }}</p>
