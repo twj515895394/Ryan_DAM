@@ -7,6 +7,7 @@ import type {
   FolderCreatePayload,
   FolderNode,
   FolderOut,
+  FolderStats,
   ImportJob,
   Project,
   ScanResult,
@@ -103,7 +104,9 @@ export const api = {
     request<FolderOut>("/api/v1/folders", { method: "POST", json: payload }),
   renameFolder: (id: number, name: string) =>
     request<FolderOut>(`/api/v1/folders/${id}`, { method: "PATCH", json: { name } }),
-  deleteFolder: (id: number) => request<void>(`/api/v1/folders/${id}`, { method: "DELETE" }),
+  getFolderStats: (id: number) => request<FolderStats>(`/api/v1/folders/${id}/stats`),
+  deleteFolder: (id: number, cascade = false) =>
+    request<void>(`/api/v1/folders/${id}${cascade ? "?cascade=true" : ""}`, { method: "DELETE" }),
 
   createImport: (paths: string[], folderId: number, allowDuplicates = false) =>
     request<ImportJob>("/api/v1/imports", {

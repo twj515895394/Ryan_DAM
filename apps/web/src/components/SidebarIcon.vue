@@ -14,7 +14,11 @@ defineProps<{
     | "edit"
     | "close"
     | "refresh"
-    | "search";
+    | "search"
+    | "filter"
+    | "arrow-up"
+    | "arrow-down"
+    | "check";
 }>();
 </script>
 
@@ -118,6 +122,28 @@ defineProps<{
     <template v-else-if="name === 'search'">
       <circle cx="11" cy="11" r="6.5" />
       <path d="m20 20-4.2-4.2" />
+    </template>
+
+    <!-- 漏斗筛选 -->
+    <template v-else-if="name === 'filter'">
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    </template>
+
+    <!-- 箭头向上 -->
+    <template v-else-if="name === 'arrow-up'">
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <polyline points="5 12 12 5 19 12" />
+    </template>
+
+    <!-- 箭头向下 -->
+    <template v-else-if="name === 'arrow-down'">
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <polyline points="19 12 12 19 5 12" />
+    </template>
+
+    <!-- 勾选对号 -->
+    <template v-else-if="name === 'check'">
+      <polyline points="20 6 9 17 4 12" />
     </template>
   </svg>
 </template>

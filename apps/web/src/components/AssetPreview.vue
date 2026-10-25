@@ -3,12 +3,25 @@ import { computed, onUnmounted, ref, watch } from "vue";
 
 import { api } from "../api/client";
 import AssetIcon from "./AssetIcon.vue";
-import SidebarIcon from "./SidebarIcon.vue";
+import AssetTagEditor from "./AssetTagEditor.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
-import { createTag, library, updateAssetTags } from "../stores/library";
-import type { AssetOut } from "../api/types";
+import PromptModal from "./PromptModal.vue";
+import { renderMarkdown } from "../utils/markdown";
+import type { AssetOut, TrashItem } from "../api/types";
+import type { ConfirmIntent } from "./ConfirmDialog.vue";
+import type { MoveFolderGroup } from "../composables/useFolderOptions";
 
-const props = defineProps<{ asset: AssetOut; moveOptions: { id: number; label: string }[]; autoOpenPrompt: boolean }>();
+const props = withDefaults(
+  defineProps<{
+    asset: AssetOut;
+    moveOptions?: { id: number; label: string }[];
+    moveGroups?: MoveFolderGroup[];
+    autoOpenPrompt: boolean;
+    trashMode?: boolean;
+    trashMeta?: TrashItem | null;
+  }>(),
+  { trashMode: false, trashMeta: null }
+);
 
 const emit = defineEmits<{
   (e: "close"): void;
@@ -19,6 +32,8 @@ const emit = defineEmits<{
   (e: "move", assetId: number, folderId: number): void;
   (e: "convert", assetId: number): void;
   (e: "prompt-opened"): void;
+  (e: "restore", assetId: number): void;
+  (e: "permanent-delete", assetId: number): void;
 }>();
 
 const objectUrl = ref<string | null>(null);
@@ -65,151 +80,6 @@ async function openInSystemApp(): Promise<void> {
   }
 }
 
-const tagQuery = ref("");
-const isTagDropdownOpen = ref(false);
-const isTagSubmitting = ref(false);
-const tagInputRef = ref<HTMLInputElement | null>(null);
-const tagInputContainerRef = ref<HTMLElement | null>(null);
-
-const trimmedTagQuery = computed(() => tagQuery.value.trim());
-
-const matchedExactTag = computed(() => {
-  if (!trimmedTagQuery.value) return null;
-  const q = trimmedTagQuery.value.toLowerCase();
-  return library.tags.find((t) => t.name.toLowerCase() === q) ?? null;
-});
-
-const isMatchedTagAlreadyAttached = computed(() => {
-  if (!matchedExactTag.value) return false;
-  return props.asset.tags.some((t) => t.id === matchedExactTag.value?.id);
-});
-
-const isNewTagCandidate = computed(() => {
-  return trimmedTagQuery.value.length > 0 && matchedExactTag.value === null;
-});
-
-const filteredTags = computed(() => {
-  const q = trimmedTagQuery.value.toLowerCase();
-  const list = q
-    ? library.tags.filter((t) => t.name.toLowerCase().includes(q))
-    : library.tags;
-  return list.map((tag) => ({
-    ...tag,
-    isAttached: props.asset.tags.some((t) => t.id === tag.id)
-  }));
-});
-
-const canSubmitTag = computed(() => {
-  if (isTagSubmitting.value) return false;
-  if (isNewTagCandidate.value) return true;
-  if (matchedExactTag.value && !isMatchedTagAlreadyAttached.value) return true;
-  return false;
-});
-
-const submitButtonLabel = computed(() => {
-  if (isTagSubmitting.value) return "处理中…";
-  if (isNewTagCandidate.value) return "新建并打标";
-  if (isMatchedTagAlreadyAttached.value) return "已打标";
-  return "添加";
-});
-
-async function handleTagSubmit(): Promise<void> {
-  if (!canSubmitTag.value || isTagSubmitting.value) return;
-  const name = trimmedTagQuery.value;
-  if (!name) return;
-
-  isTagSubmitting.value = true;
-  try {
-    let targetTagId: number | null = null;
-    if (matchedExactTag.value) {
-      targetTagId = matchedExactTag.value.id;
-    } else {
-      const created = await createTag(name);
-      if (!created) return;
-      targetTagId = created.id;
-    }
-
-    if (targetTagId !== null) {
-      const currentIds = props.asset.tags.map((t) => t.id);
-      if (!currentIds.includes(targetTagId)) {
-        const nextTagIds = [...currentIds, targetTagId];
-        const ok = await libraryUpdateTags(nextTagIds);
-        if (ok) {
-          tagQuery.value = "";
-          isTagDropdownOpen.value = false;
-        }
-      } else {
-        tagQuery.value = "";
-        isTagDropdownOpen.value = false;
-      }
-    }
-  } finally {
-    isTagSubmitting.value = false;
-  }
-}
-
-async function selectExistingTag(tagId: number): Promise<void> {
-  if (isTagSubmitting.value) return;
-  if (props.asset.tags.some((t) => t.id === tagId)) return;
-
-  isTagSubmitting.value = true;
-  try {
-    const nextTagIds = [...props.asset.tags.map((t) => t.id), tagId];
-    const ok = await libraryUpdateTags(nextTagIds);
-    if (ok) {
-      tagQuery.value = "";
-      isTagDropdownOpen.value = false;
-    }
-  } finally {
-    isTagSubmitting.value = false;
-  }
-}
-
-async function removeTag(tagId: number): Promise<void> {
-  await libraryUpdateTags(props.asset.tags.filter((t) => t.id !== tagId).map((t) => t.id));
-}
-
-async function libraryUpdateTags(tagIds: number[]): Promise<boolean> {
-  const ok = await updateAssetTags(props.asset.id, tagIds);
-  if (ok) {
-    props.asset.tags = tagIds
-      .map((id) => library.tags.find((t) => t.id === id))
-      .filter((t): t is NonNullable<typeof t> => Boolean(t))
-      .map((t) => ({ id: t.id, name: t.name, color: t.color }));
-    return true;
-  }
-  return false;
-}
-
-function onDocumentClick(e: MouseEvent | PointerEvent): void {
-  if (
-    tagInputContainerRef.value &&
-    !tagInputContainerRef.value.contains(e.target as Node)
-  ) {
-    isTagDropdownOpen.value = false;
-  }
-}
-
-watch(isTagDropdownOpen, (open) => {
-  if (open) {
-    window.addEventListener("pointerdown", onDocumentClick);
-  } else {
-    window.removeEventListener("pointerdown", onDocumentClick);
-  }
-});
-
-watch(
-  () => props.asset.id,
-  () => {
-    tagQuery.value = "";
-    isTagDropdownOpen.value = false;
-  }
-);
-
-onUnmounted(() => {
-  window.removeEventListener("pointerdown", onDocumentClick);
-});
-
 const typeLabel = computed(() => {
   switch (props.asset.asset_type) {
     case "image": return "图片";
@@ -251,11 +121,20 @@ const updatedAtLabel = computed(() => {
   return date.toLocaleString("zh-CN", { hour12: false });
 });
 
+/** 回收站预览：删除时间来自 TrashItem.deleted_at（UTC 无时区后缀，补 Z 再本地化）。 */
+const deletedAtLabel = computed(() => {
+  const raw = props.trashMeta?.deleted_at;
+  if (!raw) return "—";
+  const date = new Date(raw + (raw.endsWith("Z") ? "" : "Z"));
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleString("zh-CN", { hour12: false });
+});
+
 interface PreviewConfirmState {
   title: string;
   description: string;
   confirmText: string;
-  intent: "danger" | "warning" | "default";
+  intent: ConfirmIntent;
   action: () => void;
 }
 
@@ -306,27 +185,14 @@ function askConvert(): void {
   };
 }
 
-// ── 提示词（票 20）────────────────────────────────────────────
-
+// ── 提示词 ────────────────────────────────────────────────────
 const promptModalOpen = ref(false);
-const promptLoading = ref(false);
-const promptSaving = ref(false);
-const promptEditing = ref(false);
-const promptError = ref("");
-const promptText = ref<string | null>(null);
-const promptDraft = ref("");
-const promptCopied = ref(false);
-let promptCopyTimer: ReturnType<typeof setTimeout> | null = null;
-
 const canUsePrompt = computed(() => props.asset.asset_type === "image" || props.asset.asset_type === "video");
 
 watch(
   () => props.asset.id,
   () => {
     promptModalOpen.value = false;
-    promptEditing.value = false;
-    promptError.value = "";
-    promptText.value = null;
   }
 );
 
@@ -334,66 +200,15 @@ watch(
   () => props.autoOpenPrompt,
   (value) => {
     if (value && canUsePrompt.value) {
-      void openPromptModal();
+      promptModalOpen.value = true;
       emit("prompt-opened");
     }
   },
   { immediate: true }
 );
 
-async function openPromptModal(): Promise<void> {
-  promptModalOpen.value = true;
-  promptError.value = "";
-  promptEditing.value = !props.asset.has_prompt;
-  promptDraft.value = "";
-  promptText.value = null;
-  if (!props.asset.has_prompt) return;
-  promptLoading.value = true;
-  try {
-    const result = await api.getAssetPrompt(props.asset.id);
-    promptText.value = result.prompt_text ?? "";
-  } catch (error) {
-    promptError.value = error instanceof Error ? error.message : "提示词加载失败";
-  } finally {
-    promptLoading.value = false;
-  }
-}
-
-function startPromptEdit(): void {
-  promptDraft.value = promptText.value ?? "";
-  promptEditing.value = true;
-  promptError.value = "";
-}
-
-async function savePrompt(): Promise<void> {
-  promptSaving.value = true;
-  promptError.value = "";
-  try {
-    const result = await api.setAssetPrompt(props.asset.id, promptDraft.value || null);
-    promptText.value = result.prompt_text;
-    props.asset.has_prompt = result.has_prompt;
-    promptEditing.value = false;
-    if (!result.has_prompt) promptModalOpen.value = false;
-  } catch (error) {
-    // keep the draft and stay in edit mode so nothing the user typed is lost
-    promptError.value = error instanceof Error ? error.message : "保存失败";
-  } finally {
-    promptSaving.value = false;
-  }
-}
-
-async function copyPrompt(): Promise<void> {
-  const text = promptText.value ?? "";
-  try {
-    await navigator.clipboard.writeText(text);
-    promptCopied.value = true;
-    if (promptCopyTimer) clearTimeout(promptCopyTimer);
-    promptCopyTimer = setTimeout(() => {
-      promptCopied.value = false;
-    }, 2000);
-  } catch {
-    promptError.value = "复制失败，请手动选择文本复制。";
-  }
+function onPromptSaved(hasPrompt: boolean): void {
+  props.asset.has_prompt = hasPrompt;
 }
 
 function clearContent(): void {
@@ -402,61 +217,6 @@ function clearContent(): void {
     objectUrl.value = null;
   }
   contentText.value = null;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function renderMarkdownInline(text: string): string {
-  return text
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-    .replace(/`([^`]+)`/g, '<code class="rounded bg-canvas px-1 py-0.5 font-mono text-xs">$1</code>');
-}
-
-// Safe subset renderer: the whole source is HTML-escaped FIRST, so no markup
-// can inject tags; links intentionally stay plain text (no remote loads).
-function renderMarkdown(source: string): string {
-  const escaped = escapeHtml(source);
-  const out: string[] = [];
-  let inCode = false;
-  for (const line of escaped.split(/\r?\n/)) {
-    if (line.trim().startsWith("```")) {
-      out.push(inCode ? "</code></pre>" : '<pre class="overflow-x-auto rounded-xl bg-canvas p-3"><code>');
-      inCode = !inCode;
-      continue;
-    }
-    if (inCode) {
-      out.push(line);
-      continue;
-    }
-    const heading = line.match(/^(#{1,4})\s+(.*)$/);
-    if (heading) {
-      const level = heading[1].length + 1;
-      out.push(`<h${level} class="mt-4 mb-2 font-semibold">` + renderMarkdownInline(heading[2]) + `</h${level}>`);
-      continue;
-    }
-    if (/^\s*[-*]\s+/.test(line)) {
-      out.push('<li class="ml-5 list-disc">' + renderMarkdownInline(line.replace(/^\s*[-*]\s+/, "")) + "</li>");
-      continue;
-    }
-    if (/^\s*&gt;\s?/.test(line)) {
-      out.push('<blockquote class="border-l-2 border-line pl-3 text-muted">' + renderMarkdownInline(line.replace(/^\s*&gt;\s?/, "")) + "</blockquote>");
-      continue;
-    }
-    if (!line.trim()) {
-      out.push("<br>");
-      continue;
-    }
-    out.push("<p>" + renderMarkdownInline(line) + "</p>");
-  }
-  if (inCode) out.push("</code></pre>");
-  return out.join("\n");
 }
 
 async function loadContent(): Promise<void> {
@@ -513,7 +273,6 @@ watch(() => props.asset.id, loadContent, { immediate: true });
 onUnmounted(() => {
   window.removeEventListener("keydown", onKeydown);
   clearContent();
-  if (promptCopyTimer) clearTimeout(promptCopyTimer);
 });
 </script>
 
@@ -640,139 +399,11 @@ onUnmounted(() => {
             <div class="flex justify-between gap-3"><dt class="shrink-0 text-muted">大小</dt><dd>{{ sizeLabel }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="shrink-0 text-muted">尺寸</dt><dd>{{ dimensionsLabel }}</dd></div>
             <div v-if="durationLabel" class="flex justify-between gap-3"><dt class="shrink-0 text-muted">时长</dt><dd>{{ durationLabel }}</dd></div>
-            <div class="flex justify-between gap-3"><dt class="shrink-0 text-muted">修改时间</dt><dd class="text-right">{{ updatedAtLabel }}</dd></div>
+            <div v-if="!trashMode" class="flex justify-between gap-3"><dt class="shrink-0 text-muted">修改时间</dt><dd class="text-right">{{ updatedAtLabel }}</dd></div>
           </dl>
-          <div class="mt-4 border-t border-line pt-3">
-            <div class="flex items-center justify-between">
-              <p class="text-xs font-medium text-muted">标签</p>
-              <span v-if="asset.tags.length > 0" class="text-[11px] text-muted">已添加 {{ asset.tags.length }} 项</span>
-            </div>
-
-            <!-- 已添加标签药丸 -->
-            <div v-if="asset.tags.length > 0" class="mt-2 flex flex-wrap gap-1.5">
-              <span
-                v-for="tag in asset.tags"
-                :key="tag.id"
-                class="inline-flex items-center gap-1 rounded-md bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent transition"
-              >
-                <span>{{ tag.name }}</span>
-                <button
-                  type="button"
-                  class="rounded p-0.5 text-accent/60 transition hover:bg-accent/20 hover:text-accent"
-                  title="移除标签"
-                  @click="removeTag(tag.id)"
-                >
-                  <SidebarIcon name="close" class="h-2.5 w-2.5" />
-                </button>
-              </span>
-            </div>
-            <p v-else class="mt-1.5 text-xs text-muted">暂无标签</p>
-
-            <!-- 快捷搜索 / 新建打标输入组件 -->
-            <div ref="tagInputContainerRef" class="relative mt-2.5">
-              <div class="flex gap-1.5">
-                <div class="relative min-w-0 flex-1">
-                  <input
-                    ref="tagInputRef"
-                    v-model="tagQuery"
-                    type="text"
-                    placeholder="搜索标签，或输入新标签…"
-                    class="w-full rounded-lg border border-line bg-white px-2.5 py-1.5 pr-7 text-xs text-ink outline-none transition placeholder:text-muted/60 focus:border-accent focus:ring-1 focus:ring-accent/20"
-                    @focus="isTagDropdownOpen = true"
-                    @keydown.enter.prevent="handleTagSubmit"
-                    @keydown.esc="isTagDropdownOpen = false; tagInputRef?.blur()"
-                  />
-                  <button
-                    v-if="tagQuery"
-                    type="button"
-                    class="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-muted/60 hover:text-ink"
-                    title="清空"
-                    @click="tagQuery = ''; isTagDropdownOpen = true; tagInputRef?.focus()"
-                  >
-                    <SidebarIcon name="close" class="h-3 w-3" />
-                  </button>
-                  <button
-                    v-else
-                    type="button"
-                    class="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-muted/50 hover:text-ink"
-                    title="展开标签列表"
-                    @click="isTagDropdownOpen = !isTagDropdownOpen; if (isTagDropdownOpen) tagInputRef?.focus()"
-                  >
-                    <SidebarIcon name="chevron-right" class="h-3 w-3 transition-transform duration-150" :class="isTagDropdownOpen ? 'rotate-90' : ''" />
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  class="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-40"
-                  :class="isNewTagCandidate ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-accent hover:bg-blue-700'"
-                  :disabled="!canSubmitTag || isTagSubmitting"
-                  @click="handleTagSubmit"
-                >
-                  <span class="flex items-center gap-1">
-                    <SidebarIcon v-if="isNewTagCandidate" name="plus" class="h-3 w-3" />
-                    <span>{{ submitButtonLabel }}</span>
-                  </span>
-                </button>
-              </div>
-
-              <!-- 下拉推荐与新建面板 -->
-              <div
-                v-if="isTagDropdownOpen"
-                class="absolute left-0 right-0 top-full z-40 mt-1 max-h-56 overflow-y-auto rounded-xl border border-line bg-white p-1 shadow-lg"
-              >
-                <!-- 快捷选项：库中不存在时直接新建并打标 -->
-                <div
-                  v-if="isNewTagCandidate"
-                  class="mb-1 rounded-lg border border-emerald-200 bg-emerald-50/70 p-1"
-                >
-                  <button
-                    type="button"
-                    class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs font-medium text-emerald-800 transition hover:bg-emerald-100/70"
-                    @click="handleTagSubmit"
-                  >
-                    <span class="flex items-center gap-1.5 truncate">
-                      <SidebarIcon name="plus" class="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                      <span class="truncate">新建并打标 “<span class="font-bold">{{ trimmedTagQuery }}</span>”</span>
-                    </span>
-                    <span class="shrink-0 rounded bg-emerald-200/80 px-1 py-0.5 text-[10px] text-emerald-800">回车创建</span>
-                  </button>
-                </div>
-
-                <!-- 匹配已有标签列表 -->
-                <div v-if="filteredTags.length > 0">
-                  <div class="px-2 py-1 text-[10px] font-semibold tracking-wider text-muted/70 uppercase">
-                    {{ trimmedTagQuery ? "匹配已有标签" : "标签库" }}
-                  </div>
-                  <button
-                    v-for="tag in filteredTags"
-                    :key="tag.id"
-                    type="button"
-                    class="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition"
-                    :class="tag.isAttached ? 'opacity-50 cursor-not-allowed bg-canvas/40 text-muted' : 'text-ink hover:bg-canvas hover:text-accent'"
-                    :disabled="tag.isAttached"
-                    @click="selectExistingTag(tag.id)"
-                  >
-                    <span class="flex items-center gap-1.5 truncate">
-                      <SidebarIcon name="tag" class="h-3 w-3 shrink-0 text-muted" />
-                      <span class="truncate">{{ tag.name }}</span>
-                    </span>
-                    <span v-if="tag.isAttached" class="shrink-0 text-[10px] text-muted">已添加</span>
-                    <span v-else class="shrink-0 text-[10px] text-muted/60">点击添加</span>
-                  </button>
-                </div>
-
-                <!-- 空状态提示 -->
-                <div
-                  v-else-if="!isNewTagCandidate"
-                  class="px-3 py-3 text-center text-xs text-muted"
-                >
-                  {{ trimmedTagQuery ? "无匹配标签" : (library.tags.length === 0 ? "暂无标签，输入名称即可新建" : "全部标签已添加") }}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-if="asset.source_type === 'managed' || (asset.source_type === 'external' && asset.status !== 'missing')" class="mt-4 border-t border-line pt-3">
+          <!-- 标签编辑（内联搜索 + 即时新建打标）；回收站预览不提供打标 -->
+          <AssetTagEditor v-if="!trashMode" :asset="asset" />
+          <div v-if="!trashMode && (asset.source_type === 'managed' || (asset.source_type === 'external' && asset.status !== 'missing'))" class="mt-4 border-t border-line pt-3">
             <p class="text-xs font-medium text-muted">管理</p>
             <template v-if="asset.source_type === 'managed'">
               <button
@@ -785,7 +416,24 @@ onUnmounted(() => {
                   class="min-w-0 flex-1 rounded-lg border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-accent"
                 >
                   <option :value="null">移动到…</option>
-                  <option v-for="option in moveOptions" :key="option.id" :value="option.id">{{ option.label }}</option>
+                  <template v-if="moveGroups && moveGroups.length > 0">
+                    <optgroup
+                      v-for="group in moveGroups"
+                      :key="group.id"
+                      :label="group.label"
+                    >
+                      <option
+                        v-for="option in group.options"
+                        :key="option.id"
+                        :value="option.id"
+                      >
+                        {{ option.label }}
+                      </option>
+                    </optgroup>
+                  </template>
+                  <template v-else-if="moveOptions">
+                    <option v-for="option in moveOptions" :key="option.id" :value="option.id">{{ option.label }}</option>
+                  </template>
                 </select>
                 <button
                   class="shrink-0 rounded-lg bg-accent px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
@@ -800,19 +448,41 @@ onUnmounted(() => {
               @click="askConvert"
             >转为系统托管</button>
           </div>
-          <div v-if="canUsePrompt" class="mt-4 border-t border-line pt-3">
+          <div v-if="canUsePrompt && !trashMode" class="mt-4 border-t border-line pt-3">
             <p class="text-xs font-medium text-muted">提示词</p>
             <button
               class="mt-2 w-full rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink transition hover:bg-canvas"
-              @click="openPromptModal"
+              @click="promptModalOpen = true"
             >{{ asset.has_prompt ? "查看提示词" : "添加提示词" }}</button>
           </div>
-          <div class="mt-4 border-t border-line pt-3">
+          <!-- 回收站上下文：原目录与删除时间（回收站项不提供路径与常规管理） -->
+          <div v-if="trashMode && trashMeta" class="mt-4 border-t border-line pt-3">
+            <p class="text-xs font-medium text-muted">回收站</p>
+            <dl class="mt-2 space-y-3 text-xs">
+              <div class="flex justify-between gap-3">
+                <dt class="shrink-0 text-muted">原目录</dt>
+                <dd class="truncate text-right" :title="trashMeta.original_folder">{{ trashMeta.original_folder }}</dd>
+              </div>
+              <div class="flex justify-between gap-3"><dt class="shrink-0 text-muted">删除时间</dt><dd class="text-right">{{ deletedAtLabel }}</dd></div>
+            </dl>
+          </div>
+          <div v-if="!trashMode" class="mt-4 border-t border-line pt-3">
             <p class="text-xs text-muted">路径</p>
             <p class="mt-1 break-all font-mono text-[11px] leading-5 text-muted" :title="asset.file_path">{{ asset.file_path }}</p>
           </div>
           <div class="mt-4 border-t border-line pt-3">
+            <template v-if="trashMode">
+              <button
+                class="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-accent px-3 text-sm font-medium text-white shadow-sm transition duration-100 hover:bg-blue-700 active:scale-[0.98]"
+                @click="emit('restore', asset.id)"
+              >恢复到原目录</button>
+              <button
+                class="mt-2 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-rose-200 px-3 text-sm font-medium text-rose-600 transition duration-100 hover:bg-rose-50 active:scale-[0.98]"
+                @click="emit('permanent-delete', asset.id)"
+              >永久删除</button>
+            </template>
             <button
+              v-else
               class="w-full rounded-lg border border-rose-200 px-3 py-2 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
               @click="askDelete"
             >{{ asset.source_type === "external" ? "从库中移除（不删源文件）" : "删除到回收站" }}</button>
@@ -821,59 +491,14 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <Teleport to="body">
-      <div
-        v-if="promptModalOpen"
-        class="fixed inset-0 z-[55] flex items-center justify-center bg-black/40"
-        @click.self="promptModalOpen = false"
-      >
-        <div class="w-[560px] max-w-[92vw] rounded-2xl bg-white p-5 shadow-soft">
-          <div class="flex items-center justify-between">
-            <h3 class="truncate text-sm font-semibold">提示词 · {{ asset.name }}</h3>
-            <button class="rounded-lg px-2 py-1 text-xs text-muted transition hover:bg-canvas" @click="promptModalOpen = false">关闭</button>
-          </div>
-          <p v-if="promptError" class="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{{ promptError }}</p>
-
-          <template v-if="promptEditing">
-            <textarea
-              v-model="promptDraft"
-              rows="12"
-              placeholder="粘贴完整的图片/视频提示词…"
-              class="mt-3 w-full resize-y rounded-xl border border-line bg-white px-3 py-2.5 font-mono text-xs leading-6 outline-none focus:border-accent"
-            ></textarea>
-            <p class="mt-1.5 text-[11px] text-muted">完整多行提示词，保留原始换行与特殊字符，不拆分正负提示词。</p>
-            <div class="mt-3 flex justify-end gap-2">
-              <button
-                v-if="asset.has_prompt"
-                class="rounded-lg px-3 py-1.5 text-sm text-muted transition hover:bg-canvas"
-                @click="promptEditing = false"
-              >取消</button>
-              <button
-                class="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
-                :disabled="promptSaving"
-                @click="savePrompt"
-              >{{ promptSaving ? "保存中…" : "保存" }}</button>
-            </div>
-          </template>
-
-          <template v-else>
-            <pre
-              class="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-canvas px-3 py-2.5 font-mono text-xs leading-6"
-            >{{ promptLoading ? "正在加载…" : promptText }}</pre>
-            <div class="mt-3 flex items-center justify-between">
-              <button
-                class="rounded-lg border border-line px-3 py-1.5 text-xs font-medium transition hover:bg-canvas"
-                @click="copyPrompt"
-              >{{ promptCopied ? "已复制 ✓" : "复制全文" }}</button>
-              <div class="flex gap-2">
-                <button class="rounded-lg border border-line px-3 py-1.5 text-xs font-medium transition hover:bg-canvas" @click="startPromptEdit">编辑</button>
-                <button class="rounded-lg px-3 py-1.5 text-xs text-muted transition hover:bg-canvas" @click="promptModalOpen = false">关闭</button>
-              </div>
-            </div>
-          </template>
-        </div>
-      </div>
-    </Teleport>
+    <PromptModal
+      :open="promptModalOpen"
+      :asset-id="asset.id"
+      :asset-name="asset.name"
+      :has-prompt="asset.has_prompt"
+      @close="promptModalOpen = false"
+      @saved="onPromptSaved"
+    />
 
     <ConfirmDialog
       :open="confirmDialog !== null"

@@ -33,6 +33,15 @@ export interface FolderCreatePayload {
   parent_id?: number | null;
 }
 
+export interface FolderStats {
+  folder_id: number;
+  folder_name: string;
+  subfolder_count: number;
+  asset_count: number;
+  managed_asset_count: number;
+  external_asset_count: number;
+}
+
 export interface Settings {
   managed_root: string;
   managed_root_state: "ok" | "missing" | "unavailable";
@@ -52,7 +61,7 @@ export interface Tag extends TagBrief {
 
 export interface AssetOut {
   id: number;
-  folder_id: number;
+  folder_id: number | null;
   name: string;
   extension: string | null;
   asset_type: "image" | "video" | "audio" | "document" | "other";
@@ -85,6 +94,14 @@ export interface TrashItem {
   source_type: "managed" | "external";
   deleted_at: string | null;
   original_folder: string;
+  extension?: string | null;
+  mime_type?: string | null;
+  media_width?: number | null;
+  media_height?: number | null;
+  media_duration_ms?: number | null;
+  thumbnail_status?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface TrashList {

@@ -201,10 +201,10 @@ export async function renameFolder(id: number, name: string): Promise<boolean> {
   }
 }
 
-export async function deleteFolder(id: number): Promise<boolean> {
+export async function deleteFolder(id: number, cascade = false): Promise<boolean> {
   try {
-    await api.deleteFolder(id);
-    await loadAll();
+    await api.deleteFolder(id, cascade);
+    await Promise.all([loadAll(), loadTrash(), loadExternalSources()]);
     return true;
   } catch (error) {
     notify("error", errText(error));
