@@ -3,32 +3,34 @@
 > **必读：** 这是 Ryan_DAM 项目根目录 `.handoff/current.md` 的详细交接文档。接手者应先读本文件，再读 `docs/` 下的需求与设计；不要依赖聊天记录来判断实际代码状态。
 >
 > **最近核实时间：** 2026-10-25（ZCode 会话）  
-> **交接版本：** Handoff v6（项目级联删除完成——解除「仅空项目可删」限制）  
+> **交接版本：** Handoff v7（项目删除 409 已确诊为「升级后后端进程未重启」的陈旧服务问题 + md 表格预览 + 导入面板 5 秒自动关闭）  
 > **目标仓库：** https://github.com/twj515895394/Ryan_DAM  
 > **主分支：** `main`  
-> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录级联删除（含迁移 0005、统计接口与递归级联、Apple HIG 确认弹窗）全面完成；回收站沉浸式预览已集成（行点击调出预览、trashMode 恢复/永久删除）；**项目删除已解除空项目限制**——非空项目弹出 Apple HIG 级联影响说明（托管→回收站、外部→仅移除索引、全部文件夹与子文件夹级联删除），与目录级联共用 `cascade_delete_folder_ids` 算法；typecheck + build + 125 pytest 全绿，5173 浏览器端到端冒烟通过。
+> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录与项目级联删除全面完成（`cascade_delete_folder_ids` 共享算法 + Apple HIG 影响说明确认弹窗）；**用户报告的删除项目 409 已定位为陈旧后端进程**（Electron 派生的 Python 服务无热重载，旧进程静默忽略 `?cascade=true`），代码无缺陷，**用户完全重启桌面应用后即可正常级联删除**，前端已加固为遇 404 如实提示重启；md 文档预览支持 GFM 表格（对齐/横向滚动/卡片样式）；导入任务面板完成 5 秒自动关闭；typecheck + build + 125 pytest 全绿，5173 浏览器三项冒烟通过。
 
 ---
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 项目级联删除完成，解除「仅空项目可删」限制）
+### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 项目删除 409 陈旧后端诊断与加固 + 预览/导入体验优化）
 
-> **最新会话交接：** [`.handoff/handoff-20261025-143000.md`](./handoff-20261025-143000.md)（交付明细、验证记录、codereview 结论与下一会话任务）——接手者务必先读它，再读本文件。上一会话（回收站沉浸式预览）交接见 [`.handoff/handoff-20261025-123500.md`](./handoff-20261025-123500.md)。
+> **最新会话交接：** [`.handoff/handoff-20261025-145000.md`](./handoff-20261025-145000.md)（诊断报告、交付明细、验证记录、codereview 结论与下一会话任务）——接手者务必先读它，再读本文件。上一会话（项目级联删除）交接见 [`.handoff/handoff-20261025-143000.md`](./handoff-20261025-143000.md)。
 
-- **Git 分支 / 状态：** `main`，本地原子提交（后端 / 前端 / 文档各一组），未推送，开发期约定统一交付后再推。
+- **Git 分支 / 状态：** `main`，本地原子提交（前端 fix / feat ×2 / 文档），未推送，开发期约定统一交付后再推。
 - **本会话已完成工作：**
-  1. **级联算法抽为共享函数**：`folder_service.py` 将目录级联六步（解除外部源指向 → 托管资产入回收站并摘除目录引用 / 外部资产仅删索引 → 清回收站残留原目录引用 → 清导入任务目标引用 → 清 parent_ids → 删目录）抽为 `cascade_delete_folder_ids(db, root_ids)`，支持多根去重复用；`delete_folder(cascade=True)` 改为薄封装，行为不变。
-  2. **项目级联删除后端**：`project_service.get_project_stats`（子文件夹数 / 资产数 / 托管与外部资产数）+ `delete_project(cascade=)`——非空且未指定 cascade 仍 409 `project_not_empty`；cascade=True 时以项目根目录集合调用共享级联算法后删项目。新端点 `GET /api/v1/projects/{id}/stats`、`DELETE /api/v1/projects/{id}?cascade=true`，新增 `ProjectStats` schema。
-  3. **前端项目删除确认流**：新 composable `useProjectDelete.ts`（对齐 `useFolderDelete`）——先取统计，空项目弹轻量 danger 确认「确定删除空项目「X」吗？」；非空项目弹级联影响说明（包含 N 个文件夹、M 个资产；N₁ 个托管资产将移入回收站，N₂ 个外部素材将移除索引（源文件保留），所有文件夹与子文件夹将被级联删除），确认「级联删除」；统计接口异常时回退默认级联确认。`client.deleteProject(id, cascade)`、store 删除成功后并行刷新库/回收站/外部源，AppSidebar 按钮标题改「删除项目」。
-  4. **后端测试**：`test_project_stats`（空/嵌套统计 + 404）与 `test_project_cascade_delete`（stats 断言 → 无 cascade 409 → cascade 204 → 项目/目录树/外部源全清、托管资产进回收站且可恢复、外部源文件字节不动），全库 **125 passed**。
-  5. **5173 浏览器端到端冒烟通过**：隔离后端 + localStorage 桥，用户真实数据 0 接触。验证级联对话框文案与影响数字、确认后项目/目录/外部源消失且回收站徽标 +1、空项目轻量对话框、取消关闭；测毕清理隔离数据与进程，用户 vite（5173）全程未动。
+  1. **项目删除 409 诊断（diagnosing-bugs）**：用户反馈「弹窗提示可级联删除，点击后却 409 项目仍包含文件夹」。**结论：非代码缺陷**——时间线取证（用户 Electron 派生后端进程启动于 12:16:53，级联后端代码 13:28:17 才提交）+ 确定性 RED/GREEN diff loop（`git worktree` 检出旧提交 `d3269d7` 起后端复现 409 文案逐字一致；HEAD 同操作 204 级联成功），确诊为**升级后未重启的陈旧后端进程**静默忽略 `?cascade=true` 走旧拦截路径。**用户完全退出并重启桌面应用即可正常删除**（Python 子进程无热重载）。
+  2. **前端加固**：`ApiRequestError` 新增 `readonly status`；`useProjectDelete` 统计接口回退分支按 404 判定陈旧后端，如实提示「本地服务版本可能过旧，请完全退出并重启 Ryan_DAM 后再试」，不再做出旧后端无法兑现的级联承诺。
+  3. **md 预览支持 GFM 表格**：`utils/markdown.ts` 新增表头+分隔行识别（`TABLE_ROW`/`TABLE_SEP`）、单元格拆分与 `:---:`/`---:` 对齐、`buildHtmlTable` 输出 `overflow-x-auto rounded-xl` 卡片包裹的 border-collapse 样式表格（宽表横向滚动），预览不再显示原始管道符文本。
+  4. **导入任务面板 5 秒自动关闭**：`ImportJobPanel.vue` `watch(done)` 完成态起 `setTimeout(dismissImportJob, 5000)`；重试/强制导入回到运行态自动撤销计时；`onBeforeUnmount` 清理。
+  5. **验证与冒烟**：typecheck ✅ / build:web ✅ 1.91s / **125 passed** ✅；5173 浏览器冒烟（隔离后端 + localStorage 桥，真实数据 0 接触）三项全绿——表格渲染为样式化表格、面板完成 7.5s 后自动消失、级联删除成功无 409（回收站 +2），截图确认；测毕杀进程、删隔离数据与 worktree、清浏览器桥接与冒烟标签页。
 - **待处理问题记录（下个会话继续）：**
-  - 用户实机验收（票 21 拖出 / 票 22 终验，需人工）；review 遗留小项清单见 §12 票 15–20 条目与最新交接文档。
+  - **用户动作（关键）**：完全重启桌面应用后实机验证项目级联删除；连同票 21（拖出）/票 22（终验）人工验收。
+  - review 遗留小项清单见 §12 票 15–20 条目与最新交接文档。
 
 ### 0.0.1 迭代时间线（倒序）
 
-0. **项目级联删除（本会话，2026-10-25）**——解除「仅允许删除没有任何文件夹的空项目」限制：`cascade_delete_folder_ids` 共享算法 + `GET /projects/{id}/stats` + `DELETE ?cascade` + `useProjectDelete` 影响说明确认弹窗（托管→回收站、外部→仅移除索引），125 pytest 全绿，5173 冒烟通过。详见 [`.handoff/handoff-20261025-143000.md`](./handoff-20261025-143000.md)。
+0. **项目删除 409 诊断 + 预览/导入优化（本会话，2026-10-25）**——diagnosing-bugs 流程确诊 409 为陈旧后端进程（时间线取证 + worktree RED/GREEN diff loop），前端加固为 404 如实重启提示；md 预览支持 GFM 表格（对齐 + 横向滚动卡片）；导入任务面板完成 5 秒自动关闭。125 pytest 全绿，5173 三项冒烟通过。**用户需完全重启桌面应用使级联项目删除生效。**详见 [`.handoff/handoff-20261025-145000.md`](./handoff-20261025-145000.md)。
+1. **项目级联删除（2026-10-25 上一会话）**——解除「仅允许删除没有任何文件夹的空项目」限制：`cascade_delete_folder_ids` 共享算法 + `GET /projects/{id}/stats` + `DELETE ?cascade` + `useProjectDelete` 影响说明确认弹窗（托管→回收站、外部→仅移除索引），125 pytest 全绿，5173 冒烟通过。详见 [`.handoff/handoff-20261025-143000.md`](./handoff-20261025-143000.md)。
 1. **前端回收站沉浸式预览集成（2026-10-25 上一会话）**——回收站整行点击调出沉浸预览，trashMode 恢复/永久删除（danger 确认 + 44px 热区），App.vue 瘦身至 composables 四件套 + AssetTagEditor 抽取，`/open` 放行 trashed，123 pytest 全绿，5173 浏览器冒烟全链路通过。详见 [`.handoff/handoff-20261025-123500.md`](./handoff-20261025-123500.md)。
 1. **目录级联删除与回收站媒体流放行（2026-10-25 上一会话）**——Alembic 0005 迁移解开 `folder_id` 外键约束、目录资产统计接口、级联删除与回退承接机制、受控放行回收站 content 与 thumbnail 流、前端 Apple HIG 级联删除确认弹窗。详见 [`.handoff/handoff-20261025-113000.md`](./handoff-20261025-113000.md)。
 2. **顶栏交互重构与层叠遮挡修复（2026-10-25 上一会话）**——搜索框平滑扩展与 `⌘K`、连体式胶囊排序控件、毛玻璃独立筛选面板、移除浮动过滤条实现零布局抖动（Zero CLS）、Header 与浮层 z-index 提升解决卡片穿透遮挡。详见 [`.handoff/handoff-20261025-101500.md`](./handoff-20261025-101500.md)。
@@ -521,7 +523,17 @@ npm run package:win
 
 ## 12. 迭代记录
 
-### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 项目级联删除，解除空项目限制）
+### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 项目删除 409 陈旧后端诊断与加固 + md 表格预览 + 导入面板自动关闭）
+
+- **Git 分支 / 提交：** `main` 本地四组原子提交（前端 fix / feat ×2 / 文档），全部未推送。
+- **开发目标：** ①用户报告「文件夹已级联删除后，删除项目仍提示 409 项目仍包含 1 个文件夹，实际未删除成功」，用 diagnosing-bugs 技能定位根因；②md 文档预览中 GFM 表格按原始管道符文本显示，需渲染为表格；③导入完成任务面板希望 5 秒自动关闭。
+- **实际交付：** 见 [`.handoff/handoff-20261025-145000.md`](./handoff-20261025-145000.md) §1–2。要点：诊断结论为**非代码缺陷**——用户 Electron 派生后端进程（12:16:53 启动）早于级联代码提交（13:28:17），旧 FastAPI 静默忽略 `?cascade=true` 走旧 409 拦截路径；证据链 = 进程时间线取证 + `git worktree d3269d7` RED（409 文案逐字复现）/ HEAD GREEN（204）。前端加固：`ApiRequestError.status` + `useProjectDelete` 遇 stats 404 如实提示重启。`utils/markdown.ts` GFM 表格解析（表头+分隔行识别、`:---:`/`---:` 对齐、overflow-x-auto 圆角卡片表格）。`ImportJobPanel.vue` 完成态 5 秒 `dismissImportJob`、回到运行态撤销计时、卸载清理。
+- **修改文件：** `apps/web/src/api/client.ts`、`apps/web/src/composables/useProjectDelete.ts`、`apps/web/src/utils/markdown.ts`、`apps/web/src/components/ImportJobPanel.vue`。
+- **运行验证：** `npm run typecheck` ✅ / `npm run build:web` ✅ 1.91s / `.venv/Scripts/python.exe -m pytest backend/tests` ✅ **125 passed** / 5173 浏览器冒烟（隔离后端 + localStorage 桥，真实数据 0 接触、用户 vite 未动）✅ 三项：表格渲染为样式化表格（无 `| --- |` 残留）、面板完成 7.5s 后自动消失、级联删除成功无 409（回收站 +2），截图确认；测毕清理隔离数据/进程/worktree/浏览器桥接与冒烟标签页。
+- **未完成 / 已知问题：** **用户必须完全退出并重启 Ryan_DAM 桌面应用**，项目级联删除才能生效（Electron 派生 Python 后端无热重载）；codereview 0 致命 0 建议；行数全部合规。
+- **下一步第一任务（1–3 个）：** ①用户重启应用实机验证级联删除 + 票 21（拖出）/票 22（终验）；②review 遗留小项批量小修复；③全部通过后统一 `git push`。
+
+### 上一迭代（2026-10-25，ZCode 会话 · 项目级联删除，解除空项目限制）
 
 - **Git 分支 / 提交：** `main` 本地三组原子提交（后端 / 前端 / 文档），全部未推送。
 - **开发目标：** 用户反馈「删除项目」弹窗仍限制"仅允许删除没有任何文件夹的空项目"，要求非空项目也能连同文件夹、子文件夹与文件一起删除；语义对齐既有目录级联（托管→回收站、外部→仅移除索引、源文件永不删除）。
