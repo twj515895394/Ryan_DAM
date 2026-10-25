@@ -201,3 +201,116 @@ def test_folder_stats_and_cascade_delete(iso_client, headers, tmp_path) -> None:
     assert assets["total"] == 1
     assert assets["items"][0]["id"] == trashed_ids[0]
 
+
+def test_folder_lock_blocks_direct_delete(client, headers) -> None:
+    folder = _create(client, headers, {"name": "锁定目录", "scope": "general"})
+
+    locked = client.patch(f"/api/v1/folders/{folder['id']}", json={"locked": True}, headers=headers)
+    assert locked.status_code == 200
+    assert locked.json()["locked"] is True
+
+    tree = client.get("/api/v1/folders/tree", params={"scope": "general"}, headers=headers).json()
+    assert tree[0]["locked"] is True
+
+    refused = client.delete(f"/api/v1/folders/{folder['id']}", headers=headers)
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "folder_locked"
+
+    refused_cascade = client.delete(f"/api/v1/folders/{folder['id']}?cascade=true", headers=headers)
+    assert refused_cascade.status_code == 409
+
+    unlocked = client.patch(f"/api/v1/folders/{folder['id']}", json={"locked": False}, headers=headers)
+    assert unlocked.json()["locked"] is False
+    assert client.delete(f"/api/v1/folders/{folder['id']}", headers=headers).status_code == 204
+
+
+def test_lock_does_not_inherit_and_allows_rename_move(client, headers) -> None:
+    parent = _create(client, headers, {"name": "锁定父", "scope": "general"})
+    child = _create(client, headers, {"name": "子目录", "scope": "general", "parent_id": parent["id"]})
+    new_home = _create(client, headers, {"name": "新归属", "scope": "general"})
+    client.patch(f"/api/v1/folders/{parent['id']}", json={"locked": True}, headers=headers)
+
+    # 锁定不向下继承：子目录可单独删除
+    assert client.delete(f"/api/v1/folders/{child['id']}", headers=headers).status_code == 204
+
+    # 锁定目录本身仍可重命名与移动（锁只拦删除）
+    renamed = client.patch(f"/api/v1/folders/{parent['id']}", json={"name": "锁定父改名"}, headers=headers)
+    assert renamed.status_code == 200
+    moved = client.patch(f"/api/v1/folders/{parent['id']}", json={"parent_id": new_home["id"]}, headers=headers)
+    assert moved.status_code == 200
+
+    # 删除仍被拦截
+    assert client.delete(f"/api/v1/folders/{parent['id']}?cascade=true", headers=headers).status_code == 409
+
+
+def test_cascade_delete_blocked_by_locked_descendant(client, headers) -> None:
+    top = _create(client, headers, {"name": "顶层", "scope": "general"})
+    mid = _create(client, headers, {"name": "中层", "scope": "general", "parent_id": top["id"]})
+    leaf = _create(client, headers, {"name": "锁定叶子", "scope": "general", "parent_id": mid["id"]})
+    client.patch(f"/api/v1/folders/{leaf['id']}", json={"locked": True}, headers=headers)
+
+    refused = client.delete(f"/api/v1/folders/{top['id']}?cascade=true", headers=headers)
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "folder_locked"
+    assert "锁定叶子" in refused.json()["error"]["message"]
+
+    # 整次拦截：范围内目录全部完好
+    tree = client.get("/api/v1/folders/tree", params={"scope": "general"}, headers=headers).json()
+    assert [n["name"] for n in tree] == ["顶层"]
+    assert client.get(f"/api/v1/folders/{leaf['id']}/stats", headers=headers).status_code == 200
+
+    # 解锁后级联成功
+    client.patch(f"/api/v1/folders/{leaf['id']}", json={"locked": False}, headers=headers)
+    assert client.delete(f"/api/v1/folders/{top['id']}?cascade=true", headers=headers).status_code == 204
+
+
+def test_project_cascade_delete_blocked_by_locked_folder(client, headers) -> None:
+    project = client.post("/api/v1/projects", json={"name": "级联项目"}, headers=headers).json()
+    folder = _create(client, headers, {"name": "锁定项目目录", "scope": "project", "project_id": project["id"]})
+    client.patch(f"/api/v1/folders/{folder['id']}", json={"locked": True}, headers=headers)
+
+    refused = client.delete(f"/api/v1/projects/{project['id']}?cascade=true", headers=headers)
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "folder_locked"
+
+    client.patch(f"/api/v1/folders/{folder['id']}", json={"locked": False}, headers=headers)
+    assert client.delete(f"/api/v1/projects/{project['id']}?cascade=true", headers=headers).status_code == 204
+
+
+def test_folder_description_persist_strip_and_clear(client, headers) -> None:
+    folder = _create(client, headers, {"name": "备注目录", "scope": "general"})
+
+    saved = client.patch(f"/api/v1/folders/{folder['id']}", json={"description": "  收集说明  "}, headers=headers)
+    assert saved.status_code == 200
+    assert saved.json()["description"] == "收集说明"
+
+    # 编辑锁定时未提供 description 键 → 保持不变
+    locked = client.patch(f"/api/v1/folders/{folder['id']}", json={"locked": True}, headers=headers)
+    assert locked.json()["description"] == "收集说明"
+
+    # 全空白清空
+    blank = client.patch(f"/api/v1/folders/{folder['id']}", json={"description": "   "}, headers=headers)
+    assert blank.json()["description"] is None
+
+    # 显式 null 清空
+    client.patch(f"/api/v1/folders/{folder['id']}", json={"description": "再写点"}, headers=headers)
+    cleared = client.patch(f"/api/v1/folders/{folder['id']}", json={"description": None}, headers=headers)
+    assert cleared.json()["description"] is None
+
+    too_long = client.patch(f"/api/v1/folders/{folder['id']}", json={"description": "x" * 2001}, headers=headers)
+    assert too_long.status_code == 422
+
+
+def test_folder_edit_dialog_combined_patch(client, headers) -> None:
+    folder = _create(client, headers, {"name": "编辑我", "scope": "general"})
+    edited = client.patch(
+        f"/api/v1/folders/{folder['id']}",
+        json={"name": "已改名", "locked": True, "description": "改名+锁定+备注一起保存"},
+        headers=headers,
+    )
+    assert edited.status_code == 200
+    body = edited.json()
+    assert body["name"] == "已改名"
+    assert body["locked"] is True
+    assert body["description"] == "改名+锁定+备注一起保存"
+

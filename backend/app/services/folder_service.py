@@ -11,7 +11,11 @@ from backend.app.models.project import Project
 from backend.app.schemas.folder import FolderNode, FolderStats
 
 MAX_FOLDER_NAME = 255
+MAX_FOLDER_DESCRIPTION = 2000
 _INVALID_NAME_CHARS = set('<>:"/\\|?*')
+
+# update_folder_info 用它区分「description 键未提供（不改动）」与「显式传 null（清空）」
+FOLDER_INFO_UNSET = object()
 
 
 def _clean_name(name: str) -> str:
@@ -22,6 +26,17 @@ def _clean_name(name: str) -> str:
         raise ApiError("validation_error", f"目录名称不能超过 {MAX_FOLDER_NAME} 个字符。", 422)
     if cleaned in {".", ".."} or any(ch in _INVALID_NAME_CHARS for ch in cleaned):
         raise ApiError("validation_error", "目录名称不能包含 <>:\"/\\|?* 等字符。", 422)
+    return cleaned
+
+
+def _clean_description(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if len(cleaned) > MAX_FOLDER_DESCRIPTION:
+        raise ApiError("validation_error", f"目录描述不能超过 {MAX_FOLDER_DESCRIPTION} 个字符。", 422)
     return cleaned
 
 
@@ -116,6 +131,8 @@ def build_tree(db: Session, *, scope: str, project_id: int | None = None) -> lis
             project_id=row.project_id,
             parent_id=row.parent_id,
             sort_order=row.sort_order,
+            locked=row.locked,
+            description=row.description,
             children=[],
         )
     for row in rows:
@@ -166,6 +183,25 @@ def move_folder(db: Session, folder_id: int, parent_id: int | None) -> Folder:
         exclude_id=folder.id,
     )
     folder.parent_id = parent_id
+    db.commit()
+    db.refresh(folder)
+    return folder
+
+
+def update_folder_info(
+    db: Session,
+    folder_id: int,
+    *,
+    locked: bool | None = None,
+    description: str | None | object = FOLDER_INFO_UNSET,
+) -> Folder:
+    """编辑弹窗信息：locked 传 None 表示不改动；description 未提供不改动、显式 None/空白清空。"""
+    folder = get_folder_or_404(db, folder_id)
+    if locked is not None:
+        folder.locked = locked
+    if description is not FOLDER_INFO_UNSET:
+        # 哨兵已排除，此处只可能是显式 null（清空）或字符串（清洗后保存）
+        folder.description = _clean_description(description if isinstance(description, str) else None)
     db.commit()
     db.refresh(folder)
     return folder
@@ -236,6 +272,12 @@ def get_folder_stats(db: Session, folder_id: int) -> FolderStats:
 
 def delete_folder(db: Session, folder_id: int, cascade: bool = False) -> None:
     folder = get_folder_or_404(db, folder_id)
+    if folder.locked:
+        raise ApiError(
+            "folder_locked",
+            f"目录「{folder.name}」已锁定，请先在「编辑文件夹」中解除锁定后再删除。",
+            409,
+        )
     if not cascade:
         child_count = db.scalar(select(func.count(Folder.id)).where(Folder.parent_id == folder_id)) or 0
         if child_count:
@@ -274,6 +316,20 @@ def cascade_delete_folder_ids(db: Session, root_ids: list[int]) -> None:
             if fid not in seen:
                 seen.add(fid)
                 subtree_ids.append(fid)
+
+    # 锁定守卫：删除范围（目录级联与项目级联共用此算法）内任何一层存在锁定目录即整次拦截
+    if subtree_ids:
+        locked = db.scalars(
+            select(Folder)
+            .where(Folder.id.in_(subtree_ids), Folder.locked.is_(True))
+            .order_by(Folder.id)
+        ).first()
+        if locked is not None:
+            raise ApiError(
+                "folder_locked",
+                f"删除范围内包含已锁定的目录「{locked.name}」，请先解除锁定。",
+                409,
+            )
 
     # 1. Unlink any ExternalSource whose target_folder_id is in subtree_ids
     ext_sources = db.scalars(select(ExternalSource).where(ExternalSource.target_folder_id.in_(subtree_ids))).all()

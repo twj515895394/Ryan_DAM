@@ -22,6 +22,8 @@ class FolderUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
     parent_id: int | None = None
+    locked: bool | None = None
+    description: str | None = Field(default=None, max_length=2000)
 
 
 class FolderOut(BaseModel):
@@ -33,6 +35,8 @@ class FolderOut(BaseModel):
     project_id: int | None
     parent_id: int | None
     sort_order: int
+    locked: bool
+    description: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -44,6 +48,8 @@ class FolderNode(BaseModel):
     project_id: int | None
     parent_id: int | None
     sort_order: int
+    locked: bool
+    description: str | None
     children: list["FolderNode"] = []
 
 
