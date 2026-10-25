@@ -47,7 +47,19 @@
 
 ---
 
-## 3. 测试与验证标准
+## 3. 代码架构与设计模式规范（Clean Architecture & File Size Limit）
+
+- **单一职责原则（Single Responsibility Principle, SRP）**：
+  - 每个模块、服务类与组件应只承担单一维度的核心职责。
+  - 避免将数据获取、复杂业务处理、视图渲染与弹窗状态混杂在单一巨型文件中。
+  - 复杂视图或业务面板应适时提取为独立原子子组件（例如独立的 Dialog、Drawer、Panel、Card 等）。
+- **文件代码行数上限约束**：
+  - **建议及控制上限**：每个源码文件（包括 Vue 组件 `.vue`、TypeScript 模块 `.ts`、Python 脚本 `.py`）的代码行数**尽量不要超过 800 行**。
+  - **超限重构规则**：若某个文件随着业务迭代即将或已经达到 800 行，必须按照功能域拆分子组件、子服务（Service）或抽离 hooks/composables/utils，杜绝千行以上的「上帝组件（God Component）」或「上帝类」。
+
+---
+
+## 4. 测试与验证标准
 
 修改代码后，交付前必须执行以下三项验证：
 1. `npm run typecheck`（Vue 3 + TypeScript 类型检查无报错）

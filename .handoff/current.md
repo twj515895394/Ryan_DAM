@@ -2,33 +2,37 @@
 
 > **必读：** 这是 Ryan_DAM 项目根目录 `.handoff/current.md` 的详细交接文档。接手者应先读本文件，再读 `docs/` 下的需求与设计；不要依赖聊天记录来判断实际代码状态。
 >
-> **最近核实时间：** 2026-10-24（ZCode 会话）  
-> **交接版本：** Handoff v2（阶段 0 复核 + 阶段 1 数据层与目录树已交付）  
+> **最近核实时间：** 2026-10-25（ZCode 会话）  
+> **交接版本：** Handoff v5（前端回收站沉浸式预览与恢复/永久删除交互集成完成）  
 > **目标仓库：** https://github.com/twj515895394/Ryan_DAM  
 > **主分支：** `main`  
-> **本次交接前已核对的 main 基线：** `87c1ecf`（stage 1 数据层 + 目录树 UI 两个提交，详见文末迭代记录）  
-> **当前阶段：** 阶段 0 自动化核对全部通过、GUI 实机项仍待人工验收；阶段 1（SQLite 数据层 + 目录 API + 目录树 UI）代码已落地并有测试；下一步按票推进阶段 2  
-> **最新已核对 CI：** [Stage 0 Windows verification #40077429948](https://github.com/twj515895394/Ryan_DAM/actions/runs/40077429948) — `success`（commit `1d70a69`）；阶段 1 提交后的 CI 结果见迭代记录。  
-> **不要误读：** GitHub Actions 构建成功 ≠ 实际用户电脑上所有桌面交互已验收；代码存在 ≠ 功能通过用户场景验收。
+> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录级联删除（含迁移 0005、统计接口与递归级联、Apple HIG 确认弹窗）全面完成；回收站沉浸式预览已集成——行点击调出预览（媒体/文本/PDF 复用 AssetPreview），trashMode 提供「恢复到原目录 / 永久删除」，danger 确认与 Esc 层级齐备；typecheck + build + 123 pytest 全绿，5173 浏览器端到端冒烟通过。
 
 ---
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-24，ZCode 会话 · 阶段 5 全部开发票完成，未 push）
+### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 前端回收站沉浸式预览与恢复/永久删除集成完成）
 
-> **最新会话交接：** [`.handoff/handoff-20261024-231516.md`](./handoff-20261024-231516.md)（**下一会话任务：接收用户实机测试反馈并修复**，含测试清单与修复注意事项）——接手者先读它，再读本文件。
+> **最新会话交接：** [`.handoff/handoff-20261025-123500.md`](./handoff-20261025-123500.md)（交付明细、验证记录、codereview 结论与下一会话任务）——接手者务必先读它，再读本文件。
 
-- **Git 分支 / 提交：** `main` **本地**最新 `fd4df00`（review 加固）；远端 origin/main 停在 `d3ea899`，本地领先 17 个提交，待用户确认后一次性 push。
-- **当前状态一句话：** 阶段 0–4 完成；阶段 5 完成（票 15 回收站、16 重命名/移动、17 外部关联与扫描、18 解除关联、19 转托管、20 提示词）；**全部开发票完成**，统一自测 + 全库 review 已做，剩 HITL 票（GUI 实机验收 / 正式拖出 / 终验）。
-- **运行验证（最新）：** pytest **120/120**；vue-tsc / build / `node --check` 通过；e2e **21/21**；浏览器 UI 实测（回收站删除/恢复/清空、批量删除 managed+external 分流、提示词新增/复制/保存失败保留、外部转托管就地更新）全部通过；真实 `D:\Ryan_DAM\assets` 保持 0 条目。
-- **本会话实测发现并修复的问题：** ①CORS 白名单缺 `PUT`（票 20 提示词保存全部失败，UI 实测抓到）；②删除/恢复后外部来源计数不刷新；③review 发现的模型约束与迁移 0004 不同步、外部扫描未排除托管根子树、删除后选区残留、trash 提交失败无补偿（均已修复并补测试，见 `fd4df00`）。
-- **review 遗留（不阻塞，记录在案）：** 加载更多无 in-flight 防抖（快速连点可能重复追加）；搜索 `ilike` 未转义 `%`/`_`；列表 has_prompt 拉全量 prompt_text（可用 exists 优化）；解除关联后镜像出的空目录保留在树上；扫描仅按 size 判变更。
-- **下一步第一任务：** 用户实机验收（票 1 GUI 启动/拖出 PoC、票 21 正式资产拖出、票 22 终验），随后按需发布 GitHub Issues 并推送。
+- **Git 分支 / 状态：** `main`，本地原子提交（后端 `20d041d` / 前端 / 文档三组），未推送，开发期约定统一交付后再推。
+- **本会话已完成工作：**
+  1. **后端双状态放行收尾**：`/thumbnail`、`/content`、`/open` 统一以 `SERVABLE_STATUSES = ("active", "trashed")` 常量放行回收站资产；`/open` 首次支持 trashed；`test_content_api.py` 新增 2 项回归测试，全库 **123 passed**。
+  2. **前端回收站沉浸式预览链路**：`TrashView.vue` 整行可点（role=button + hover/active/focus-visible 三态）调出 `AssetPreview.vue` 沉浸预览（文本/图片/视频/音频/PDF 全复用）；`trashMode` 隐藏常规管理项、显示「回收站」信息块（原目录 + 删除时间），提供 44px 热区「恢复到原目录」（强调蓝）与「永久删除」（红描边 → danger ConfirmDialog，自动聚焦、Enter/Esc 键盘流）。
+  3. **App.vue 瘦身与 composables 抽取**：`useConfirmDialog` / `useFolderDelete` / `useDialogFlows` / `useTrashPreview`（id 化状态 + 删除后邻居前移竞态守卫）四组件落地；`AssetTagEditor.vue` 抽出标签 combobox；`ConfirmIntent` 类型经 `ConfirmDialog.vue` 导出复用；关键文件全部 < 800 行（App.vue 721 / AssetPreview 513）。
+  4. **codereview 全量审查通过**：0 致命；修复 3 条建议（跨视图预览叠加 watch 关闭、ConfirmIntent DRY、后端状态常量）；无硬编码。
+  5. **5173 浏览器端到端冒烟通过**：隔离后端 + 真实用户数据 0 接触，验证行点击→预览（文本正文渲染 / 图片缩放）→恢复→toast→回收站清空→永久删除 danger 确认→Esc 浮层归零全链路；测毕清理隔离数据与进程。
+- **待处理问题记录（下个会话继续）：**
+  - 用户实机验收（票 21 拖出 / 票 22 终验，需人工）；review 遗留小项清单见 §12 票 15–20 条目与最新交接文档。
 
 ### 0.0.1 迭代时间线（倒序）
 
-0. **票 15–20（本会话，2026-10-24）**（`194df8a` → `fd4df00`，全部仅本地提交）——回收站（删除/恢复/永久删除/清空/bulk-trash 逐项结果 + 锁定文件 409 保护）、单资产重命名/移动（扩展名保留、同目录冲突、external 只读）、外部目录关联与手动扫描（层级镜像、重扫幂等、失效标记 missing、迁移 0004）、解除关联（仅删仍为 external 的索引）、外部转托管（staging+哈希校验+就地更新）、图片/视频提示词（`GET/PUT /assets/{id}/prompt`，换行逐字保留）。UI 实测全链路通过；review 加固（托管根子树跳过、提交失败补偿、选区清理、Esc 层级）已合入。
+0. **前端回收站沉浸式预览集成（本会话，2026-10-25）**——回收站整行点击调出沉浸预览，trashMode 恢复/永久删除（danger 确认 + 44px 热区），App.vue 瘦身至 composables 四件套 + AssetTagEditor 抽取，`/open` 放行 trashed，123 pytest 全绿，5173 浏览器冒烟全链路通过。详见 [`.handoff/handoff-20261025-123500.md`](./handoff-20261025-123500.md)。
+1. **目录级联删除与回收站媒体流放行（2026-10-25 上一会话）**——Alembic 0005 迁移解开 `folder_id` 外键约束、目录资产统计接口、级联删除与回退承接机制、受控放行回收站 content 与 thumbnail 流、前端 Apple HIG 级联删除确认弹窗。详见 [`.handoff/handoff-20261025-113000.md`](./handoff-20261025-113000.md)。
+2. **顶栏交互重构与层叠遮挡修复（2026-10-25 上一会话）**——搜索框平滑扩展与 `⌘K`、连体式胶囊排序控件、毛玻璃独立筛选面板、移除浮动过滤条实现零布局抖动（Zero CLS）、Header 与浮层 z-index 提升解决卡片穿透遮挡。详见 [`.handoff/handoff-20261025-101500.md`](./handoff-20261025-101500.md)。
+3. **Apple HIG 规范落地与跨库移动（2026-10-25 上一会话）**——全面废除 `window.confirm`，改用全项目统一的 Apple HIG `ConfirmDialog`；更新 `AGENTS.md` 和设计规范；解禁跨项目/跨通用库资产移动限制；新增单文件不超过 800 行的架构硬性约束。详见 [`.handoff/handoff-20261025-085144.md`](./handoff-20261025-085144.md)。
+2. **票 15–20（2026-10-24）**（`194df8a` → `fd4df00`，全部仅本地提交）——回收站（删除/恢复/永久删除/清空/bulk-trash 逐项结果 + 锁定文件 409 保护）、单资产重命名/移动（扩展名保留、同目录冲突、external 只读）、外部目录关联与手动扫描（层级镜像、重扫幂等、失效标记 missing、迁移 0004）、解除关联（仅删仍为 external 的索引）、外部转托管（staging+哈希校验+就地更新）、图片/视频提示词（`GET/PUT /assets/{id}/prompt`，换行逐字保留）。UI 实测全链路通过；review 加固（托管根子树跳过、提交失败补偿、选区清理、Esc 层级）已合入。
 1. **票 9–14（2026-10-24 上一会话）**（`9921a82` → `d98db52`，全部仅本地提交）——沉浸式预览与内容端点、Range 播放与系统打开、五类文档预览、搜索/筛选/排序、全局标签、批量操作。详情与逐项验证记录见 `.handoff/handoff-20261024-213000.md`。
 1. **票 8：音视频元数据与代表帧（FFmpeg 打包）**（`70116d3`）——`media_service` 受控定位器（`RYAN_DAM_FFMPEG_DIR` 环境变量 → PyInstaller 包内 `_MEIPASS/ffmpeg` → 仓库 `ffmpeg-bin/` → PATH，校验 PE 头拒绝构建期占位符）；ffprobe 提取时长/宽高、ffmpeg 提取视频代表帧（512px contain、1s 起帧回退）与音频内嵌封面；缩略图管线扩展到视频/音频；卡片新增时长角标（mm:ss）；`scripts/prepare-ffmpeg.mjs` 装载真实二进制或占位符、PyInstaller `--add-binary` 捆绑、CI 下载 BtbN win64 构建并导出环境变量；`docs/THIRD_PARTY_NOTICES.md` 记录 FFmpeg GPL v3 来源；测试 +7（66/66，无 ffmpeg 环境自动跳过）。CI 首轮失败：定位器测试依赖仓库状态（CI 在测试前已把真实 ffmpeg 放入 ffmpeg-bin/），已改为注入候选列表隔离（`3023b3b` 修复）。
    - **本地打包验证**：PyInstaller 产物 129MB（含 FFmpeg），冻结版 exe 端到端通过——视频时长 3000ms 精确、320x240、代表帧 JPEG 200；音频时长 2038ms。
@@ -516,7 +520,17 @@ npm run package:win
 
 ## 12. 迭代记录
 
-### 最近一次迭代（更新日期 2026-10-24，ZCode 会话 · 票 15–20）
+### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 前端回收站沉浸式预览与恢复/永久删除集成）
+
+- **Git 分支 / 提交：** `main` 本地三组原子提交（`20d041d` 后端 / 前端 / 文档），全部未推送；本批提交同时收编了 101500（顶栏重构）与 113000（级联删除后端）两个会话遗留的未提交工作（均已在上一会话验证通过）。
+- **开发目标：** 完成 113000 交接指定的唯一任务——回收站 TrashView 沉浸式预览与恢复/永久删除交互集成，并按 apple-design/codereview 规范全量审查。
+- **实际交付：** 见 [`.handoff/handoff-20261025-123500.md`](./handoff-20261025-123500.md) §1。要点：行点击整行预览（三态交互）、`trashMode` 预览面板（回收站信息块 + 44px 恢复/永久删除按钮 + danger 确认）、`useConfirmDialog/useFolderDelete/useDialogFlows/useTrashPreview` 四 composables 与 `AssetTagEditor.vue` 抽取、`ConfirmIntent` 类型复用、`/open` 放行 trashed + 2 项回归测试、`SERVABLE_STATUSES` 常量、跨视图预览 watch 关闭。
+- **修改文件：** `backend/app/api/v1/assets.py`、`backend/tests/test_content_api.py`；`apps/web/src/App.vue`、`components/AssetPreview.vue`、`components/TrashView.vue`、`components/TrashRowThumb.vue`、`components/AssetTagEditor.vue`、`composables/`（4 新文件）。
+- **运行验证：** `npm run typecheck` ✅ / `npm run build:web` ✅ 2.29s / `.venv/Scripts/python.exe -m pytest backend/tests` ✅ **123 passed** / 5173 浏览器冒烟（隔离后端 + localStorage 桥，用户真实数据 0 接触）✅ 全链路 + 截图确认 Apple HIG 质感；测毕已杀冒烟后端进程并删除 `.ui-smoke-data` 与临时素材。
+- **未完成 / 已知问题：** codereview 0 致命、3 建议已修；信息项（`out as any` 历史遗留、AssetTagEditor props 写回、2MB 截断有注释、z 层级链）不修；预览浮层遮挡侧栏导致 watch 守卫仅程序化生效（预期）。
+- **下一步第一任务（1–3 个）：** ①用户实机验收票 21（拖出）/票 22（终验）；②review 遗留小项批量小修复；③如需 GitHub Issues 发布用 `to-issues`。
+
+### 上一迭代（2026-10-24，票 15–20）
 
 - **Git 分支 / 提交：** `main` 本地 `194df8a` → `fd4df00`（8 个提交，全部仅本地）：
   - `194df8a` feat: ticket 15 trash with restore, permanent delete and bulk trash
