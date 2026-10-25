@@ -285,6 +285,11 @@ function onDeleteFolderNode(node: FolderNode): void {
   });
 }
 
+/** 侧栏图钉 → 快速置顶/取消置顶：后端把 pinned 排同层最前，保存成功后 loadAll 重取树。 */
+async function onTogglePinFolder(node: FolderNode): Promise<void> {
+  await updateFolder(node.id, { pinned: !node.pinned });
+}
+
 /** 侧栏铅笔 →「编辑文件夹」弹窗（名称 / 描述 / 锁定开关），保存成功后关闭并刷新树。 */
 const folderEditNode = ref<FolderNode | null>(null);
 
@@ -577,6 +582,7 @@ onUnmounted(() => {
       @create-folder="(scope, projId, parentId) => (dialog = { kind: 'folder-create', scope, projectId: projId, parentId })"
       @edit-folder="(n) => (folderEditNode = n)"
       @delete-folder="onDeleteFolderNode"
+      @toggle-pin-folder="onTogglePinFolder"
       @create-project="dialog = { kind: 'project-create' }"
       @rename-project="(id, name) => (dialog = { kind: 'project-rename', projectId: id, initial: name })"
       @delete-project="(id, name) => askDeleteProject(id, name)"

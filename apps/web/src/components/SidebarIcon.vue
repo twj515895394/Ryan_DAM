@@ -19,7 +19,8 @@ defineProps<{
     | "arrow-up"
     | "arrow-down"
     | "check"
-    | "lock";
+    | "lock"
+    | "pin";
 }>();
 </script>
 
@@ -151,6 +152,14 @@ defineProps<{
     <template v-else-if="name === 'lock'">
       <rect x="4.5" y="10.5" width="15" height="9.5" rx="2" />
       <path d="M8 10.5V7.5a4 4 0 1 1 8 0v3" />
+    </template>
+
+    <!-- 置顶图钉 -->
+    <template v-else-if="name === 'pin'">
+      <path d="M9 4h6" />
+      <path d="M12 4v6.5" />
+      <path d="M7 10.5h10l-1.2 3.9a1.5 1.5 0 0 1-1.44 1.07H9.64a1.5 1.5 0 0 1-1.44-1.07z" />
+      <path d="M12 15.5v5" />
     </template>
   </svg>
 </template>

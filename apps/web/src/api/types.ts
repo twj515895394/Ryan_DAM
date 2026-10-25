@@ -12,6 +12,7 @@ export interface FolderNode {
   project_id: number | null;
   parent_id: number | null;
   sort_order: number;
+  pinned: boolean;
   locked: boolean;
   description: string | null;
   children: FolderNode[];
@@ -24,6 +25,7 @@ export interface FolderOut {
   project_id: number | null;
   parent_id: number | null;
   sort_order: number;
+  pinned: boolean;
   locked: boolean;
   description: string | null;
   created_at: string;
@@ -32,6 +34,7 @@ export interface FolderOut {
 
 export interface FolderEditPayload {
   name?: string;
+  pinned?: boolean;
   locked?: boolean;
   description?: string | null;
 }

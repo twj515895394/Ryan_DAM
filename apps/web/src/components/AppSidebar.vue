@@ -20,6 +20,7 @@ const emit = defineEmits<{
   (e: "create-folder", scope: "general" | "project", projectId: number | null, parentId: number | null): void;
   (e: "edit-folder", node: FolderNode): void;
   (e: "delete-folder", node: FolderNode): void;
+  (e: "toggle-pin-folder", node: FolderNode): void;
   (e: "create-project"): void;
   (e: "rename-project", id: number, name: string): void;
   (e: "delete-project", id: number, name: string): void;
@@ -117,6 +118,7 @@ function toggleTagSelection(tagId: number): void {
             @create-child="emit('create-folder', 'general', null, $event.id)"
             @edit="emit('edit-folder', $event)"
             @remove="emit('delete-folder', $event)"
+            @toggle-pin="emit('toggle-pin-folder', $event)"
           />
         </div>
       </section>
@@ -185,6 +187,7 @@ function toggleTagSelection(tagId: number): void {
               @create-child="emit('create-folder', 'project', project.id, $event.id)"
               @edit="emit('edit-folder', $event)"
               @remove="emit('delete-folder', $event)"
+              @toggle-pin="emit('toggle-pin-folder', $event)"
             />
           </div>
         </div>

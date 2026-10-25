@@ -18,6 +18,7 @@ const emit = defineEmits<{
   (e: "create-child", node: FolderNode): void;
   (e: "edit", node: FolderNode): void;
   (e: "remove", node: FolderNode): void;
+  (e: "toggle-pin", node: FolderNode): void;
 }>();
 
 const collapsed = ref(new Set<number>());
@@ -68,9 +69,12 @@ function toggle(node: FolderNode): void {
           :class="activeId === node.id ? 'text-accent' : ''"
         />
 
-        <!-- 目录名称 + 锁定徽记 -->
+        <!-- 目录名称 + 置顶/锁定徽记 -->
         <span class="flex min-w-0 flex-1 items-center gap-1">
           <span class="truncate" :title="node.name">{{ node.name }}</span>
+          <span v-if="node.pinned" class="shrink-0 text-accent" title="已置顶：始终排在同层最上方">
+            <SidebarIcon name="pin" class="h-3 w-3" />
+          </span>
           <span v-if="node.locked" class="shrink-0 text-amber-500" title="已锁定：该文件夹不会被删除">
             <SidebarIcon name="lock" class="h-3 w-3" />
           </span>
@@ -84,6 +88,14 @@ function toggle(node: FolderNode): void {
             @click.stop="emit('create-child', node)"
           >
             <SidebarIcon name="plus" class="h-3 w-3" />
+          </button>
+          <button
+            class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-accent hover:shadow-xs active:scale-95 transition-transform"
+            :class="node.pinned ? 'text-accent' : ''"
+            :title="node.pinned ? '取消置顶' : '置顶：排在同层目录最上方'"
+            @click.stop="emit('toggle-pin', node)"
+          >
+            <SidebarIcon name="pin" class="h-3 w-3" />
           </button>
           <button
             class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-ink hover:shadow-xs"
@@ -114,6 +126,7 @@ function toggle(node: FolderNode): void {
           @create-child="(n) => emit('create-child', n)"
           @edit="(n) => emit('edit', n)"
           @remove="(n) => emit('remove', n)"
+          @toggle-pin="(n) => emit('toggle-pin', n)"
         />
       </div>
     </li>
