@@ -4,8 +4,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.errors import ApiError
+from backend.app.models.asset import Asset
 from backend.app.models.folder import Folder
 from backend.app.models.project import Project
+from backend.app.schemas.project import ProjectStats
 
 MAX_PROJECT_NAME = 128
 
@@ -59,10 +61,40 @@ def rename_project(db: Session, project_id: int, name: str) -> Project:
     return project
 
 
-def delete_project(db: Session, project_id: int) -> None:
+def _project_folder_ids(db: Session, project_id: int) -> list[int]:
+    return list(db.scalars(select(Folder.id).where(Folder.project_id == project_id)).all())
+
+
+def get_project_stats(db: Session, project_id: int) -> ProjectStats:
     project = get_project_or_404(db, project_id)
-    folder_count = db.scalar(select(func.count(Folder.id)).where(Folder.project_id == project_id)) or 0
-    if folder_count:
+    folder_ids = _project_folder_ids(db, project_id)
+    assets = db.scalars(select(Asset).where(Asset.folder_id.in_(folder_ids))).all() if folder_ids else []
+    return ProjectStats(
+        project_id=project.id,
+        project_name=project.name,
+        subfolder_count=len(folder_ids),
+        asset_count=len(assets),
+        managed_asset_count=sum(1 for a in assets if a.source_type == "managed"),
+        external_asset_count=sum(1 for a in assets if a.source_type == "external"),
+    )
+
+
+def delete_project(db: Session, project_id: int, cascade: bool = False) -> None:
+    project = get_project_or_404(db, project_id)
+    root_ids = [
+        fid
+        for fid, parent_id in db.execute(
+            select(Folder.id, Folder.parent_id).where(Folder.project_id == project_id)
+        ).all()
+        if parent_id is None
+    ]
+    if root_ids and not cascade:
+        folder_count = len(_project_folder_ids(db, project_id))
         raise ApiError("project_not_empty", f"项目仍包含 {folder_count} 个文件夹，请先处理这些目录后再删除项目。", 409)
+    if root_ids:
+        # 与目录级联删除同一算法：托管资产移入回收站、外部资产仅移除索引、解除外部来源关联
+        from backend.app.services.folder_service import cascade_delete_folder_ids
+
+        cascade_delete_folder_ids(db, root_ids)
     db.delete(project)
     db.commit()

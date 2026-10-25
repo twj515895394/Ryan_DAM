@@ -24,3 +24,12 @@ class ProjectOut(BaseModel):
     name: str
     created_at: datetime
     updated_at: datetime
+
+
+class ProjectStats(BaseModel):
+    project_id: int
+    project_name: str
+    subfolder_count: int
+    asset_count: int
+    managed_asset_count: int
+    external_asset_count: int

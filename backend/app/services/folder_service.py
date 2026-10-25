@@ -257,11 +257,23 @@ def delete_folder(db: Session, folder_id: int, cascade: bool = False) -> None:
         return
 
     # Cascade mode:
+    cascade_delete_folder_ids(db, [folder_id])
+
+
+def cascade_delete_folder_ids(db: Session, root_ids: list[int]) -> None:
+    """级联删除若干文件夹子树：托管资产移入回收站、外部资产仅移除索引、
+    解除外部来源关联并清理任务引用。目录级联删除与项目级联删除共用此算法。"""
     from backend.app.services.trash_service import delete_asset_index, trash_asset
     from backend.app.services.external_service import unlink_external_source
     from backend.app.models.external_source import ExternalSource
 
-    subtree_ids = get_folder_subtree_ids(db, folder_id)
+    subtree_ids: list[int] = []
+    seen: set[int] = set()
+    for root_id in root_ids:
+        for fid in get_folder_subtree_ids(db, root_id):
+            if fid not in seen:
+                seen.add(fid)
+                subtree_ids.append(fid)
 
     # 1. Unlink any ExternalSource whose target_folder_id is in subtree_ids
     ext_sources = db.scalars(select(ExternalSource).where(ExternalSource.target_folder_id.in_(subtree_ids))).all()
