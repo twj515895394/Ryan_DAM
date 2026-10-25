@@ -179,3 +179,13 @@ def test_relative_import_path_rejected(iso_client, headers, tmp_path) -> None:
         "/api/v1/imports", json={"paths": ["relative.png"], "folder_id": folder_id}, headers=headers
     )
     assert response.status_code == 422
+
+
+def test_guess_asset_type_covers_code_extensions() -> None:
+    from backend.app.services.import_service import guess_asset_type
+
+    for suffix in (".py", ".ts", ".tsx", ".vue", ".html", ".yaml", ".sql", ".log", ".ps1"):
+        assert guess_asset_type(Path(f"demo{suffix}")) == "document", suffix
+    assert guess_asset_type(Path("notes.docx")) == "document"
+    assert guess_asset_type(Path("photo.png")) == "image"
+    assert guess_asset_type(Path("archive.zip")) == "other"

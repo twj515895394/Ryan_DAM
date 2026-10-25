@@ -34,7 +34,20 @@ CHUNK_SIZE = 1024 * 1024
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".avif", ".ico", ".tif", ".tiff"}
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".flv", ".wmv"}
 AUDIO_EXTS = {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma"}
-DOC_EXTS = {".pdf", ".txt", ".md", ".json", ".csv", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"}
+# Source/config/log files are registered as documents so the immersive preview
+# renders them as text (AssetPreview.vue keeps a parallel CODE_PREVIEW_EXTS list).
+CODE_EXTS = {
+    ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".vue", ".svelte",
+    ".html", ".htm", ".css", ".scss", ".less", ".yml", ".yaml", ".xml",
+    ".toml", ".ini", ".cfg", ".conf", ".properties", ".sh", ".bash", ".zsh",
+    ".bat", ".cmd", ".ps1", ".sql", ".java", ".c", ".h", ".cpp", ".hpp",
+    ".cc", ".cs", ".go", ".rs", ".rb", ".php", ".swift", ".kt", ".lua",
+    ".pl", ".r", ".gradle", ".proto", ".graphql", ".log",
+}
+DOC_EXTS = (
+    {".pdf", ".txt", ".md", ".json", ".csv", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"}
+    | CODE_EXTS
+)
 
 JOB_TERMINAL = {"completed", "completed_with_errors", "failed", "interrupted"}
 
