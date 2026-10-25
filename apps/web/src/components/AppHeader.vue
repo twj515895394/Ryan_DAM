@@ -91,7 +91,8 @@ const quickTypes: Array<{
   { value: "image", label: "图片" },
   { value: "video", label: "视频" },
   { value: "audio", label: "音频" },
-  { value: "document", label: "文档" }
+  { value: "document", label: "文档" },
+  { value: "other", label: "其他" }
 ];
 </script>
 

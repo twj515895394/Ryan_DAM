@@ -16,7 +16,7 @@ const ASSET_TYPE_LABELS: Record<string, string> = {
   video: "视频",
   audio: "音频",
   document: "文档",
-  other: "文件"
+  other: "其他"
 };
 
 function trashTypeLabel(type: string): string {

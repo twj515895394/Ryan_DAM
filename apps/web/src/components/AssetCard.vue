@@ -55,7 +55,7 @@ const typeLabel = computed(() => {
     case "video": return "视频";
     case "audio": return "音频";
     case "document": return "文档";
-    default: return "文件";
+    default: return "其他";
   }
 });
 
