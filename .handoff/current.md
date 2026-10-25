@@ -3,32 +3,34 @@
 > **必读：** 这是 Ryan_DAM 项目根目录 `.handoff/current.md` 的详细交接文档。接手者应先读本文件，再读 `docs/` 下的需求与设计；不要依赖聊天记录来判断实际代码状态。
 >
 > **最近核实时间：** 2026-10-25（ZCode 会话）  
-> **交接版本：** Handoff v7（项目删除 409 已确诊为「升级后后端进程未重启」的陈旧服务问题 + md 表格预览 + 导入面板 5 秒自动关闭）  
+> **交接版本：** Handoff v9（文件夹「编辑文件夹」弹窗：锁定开关 + 描述，锁定目录拦截一切删除含级联 409）  
 > **目标仓库：** https://github.com/twj515895394/Ryan_DAM  
 > **主分支：** `main`  
-> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录与项目级联删除全面完成（`cascade_delete_folder_ids` 共享算法 + Apple HIG 影响说明确认弹窗）；**用户报告的删除项目 409 已定位为陈旧后端进程**（Electron 派生的 Python 服务无热重载，旧进程静默忽略 `?cascade=true`），代码无缺陷，**用户完全重启桌面应用后即可正常级联删除**，前端已加固为遇 404 如实提示重启；md 文档预览支持 GFM 表格（对齐/横向滚动/卡片样式）；导入任务面板完成 5 秒自动关闭；typecheck + build + 125 pytest 全绿，5173 浏览器三项冒烟通过。
+> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录与项目级联删除全面完成（`cascade_delete_folder_ids` 共享算法 + Apple HIG 影响说明确认弹窗）；**用户报告的删除项目 409 已定位为陈旧后端进程**（Electron 派生的 Python 服务无热重载，旧进程静默忽略 `?cascade=true`），代码无缺陷，**用户完全重启桌面应用后即可正常级联删除**，前端已加固为遇 404 如实提示重启；md 文档预览支持 GFM 表格；导入任务面板 5 秒自动关闭；卡片提示词入口双修复；**侧栏铅笔升级为「编辑文件夹」弹窗（名称 + 描述 + Apple HIG 琥珀锁定开关）**——迁移 0006 增 `folders.locked/description`，锁定目录拦截直接删除与目录/项目级联（409 `folder_locked` 点名锁定目录），锁只拦删除、不向下继承；typecheck + build + **131 pytest** 全绿，5173 浏览器冒烟锁定/拦截/解锁/级联全链路通过。**需完全重启桌面应用使 0006 迁移与守卫生效（前端 vite 热更新即可，后端进程必须重启）。**
 
 ---
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 卡片提示词入口双修复：挂载时序进编辑态 + 毛玻璃芯片重设计）
+### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 文件夹「编辑文件夹」弹窗：锁定开关 + 描述，级联删除锁定拦截）
 
-> **最新会话交接：** [`.handoff/handoff-20261025-163052.md`](./handoff-20261025-163052.md)（根因诊断、交付明细、验证记录、codereview 结论与下一会话任务）——接手者务必先读它，再读本文件。上一会话（409 诊断 + md 表格 + 导入面板自动关闭）交接见 [`.handoff/handoff-20261025-145000.md`](./handoff-20261025-145000.md)。
+> **最新会话交接：** [`.handoff/handoff-20261025-165908.md`](./handoff-20261025-165908.md)（设计共识、交付明细、验证记录、codereview 结论与下一会话任务）——接手者务必先读它，再读本文件。上一会话（卡片提示词入口双修复）交接见 [`.handoff/handoff-20261025-163052.md`](./handoff-20261025-163052.md)。
 
-- **Git 分支 / 状态：** `main`，本地原子提交（前端 fix / feat / 文档，本会话新增 `79257e8` + `8cd8e37` + docs），未推送，开发期约定统一交付后再推。
-- **本会话已完成工作（纯前端，后端 0 改动）：**
-  1. **卡片入口弹出空查看框 → 修复（`fix(web)`）**：无提示词资产点卡片「+ 提示词」进入的是查看空框而非添加编辑框。根因：`AssetPreview` setup 期同步把 `promptModalOpen` 置 `true`，`PromptModal` 的 `open` watch **缺 `immediate`**，挂载即真值不触发，`initPrompt()` 从未运行。修复 = watch 加 `{ immediate: true }`，标题按状态显示「添加提示词 / 编辑提示词 / 提示词 · 名称」。
-  2. **实心蓝徽标突兀 → 毛玻璃芯片重设计（`feat(web)`，design-taste-frontend + apple-design）**：`AssetCard.vue` 提示词入口改为深色毛玻璃芯片（`bg-black/55 backdrop-blur-sm`，与时长角标 `bg-black/60` 同材质）；有提示词常态仅图标、悬停展开文字，无提示词悬停卡片才现「+ 提示词」；`focus-visible:opacity-100` 保键盘可达；失效徽标与芯片收入同一左下芯片行，不再重叠。
-  3. **验证与冒烟**：typecheck ✅ / build:web ✅ 1.93s / **125 passed** ✅；5173 浏览器冒烟（隔离后端 + localStorage 桥，真实数据 0 接触）——无提示词点入直达添加态（标题/聚焦确认）、保存换行逐字保留 + 卡片图标翻转、有提示词查看态正常、悬停芯片实测 `rgba(0,0,0,0.55)`+`blur(4px)`；测毕杀进程、删 `.prompt-smoke`、清桥接与冒烟标签页。
-  4. **codereview**：0 致命；2 建议已落实——对比度 `/45→/55`、hover `/70→/75`（白字过 AA）+ `focus-visible:opacity-100`（键盘可见）。
+- **Git 分支 / 状态：** `main`，本地原子提交（本会话 `f611783` backend + `c234b43` web + docs），未推送，开发期约定统一交付后再推。
+- **本会话已完成工作（后端迁移 + 前端弹窗）：**
+  1. **需求与设计共识（grill-me 三问定案）**：侧栏铅笔 →「重命名文件夹」升级为「编辑文件夹」弹窗；锁定 = 本目录免删（子目录与资产仍可单独删除），**级联删除（目录级与项目级）子树内含锁定目录整次拦截 409 `folder_locked` 点名锁定目录**；锁只拦删除（重命名/移动允许）、不向下继承；本弹窗字段 = 名称 + 锁定开关 + 描述（≤2000）。
+  2. **后端（`f611783`）**：Alembic **0006** 增列 `folders.locked`（NOT NULL default false）与 `folders.description`；`update_folder_info`（`FOLDER_INFO_UNSET` 哨兵区分未提供/显式清空，strip + 超长 422）；`delete_folder` 自身锁定守卫 + `cascade_delete_folder_ids` 子树单查询锁定扫描（目录/项目级联共用）；`PATCH /folders/{id}` 组合分支；测试 +6 → **131 passed**。
+  3. **前端（`c234b43`）**：新组件 `FolderEditDialog.vue`（119 行，名称/描述/Apple HIG 琥珀开关，单「保存」一次组合 PATCH）；树行锁定琥珀锁徽标 + × 禁用与锁定 tooltip；`useFolderDelete` 锁定前置 warning 兜底；store `updateFolder` 替换 `renameFolder`。
+  4. **验证与冒烟**：typecheck ✅ / build:web ✅ 2.03s / **131 passed** ✅；5173 浏览器冒烟（隔离后端 58469 + localStorage 桥，真实数据 0 接触）——锁徽标实测琥珀 `rgb(245,158,11)`、× `disabled=true`、级联删除 toast 如实显示 409 点名「内层」、解锁后徽标消失 + 删除成功、描述编辑持久化、NameDialog 新建回归通过；测毕杀进程、删 `.folder-lock-smoke`、清桥接。
+  5. **codereview**：0 致命、0 需修（`{"locked": null}` 视作不改动的边界与 ConfirmDialog `whitespace-pre-line` 换行均已核实）。
 - **待处理问题记录（下个会话继续）：**
-  - **用户动作（关键）**：实机验收卡片芯片观感与卡片入口直达添加框；连同前会话项目级联删除（需完全重启桌面应用）、票 21（拖出）/票 22（终验）人工验收。
-  - review 遗留小项清单见 §12 票 15–20 条目与最新交接文档。
+  - **用户动作（关键）**：**完全重启桌面应用**（0006 迁移与新守卫需后端进程重启；vite 5173 无需动）后实机验收锁定全链路；连同前会话项目级联删除、票 21/22、卡片芯片观感人工验收。
+  - 编辑弹窗后续字段候选（封面/颜色/归档）待用户点名；review 遗留小项清单见 §12 票 15–20 条目与最新交接文档。
 
 ### 0.0.1 迭代时间线（倒序）
 
-0. **卡片提示词入口双修复（本会话，2026-10-25）**——①无提示词资产点卡片「+ 提示词」弹出空查看框而非添加框：`PromptModal` 的 `open` watch 缺 `immediate`，卡片入口挂载即 `open=true` 无变化可监听，`initPrompt` 永不执行；加 `{ immediate: true }` 修复，标题按意图显示添加/编辑/查看。②实心蓝徽标突兀：重设计为深色毛玻璃芯片（`bg-black/55` + `backdrop-blur-sm`，与时长角标同材质），有提示词图标常驻、无提示词悬停显现，`focus-visible` 键盘可达，失效徽标同排不重叠。125 pytest 全绿，5173 四场景冒烟通过；codereview 对比度与焦点 2 建议已落实。详见 [`.handoff/handoff-20261025-163052.md`](./handoff-20261025-163052.md)。
+0. **文件夹编辑弹窗：锁定开关 + 描述（本会话，2026-10-25）**——侧栏铅笔升级为「编辑文件夹」弹窗（名称 + 描述 + Apple HIG 琥珀锁定开关，一次组合 PATCH）；迁移 0006 增 `folders.locked/description`；锁定目录拦截直接删除与目录/项目级联（409 `folder_locked` 点名锁定目录），锁只拦删除、不向下继承；树行琥珀锁徽标 + × 禁用 tooltip + `useFolderDelete` 前置兜底。131 pytest 全绿（+6），5173 冒烟锁定/拦截/解锁/级联/描述持久化全链路通过；codereview 0 致命。**用户需完全重启桌面应用使迁移与守卫生效。**详见 [`.handoff/handoff-20261025-165908.md`](./handoff-20261025-165908.md)。
+1. **卡片提示词入口双修复（上一会话，2026-10-25）**——①无提示词资产点卡片「+ 提示词」弹出空查看框而非添加框：`PromptModal` 的 `open` watch 缺 `immediate`，卡片入口挂载即 `open=true` 无变化可监听，`initPrompt` 永不执行；加 `{ immediate: true }` 修复，标题按意图显示添加/编辑/查看。②实心蓝徽标突兀：重设计为深色毛玻璃芯片（`bg-black/55` + `backdrop-blur-sm`，与时长角标同材质），有提示词图标常驻、无提示词悬停显现，`focus-visible` 键盘可达，失效徽标同排不重叠。125 pytest 全绿，5173 四场景冒烟通过；codereview 对比度与焦点 2 建议已落实。详见 [`.handoff/handoff-20261025-163052.md`](./handoff-20261025-163052.md)。
 1. **项目删除 409 诊断 + 预览/导入优化（2026-10-25 上一会话）**——diagnosing-bugs 流程确诊 409 为陈旧后端进程（时间线取证 + worktree RED/GREEN diff loop），前端加固为 404 如实重启提示；md 预览支持 GFM 表格（对齐 + 横向滚动卡片）；导入任务面板完成 5 秒自动关闭。125 pytest 全绿，5173 三项冒烟通过。**用户需完全重启桌面应用使级联项目删除生效。**详见 [`.handoff/handoff-20261025-145000.md`](./handoff-20261025-145000.md)。
 1. **项目级联删除（2026-10-25 上一会话）**——解除「仅允许删除没有任何文件夹的空项目」限制：`cascade_delete_folder_ids` 共享算法 + `GET /projects/{id}/stats` + `DELETE ?cascade` + `useProjectDelete` 影响说明确认弹窗（托管→回收站、外部→仅移除索引），125 pytest 全绿，5173 冒烟通过。详见 [`.handoff/handoff-20261025-143000.md`](./handoff-20261025-143000.md)。
 1. **前端回收站沉浸式预览集成（2026-10-25 上一会话）**——回收站整行点击调出沉浸预览，trashMode 恢复/永久删除（danger 确认 + 44px 热区），App.vue 瘦身至 composables 四件套 + AssetTagEditor 抽取，`/open` 放行 trashed，123 pytest 全绿，5173 浏览器冒烟全链路通过。详见 [`.handoff/handoff-20261025-123500.md`](./handoff-20261025-123500.md)。
@@ -523,7 +525,17 @@ npm run package:win
 
 ## 12. 迭代记录
 
-### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 卡片提示词入口双修复：挂载时序进编辑态 + 毛玻璃芯片重设计）
+### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 文件夹「编辑文件夹」弹窗：锁定开关 + 描述，级联删除锁定拦截）
+
+- **Git 分支 / 提交：** `main` 本地三组原子提交（`f611783` backend / `c234b43` web / 文档），全部未推送。
+- **开发目标：** 侧栏文件夹铅笔从「重命名文件夹」升级为「编辑文件夹」弹窗，可编辑目录信息；第一功能 = 锁定开关：锁定后该目录不能被删除（含父级/项目级联），但子目录与资产仍可单独删除。grill-me 定案：级联遇锁定整次拦截 409、锁只拦删除（重命名/移动允许）、字段 = 名称 + 锁定 + 描述。
+- **实际交付：** 见 [`.handoff/handoff-20261025-165908.md`](./handoff-20261025-165908.md) §1–2。后端：迁移 0006（`folders.locked` NOT NULL default false + `folders.description` ≤2000）、`update_folder_info` 哨兵语义（未提供保持 / 显式 null 空白清空 / strip / 超长 422）、`delete_folder` 锁定守卫 + `cascade_delete_folder_ids` 子树锁定单查询拦截（目录与项目级联共用）、`PATCH` 组合分支。前端：`FolderEditDialog.vue`（119 行，名称/描述/琥珀 `role="switch"` 开关，单保存一次 PATCH）、树行琥珀锁徽标 + × `disabled` + 锁定 tooltip、`useFolderDelete` 锁定 warning 兜底、store `updateFolder`。
+- **修改文件：** `backend/alembic/versions/0006_folder_lock_description.py`（新）、`backend/app/{models,schemas,services,api/v1}/folder*`、`backend/tests/{test_folders_api,test_migrations}.py`；`apps/web/src/components/FolderEditDialog.vue`（新）、`FolderTree/AppSidebar/SidebarIcon.vue`、`App.vue`、`api/{types,client}.ts`、`stores/library.ts`、`composables/{useDialogFlows,useFolderDelete}.ts`。
+- **运行验证：** `npm run typecheck` ✅ / `npm run build:web` ✅ 2.03s / `.venv/Scripts/python.exe -m pytest backend/tests` ✅ **131 passed**（+6）/ 5173 浏览器冒烟（隔离后端 58469 + localStorage 桥，真实数据 0 接触）✅ 锁徽标琥珀实测、× disabled、级联 409 toast 点名「内层」、解锁→徽标消失→删除成功、描述持久化、NameDialog 新建回归；测毕杀进程、删 `.folder-lock-smoke`、清桥接，5173 复测正常。
+- **未完成 / 已知问题：** codereview 0 致命 0 需修；新组件 119 行合规；`{"locked": null}` 显式 null 按「不改动」处理（弹窗恒携带布尔值，无实际影响）。
+- **下一步第一任务（1–3 个）：** ①**用户完全重启桌面应用**（0006 迁移与守卫需后端重启）后实机验收锁定全链路 + 前会话遗留项（项目级联、票 21/22、卡片芯片）；②编辑弹窗后续字段候选（封面/颜色/归档）待用户点名；③全部通过后统一 `git push`。
+
+### 上一迭代（2026-10-25，ZCode 会话 · 卡片提示词入口双修复：挂载时序进编辑态 + 毛玻璃芯片重设计）
 
 - **Git 分支 / 提交：** `main` 本地三组原子提交（`79257e8` fix / `8cd8e37` feat / 文档），全部未推送。
 - **开发目标：** ①无提示词资产点卡片「+ 提示词」应进入添加提示词编辑框，实测弹出的是空白查看框；②卡片实心蓝色「+ 提示词」徽标突兀，需按 design-taste-frontend / apple-design 优化显示。
