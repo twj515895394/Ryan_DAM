@@ -7,7 +7,6 @@ import {
   createTag,
   library,
   renameAssetById,
-  renameFolder,
   renameProject,
   renameTag,
   updateManagedRoot
@@ -17,7 +16,6 @@ export type DialogRequest =
   | { kind: "project-create" }
   | { kind: "project-rename"; projectId: number; initial: string }
   | { kind: "folder-create"; scope: "general" | "project"; projectId: number | null; parentId: number | null }
-  | { kind: "folder-rename"; folderId: number; initial: string }
   | { kind: "tag-create" }
   | { kind: "tag-rename"; tagId: number; initial: string }
   | { kind: "asset-rename"; assetId: number; initial: string }
@@ -37,7 +35,6 @@ export function useDialogFlows(deps: { onAssetRenamed: (assetId: number) => void
       case "project-create": return "新建项目";
       case "project-rename": return "重命名项目";
       case "folder-create": return d.parentId === null ? "新建顶层文件夹" : "新建子文件夹";
-      case "folder-rename": return "重命名文件夹";
       case "tag-create": return "新建标签";
       case "tag-rename": return "重命名标签";
       case "asset-rename": return "重命名资产";
@@ -49,7 +46,6 @@ export function useDialogFlows(deps: { onAssetRenamed: (assetId: number) => void
     const d = dialog.value;
     if (
       d?.kind === "project-rename" ||
-      d?.kind === "folder-rename" ||
       d?.kind === "tag-rename" ||
       d?.kind === "asset-rename"
     ) {
@@ -75,9 +71,6 @@ export function useDialogFlows(deps: { onAssetRenamed: (assetId: number) => void
           d.scope === "general"
             ? await createGeneralFolder(value, d.parentId)
             : await createProjectFolder(d.projectId ?? -1, value, d.parentId);
-        break;
-      case "folder-rename":
-        ok = await renameFolder(d.folderId, value);
         break;
       case "tag-create":
         ok = Boolean(await createTag(value));

@@ -18,7 +18,8 @@ defineProps<{
     | "filter"
     | "arrow-up"
     | "arrow-down"
-    | "check";
+    | "check"
+    | "lock";
 }>();
 </script>
 
@@ -144,6 +145,12 @@ defineProps<{
     <!-- 勾选对号 -->
     <template v-else-if="name === 'check'">
       <polyline points="20 6 9 17 4 12" />
+    </template>
+
+    <!-- 锁定挂锁 -->
+    <template v-else-if="name === 'lock'">
+      <rect x="4.5" y="10.5" width="15" height="9.5" rx="2" />
+      <path d="M8 10.5V7.5a4 4 0 1 1 8 0v3" />
     </template>
   </svg>
 </template>

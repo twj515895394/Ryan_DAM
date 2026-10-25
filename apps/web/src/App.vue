@@ -5,6 +5,7 @@ import AssetPreview from "./components/AssetPreview.vue";
 import AssetGallery from "./components/AssetGallery.vue";
 import ImportJobPanel from "./components/ImportJobPanel.vue";
 import NameDialog from "./components/NameDialog.vue";
+import FolderEditDialog from "./components/FolderEditDialog.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
 import Stage0Panel from "./components/Stage0Panel.vue";
 import AppSidebar from "./components/AppSidebar.vue";
@@ -20,7 +21,7 @@ import { useFolderDelete } from "./composables/useFolderDelete";
 import { useProjectDelete } from "./composables/useProjectDelete";
 import { useTrashPreview } from "./composables/useTrashPreview";
 
-import type { ExternalSource, FolderNode } from "./api/types";
+import type { ExternalSource, FolderEditPayload, FolderNode } from "./api/types";
 import {
   bulkTrashSelected,
   clearAssetSelection,
@@ -42,7 +43,8 @@ import {
   moveAssetToFolder,
   rescanExternalSource,
   toggleAssetSelection,
-  unlinkExternalSource
+  unlinkExternalSource,
+  updateFolder
 } from "./stores/library";
 
 type TargetDialogRequest =
@@ -271,6 +273,16 @@ function onDeleteFolderNode(node: FolderNode): void {
   askDeleteFolder(node, (ok) => {
     if (ok && activeFolderId.value === node.id) selectGeneral();
   });
+}
+
+/** 侧栏铅笔 →「编辑文件夹」弹窗（名称 / 描述 / 锁定开关），保存成功后关闭并刷新树。 */
+const folderEditNode = ref<FolderNode | null>(null);
+
+async function onFolderEditSave(payload: FolderEditPayload): Promise<void> {
+  const node = folderEditNode.value;
+  if (!node) return;
+  const ok = await updateFolder(node.id, payload);
+  if (ok) folderEditNode.value = null;
 }
 
 async function runFilesImport(folderId: number): Promise<void> {
@@ -553,7 +565,7 @@ onUnmounted(() => {
       @select-folder="selectFolder"
       @select-trash="selectTrash"
       @create-folder="(scope, projId, parentId) => (dialog = { kind: 'folder-create', scope, projectId: projId, parentId })"
-      @rename-folder="(n) => (dialog = { kind: 'folder-rename', folderId: n.id, initial: n.name })"
+      @edit-folder="(n) => (folderEditNode = n)"
       @delete-folder="onDeleteFolderNode"
       @create-project="dialog = { kind: 'project-create' }"
       @rename-project="(id, name) => (dialog = { kind: 'project-rename', projectId: id, initial: name })"
@@ -696,6 +708,14 @@ onUnmounted(() => {
       :initial="dialogInitial"
       @confirm="onDialogConfirm"
       @cancel="dialog = null"
+    />
+
+    <!-- 编辑文件夹弹窗（名称 / 描述 / 锁定） -->
+    <FolderEditDialog
+      :open="folderEditNode !== null"
+      :folder="folderEditNode"
+      @save="onFolderEditSave"
+      @cancel="folderEditNode = null"
     />
 
     <!-- Apple HIG 全局操作确认模态框 -->

@@ -5,6 +5,7 @@ import type {
   BulkResult,
   ExternalSource,
   FolderCreatePayload,
+  FolderEditPayload,
   FolderNode,
   FolderOut,
   FolderStats,
@@ -107,8 +108,8 @@ export const api = {
     request<FolderNode[]>(`/api/v1/folders/tree?scope=project&project_id=${projectId}`),
   createFolder: (payload: FolderCreatePayload) =>
     request<FolderOut>("/api/v1/folders", { method: "POST", json: payload }),
-  renameFolder: (id: number, name: string) =>
-    request<FolderOut>(`/api/v1/folders/${id}`, { method: "PATCH", json: { name } }),
+  updateFolder: (id: number, payload: FolderEditPayload) =>
+    request<FolderOut>(`/api/v1/folders/${id}`, { method: "PATCH", json: payload }),
   getFolderStats: (id: number) => request<FolderStats>(`/api/v1/folders/${id}/stats`),
   deleteFolder: (id: number, cascade = false) =>
     request<void>(`/api/v1/folders/${id}${cascade ? "?cascade=true" : ""}`, { method: "DELETE" }),

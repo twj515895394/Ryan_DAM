@@ -18,7 +18,7 @@ const emit = defineEmits<{
   (e: "select-folder", node: FolderNode): void;
   (e: "select-trash"): void;
   (e: "create-folder", scope: "general" | "project", projectId: number | null, parentId: number | null): void;
-  (e: "rename-folder", node: FolderNode): void;
+  (e: "edit-folder", node: FolderNode): void;
   (e: "delete-folder", node: FolderNode): void;
   (e: "create-project"): void;
   (e: "rename-project", id: number, name: string): void;
@@ -115,7 +115,7 @@ function toggleTagSelection(tagId: number): void {
             :active-id="activeScope === 'general' && viewMode === 'library' ? activeFolderId : null"
             @select="emit('select-folder', $event)"
             @create-child="emit('create-folder', 'general', null, $event.id)"
-            @rename="emit('rename-folder', $event)"
+            @edit="emit('edit-folder', $event)"
             @remove="emit('delete-folder', $event)"
           />
         </div>
@@ -183,7 +183,7 @@ function toggleTagSelection(tagId: number): void {
               :active-id="activeScope === 'project' && activeProjectId === project.id && viewMode === 'library' ? activeFolderId : null"
               @select="emit('select-folder', $event)"
               @create-child="emit('create-folder', 'project', project.id, $event.id)"
-              @rename="emit('rename-folder', $event)"
+              @edit="emit('edit-folder', $event)"
               @remove="emit('delete-folder', $event)"
             />
           </div>

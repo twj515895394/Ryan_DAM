@@ -16,7 +16,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: "select", node: FolderNode): void;
   (e: "create-child", node: FolderNode): void;
-  (e: "rename", node: FolderNode): void;
+  (e: "edit", node: FolderNode): void;
   (e: "remove", node: FolderNode): void;
 }>();
 
@@ -68,8 +68,13 @@ function toggle(node: FolderNode): void {
           :class="activeId === node.id ? 'text-accent' : ''"
         />
 
-        <!-- 目录名称 -->
-        <span class="min-w-0 flex-1 truncate">{{ node.name }}</span>
+        <!-- 目录名称 + 锁定徽记 -->
+        <span class="flex min-w-0 flex-1 items-center gap-1">
+          <span class="truncate">{{ node.name }}</span>
+          <span v-if="node.locked" class="shrink-0 text-amber-500" title="已锁定：该文件夹不会被删除">
+            <SidebarIcon name="lock" class="h-3 w-3" />
+          </span>
+        </span>
 
         <!-- 悬停操作按钮组 -->
         <span class="hidden shrink-0 items-center gap-0.5 group-hover:flex">
@@ -82,14 +87,16 @@ function toggle(node: FolderNode): void {
           </button>
           <button
             class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-ink hover:shadow-xs"
-            title="重命名"
-            @click.stop="emit('rename', node)"
+            title="编辑文件夹"
+            @click.stop="emit('edit', node)"
           >
             <SidebarIcon name="edit" class="h-3 w-3" />
           </button>
           <button
-            class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-rose-600 hover:shadow-xs"
-            title="删除空目录"
+            class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-rose-600 hover:shadow-xs disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted disabled:hover:shadow-none"
+            :class="node.locked ? 'text-muted/50' : ''"
+            :title="node.locked ? '已锁定，需在「编辑文件夹」中解除锁定后才能删除' : '删除文件夹'"
+            :disabled="node.locked"
             @click.stop="emit('remove', node)"
           >
             <SidebarIcon name="close" class="h-3 w-3" />
@@ -105,7 +112,7 @@ function toggle(node: FolderNode): void {
           :depth="depth + 1"
           @select="(n) => emit('select', n)"
           @create-child="(n) => emit('create-child', n)"
-          @rename="(n) => emit('rename', n)"
+          @edit="(n) => emit('edit', n)"
           @remove="(n) => emit('remove', n)"
         />
       </div>

@@ -15,6 +15,17 @@ export function useFolderDelete(ask: (request: ConfirmRequest) => void) {
   }
 
   async function buildAndAsk(node: FolderNode, afterDeleted: (ok: boolean) => void): Promise<void> {
+    // 锁定前置拦截：侧栏已禁用删除按钮，此处兜底树刷新竞态（后端 409 仍是最终事实源）
+    if (node.locked) {
+      ask({
+        title: "文件夹已锁定",
+        description: `「${node.name}」处于锁定状态，无法删除。\n请在该目录的「编辑文件夹」弹窗中解除锁定后再试。`,
+        confirmText: "知道了",
+        intent: "warning",
+        action: () => {}
+      });
+      return;
+    }
     try {
       const stats = await api.getFolderStats(node.id);
       const hasContents = stats.subfolder_count > 0 || stats.asset_count > 0;

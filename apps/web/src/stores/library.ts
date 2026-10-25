@@ -4,6 +4,7 @@ import { api, ApiRequestError } from "../api/client";
 import type {
   AssetPage,
   ExternalSource,
+  FolderEditPayload,
   FolderNode,
   ImportJob,
   Project,
@@ -190,9 +191,9 @@ export async function ensureTopLevelFolder(
   }
 }
 
-export async function renameFolder(id: number, name: string): Promise<boolean> {
+export async function updateFolder(id: number, payload: FolderEditPayload): Promise<boolean> {
   try {
-    await api.renameFolder(id, name);
+    await api.updateFolder(id, payload);
     await loadAll();
     return true;
   } catch (error) {
