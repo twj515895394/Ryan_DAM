@@ -12,24 +12,24 @@
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 项目删除 409 陈旧后端诊断与加固 + 预览/导入体验优化）
+### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 卡片提示词入口双修复：挂载时序进编辑态 + 毛玻璃芯片重设计）
 
-> **最新会话交接：** [`.handoff/handoff-20261025-145000.md`](./handoff-20261025-145000.md)（诊断报告、交付明细、验证记录、codereview 结论与下一会话任务）——接手者务必先读它，再读本文件。上一会话（项目级联删除）交接见 [`.handoff/handoff-20261025-143000.md`](./handoff-20261025-143000.md)。
+> **最新会话交接：** [`.handoff/handoff-20261025-163052.md`](./handoff-20261025-163052.md)（根因诊断、交付明细、验证记录、codereview 结论与下一会话任务）——接手者务必先读它，再读本文件。上一会话（409 诊断 + md 表格 + 导入面板自动关闭）交接见 [`.handoff/handoff-20261025-145000.md`](./handoff-20261025-145000.md)。
 
-- **Git 分支 / 状态：** `main`，本地原子提交（前端 fix / feat ×2 / 文档），未推送，开发期约定统一交付后再推。
-- **本会话已完成工作：**
-  1. **项目删除 409 诊断（diagnosing-bugs）**：用户反馈「弹窗提示可级联删除，点击后却 409 项目仍包含文件夹」。**结论：非代码缺陷**——时间线取证（用户 Electron 派生后端进程启动于 12:16:53，级联后端代码 13:28:17 才提交）+ 确定性 RED/GREEN diff loop（`git worktree` 检出旧提交 `d3269d7` 起后端复现 409 文案逐字一致；HEAD 同操作 204 级联成功），确诊为**升级后未重启的陈旧后端进程**静默忽略 `?cascade=true` 走旧拦截路径。**用户完全退出并重启桌面应用即可正常删除**（Python 子进程无热重载）。
-  2. **前端加固**：`ApiRequestError` 新增 `readonly status`；`useProjectDelete` 统计接口回退分支按 404 判定陈旧后端，如实提示「本地服务版本可能过旧，请完全退出并重启 Ryan_DAM 后再试」，不再做出旧后端无法兑现的级联承诺。
-  3. **md 预览支持 GFM 表格**：`utils/markdown.ts` 新增表头+分隔行识别（`TABLE_ROW`/`TABLE_SEP`）、单元格拆分与 `:---:`/`---:` 对齐、`buildHtmlTable` 输出 `overflow-x-auto rounded-xl` 卡片包裹的 border-collapse 样式表格（宽表横向滚动），预览不再显示原始管道符文本。
-  4. **导入任务面板 5 秒自动关闭**：`ImportJobPanel.vue` `watch(done)` 完成态起 `setTimeout(dismissImportJob, 5000)`；重试/强制导入回到运行态自动撤销计时；`onBeforeUnmount` 清理。
-  5. **验证与冒烟**：typecheck ✅ / build:web ✅ 1.91s / **125 passed** ✅；5173 浏览器冒烟（隔离后端 + localStorage 桥，真实数据 0 接触）三项全绿——表格渲染为样式化表格、面板完成 7.5s 后自动消失、级联删除成功无 409（回收站 +2），截图确认；测毕杀进程、删隔离数据与 worktree、清浏览器桥接与冒烟标签页。
+- **Git 分支 / 状态：** `main`，本地原子提交（前端 fix / feat / 文档，本会话新增 `79257e8` + `8cd8e37` + docs），未推送，开发期约定统一交付后再推。
+- **本会话已完成工作（纯前端，后端 0 改动）：**
+  1. **卡片入口弹出空查看框 → 修复（`fix(web)`）**：无提示词资产点卡片「+ 提示词」进入的是查看空框而非添加编辑框。根因：`AssetPreview` setup 期同步把 `promptModalOpen` 置 `true`，`PromptModal` 的 `open` watch **缺 `immediate`**，挂载即真值不触发，`initPrompt()` 从未运行。修复 = watch 加 `{ immediate: true }`，标题按状态显示「添加提示词 / 编辑提示词 / 提示词 · 名称」。
+  2. **实心蓝徽标突兀 → 毛玻璃芯片重设计（`feat(web)`，design-taste-frontend + apple-design）**：`AssetCard.vue` 提示词入口改为深色毛玻璃芯片（`bg-black/55 backdrop-blur-sm`，与时长角标 `bg-black/60` 同材质）；有提示词常态仅图标、悬停展开文字，无提示词悬停卡片才现「+ 提示词」；`focus-visible:opacity-100` 保键盘可达；失效徽标与芯片收入同一左下芯片行，不再重叠。
+  3. **验证与冒烟**：typecheck ✅ / build:web ✅ 1.93s / **125 passed** ✅；5173 浏览器冒烟（隔离后端 + localStorage 桥，真实数据 0 接触）——无提示词点入直达添加态（标题/聚焦确认）、保存换行逐字保留 + 卡片图标翻转、有提示词查看态正常、悬停芯片实测 `rgba(0,0,0,0.55)`+`blur(4px)`；测毕杀进程、删 `.prompt-smoke`、清桥接与冒烟标签页。
+  4. **codereview**：0 致命；2 建议已落实——对比度 `/45→/55`、hover `/70→/75`（白字过 AA）+ `focus-visible:opacity-100`（键盘可见）。
 - **待处理问题记录（下个会话继续）：**
-  - **用户动作（关键）**：完全重启桌面应用后实机验证项目级联删除；连同票 21（拖出）/票 22（终验）人工验收。
+  - **用户动作（关键）**：实机验收卡片芯片观感与卡片入口直达添加框；连同前会话项目级联删除（需完全重启桌面应用）、票 21（拖出）/票 22（终验）人工验收。
   - review 遗留小项清单见 §12 票 15–20 条目与最新交接文档。
 
 ### 0.0.1 迭代时间线（倒序）
 
-0. **项目删除 409 诊断 + 预览/导入优化（本会话，2026-10-25）**——diagnosing-bugs 流程确诊 409 为陈旧后端进程（时间线取证 + worktree RED/GREEN diff loop），前端加固为 404 如实重启提示；md 预览支持 GFM 表格（对齐 + 横向滚动卡片）；导入任务面板完成 5 秒自动关闭。125 pytest 全绿，5173 三项冒烟通过。**用户需完全重启桌面应用使级联项目删除生效。**详见 [`.handoff/handoff-20261025-145000.md`](./handoff-20261025-145000.md)。
+0. **卡片提示词入口双修复（本会话，2026-10-25）**——①无提示词资产点卡片「+ 提示词」弹出空查看框而非添加框：`PromptModal` 的 `open` watch 缺 `immediate`，卡片入口挂载即 `open=true` 无变化可监听，`initPrompt` 永不执行；加 `{ immediate: true }` 修复，标题按意图显示添加/编辑/查看。②实心蓝徽标突兀：重设计为深色毛玻璃芯片（`bg-black/55` + `backdrop-blur-sm`，与时长角标同材质），有提示词图标常驻、无提示词悬停显现，`focus-visible` 键盘可达，失效徽标同排不重叠。125 pytest 全绿，5173 四场景冒烟通过；codereview 对比度与焦点 2 建议已落实。详见 [`.handoff/handoff-20261025-163052.md`](./handoff-20261025-163052.md)。
+1. **项目删除 409 诊断 + 预览/导入优化（2026-10-25 上一会话）**——diagnosing-bugs 流程确诊 409 为陈旧后端进程（时间线取证 + worktree RED/GREEN diff loop），前端加固为 404 如实重启提示；md 预览支持 GFM 表格（对齐 + 横向滚动卡片）；导入任务面板完成 5 秒自动关闭。125 pytest 全绿，5173 三项冒烟通过。**用户需完全重启桌面应用使级联项目删除生效。**详见 [`.handoff/handoff-20261025-145000.md`](./handoff-20261025-145000.md)。
 1. **项目级联删除（2026-10-25 上一会话）**——解除「仅允许删除没有任何文件夹的空项目」限制：`cascade_delete_folder_ids` 共享算法 + `GET /projects/{id}/stats` + `DELETE ?cascade` + `useProjectDelete` 影响说明确认弹窗（托管→回收站、外部→仅移除索引），125 pytest 全绿，5173 冒烟通过。详见 [`.handoff/handoff-20261025-143000.md`](./handoff-20261025-143000.md)。
 1. **前端回收站沉浸式预览集成（2026-10-25 上一会话）**——回收站整行点击调出沉浸预览，trashMode 恢复/永久删除（danger 确认 + 44px 热区），App.vue 瘦身至 composables 四件套 + AssetTagEditor 抽取，`/open` 放行 trashed，123 pytest 全绿，5173 浏览器冒烟全链路通过。详见 [`.handoff/handoff-20261025-123500.md`](./handoff-20261025-123500.md)。
 1. **目录级联删除与回收站媒体流放行（2026-10-25 上一会话）**——Alembic 0005 迁移解开 `folder_id` 外键约束、目录资产统计接口、级联删除与回退承接机制、受控放行回收站 content 与 thumbnail 流、前端 Apple HIG 级联删除确认弹窗。详见 [`.handoff/handoff-20261025-113000.md`](./handoff-20261025-113000.md)。
@@ -523,7 +523,17 @@ npm run package:win
 
 ## 12. 迭代记录
 
-### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 项目删除 409 陈旧后端诊断与加固 + md 表格预览 + 导入面板自动关闭）
+### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 卡片提示词入口双修复：挂载时序进编辑态 + 毛玻璃芯片重设计）
+
+- **Git 分支 / 提交：** `main` 本地三组原子提交（`79257e8` fix / `8cd8e37` feat / 文档），全部未推送。
+- **开发目标：** ①无提示词资产点卡片「+ 提示词」应进入添加提示词编辑框，实测弹出的是空白查看框；②卡片实心蓝色「+ 提示词」徽标突兀，需按 design-taste-frontend / apple-design 优化显示。
+- **实际交付：** 见 [`.handoff/handoff-20261025-163052.md`](./handoff-20261025-163052.md) §1。要点：根因 = `PromptModal` 的 `open` watch 缺 `immediate`——卡片入口 `AssetPreview` setup 期同步置 `open=true`，挂载即真值无变化可监听，`initPrompt()`（`promptEditing = !hasPrompt`）永不执行；修复 = `{ immediate: true }` + 标题按状态显示「添加提示词/编辑提示词/提示词 · 名称」。徽标重设计 = 深色毛玻璃芯片（`bg-black/55 backdrop-blur-sm`、hover `/75`，与时长角标 `bg-black/60` 同材质家族），有提示词图标常驻悬停展开、无提示词悬停卡片显现「+ 提示词」，`focus-visible:opacity-100` 键盘可达，失效徽标与芯片同处左下 `bottom-1.5 left-1.5` 芯片行互不遮挡。
+- **修改文件：** `apps/web/src/components/PromptModal.vue`、`apps/web/src/components/AssetCard.vue`（纯前端，后端 0 改动）。
+- **运行验证：** `npm run typecheck` ✅ / `npm run build:web` ✅ 1.93s / `.venv/Scripts/python.exe -m pytest backend/tests` ✅ **125 passed** / 5173 浏览器冒烟（隔离后端 + localStorage 桥，真实数据 0 接触、用户 vite 未动）✅ 四场景：无提示词点入直达添加态（标题+聚焦确认）、保存换行逐字保留且卡片图标翻转、有提示词查看态+复制正常、悬停芯片实测 `rgba(0,0,0,0.55)`+`blur(4px)` 截图确认；测毕杀进程、删 `.prompt-smoke`、清桥接与冒烟标签页（53220 复测 000、5173 复测 200）。
+- **未完成 / 已知问题：** codereview 0 致命、2 建议已落实（对比度 `/45→/55`+hover `/70→/75` 过 AA、`focus-visible` 键盘可见）；行数合规（PromptModal ≈230 / AssetCard ≈150）。
+- **下一步第一任务（1–3 个）：** ①用户实机验收卡片芯片观感 + 卡片入口直达添加框（连同前会话级联删除重启验收、票 21/22）；②review 遗留小项批量小修复；③全部通过后统一 `git push`。
+
+### 上一迭代（2026-10-25，ZCode 会话 · 项目删除 409 陈旧后端诊断与加固 + md 表格预览 + 导入面板自动关闭）
 
 - **Git 分支 / 提交：** `main` 本地四组原子提交（前端 fix / feat ×2 / 文档），全部未推送。
 - **开发目标：** ①用户报告「文件夹已级联删除后，删除项目仍提示 409 项目仍包含 1 个文件夹，实际未删除成功」，用 diagnosing-bugs 技能定位根因；②md 文档预览中 GFM 表格按原始管道符文本显示，需渲染为表格；③导入完成任务面板希望 5 秒自动关闭。
