@@ -42,6 +42,15 @@ export interface FolderStats {
   external_asset_count: number;
 }
 
+export interface ProjectStats {
+  project_id: number;
+  project_name: string;
+  subfolder_count: number;
+  asset_count: number;
+  managed_asset_count: number;
+  external_asset_count: number;
+}
+
 export interface Settings {
   managed_root: string;
   managed_root_state: "ok" | "missing" | "unavailable";

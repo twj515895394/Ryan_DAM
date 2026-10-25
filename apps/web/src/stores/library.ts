@@ -116,10 +116,10 @@ export async function renameProject(id: number, name: string): Promise<boolean> 
   }
 }
 
-export async function deleteProject(id: number): Promise<boolean> {
+export async function deleteProject(id: number, cascade = false): Promise<boolean> {
   try {
-    await api.deleteProject(id);
-    await loadAll();
+    await api.deleteProject(id, cascade);
+    await Promise.all([loadAll(), loadTrash(), loadExternalSources()]);
     return true;
   } catch (error) {
     notify("error", errText(error));

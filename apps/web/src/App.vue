@@ -17,6 +17,7 @@ import { useFolderOptions } from "./composables/useFolderOptions";
 import { useConfirmDialog } from "./composables/useConfirmDialog";
 import { useDialogFlows } from "./composables/useDialogFlows";
 import { useFolderDelete } from "./composables/useFolderDelete";
+import { useProjectDelete } from "./composables/useProjectDelete";
 import { useTrashPreview } from "./composables/useTrashPreview";
 
 import type { ExternalSource, FolderNode } from "./api/types";
@@ -26,7 +27,6 @@ import {
   clearAssets,
   convertExternalToManaged,
   deleteAssetToTrash,
-  deleteProject,
   deleteTag,
   emptyTrashAll,
   ensureTopLevelFolder,
@@ -63,12 +63,13 @@ let savedScrollTop = 0;
 
 const { allFolderGroups, allFolderOptions, flattenFolderNodes } = useFolderOptions();
 
-// Apple HIG 确认弹窗 / 通用输入对话框 / 目录级联删除 / 回收站沉浸式预览
+// Apple HIG 确认弹窗 / 通用输入对话框 / 目录与项目级联删除 / 回收站沉浸式预览
 const { confirmDialog, ask, resolveConfirm, dismissConfirm } = useConfirmDialog();
 const { dialog, dialogTitle, dialogInitial, onDialogConfirm } = useDialogFlows({
   onAssetRenamed: relocatePreview
 });
 const { askDeleteFolder } = useFolderDelete(ask);
+const { askDeleteProject: confirmDeleteProject } = useProjectDelete(ask);
 const {
   trashPreviewItem,
   trashPreviewAsset,
@@ -258,17 +259,10 @@ function selectFolder(node: FolderNode): void {
   activeFolderId.value = node.id;
 }
 
+/** 项目删除统一走 useProjectDelete（统计 → 级联影响说明 → 确认）。 */
 function askDeleteProject(id: number, name: string): void {
-  ask({
-    title: "删除项目？",
-    description: `确定删除项目「${name}」吗？\n注意：仅允许删除没有任何文件夹的空项目。`,
-    confirmText: "删除项目",
-    intent: "danger",
-    action: () => {
-      void deleteProject(id).then((ok) => {
-        if (ok && activeProjectId.value === id) selectGeneral();
-      });
-    }
+  confirmDeleteProject(id, name, (ok) => {
+    if (ok && activeProjectId.value === id) selectGeneral();
   });
 }
 

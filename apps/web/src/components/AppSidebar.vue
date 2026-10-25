@@ -170,7 +170,7 @@ function toggleTagSelection(tagId: number): void {
               </button>
               <button
                 class="flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-white hover:text-rose-600 hover:shadow-xs"
-                title="删除空项目"
+                title="删除项目"
                 @click.stop="emit('delete-project', project.id, project.name)"
               >
                 <SidebarIcon name="close" class="h-3 w-3" />

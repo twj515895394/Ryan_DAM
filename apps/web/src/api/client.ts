@@ -10,6 +10,7 @@ import type {
   FolderStats,
   ImportJob,
   Project,
+  ProjectStats,
   ScanResult,
   Settings,
   Tag,
@@ -95,7 +96,9 @@ export const api = {
   createProject: (name: string) => request<Project>("/api/v1/projects", { method: "POST", json: { name } }),
   renameProject: (id: number, name: string) =>
     request<Project>(`/api/v1/projects/${id}`, { method: "PATCH", json: { name } }),
-  deleteProject: (id: number) => request<void>(`/api/v1/projects/${id}`, { method: "DELETE" }),
+  deleteProject: (id: number, cascade = false) =>
+    request<void>(`/api/v1/projects/${id}${cascade ? "?cascade=true" : ""}`, { method: "DELETE" }),
+  getProjectStats: (id: number) => request<ProjectStats>(`/api/v1/projects/${id}/stats`),
 
   generalTree: () => request<FolderNode[]>("/api/v1/folders/tree?scope=general"),
   projectTree: (projectId: number) =>
