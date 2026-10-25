@@ -3,33 +3,35 @@
 > **必读：** 这是 Ryan_DAM 项目根目录 `.handoff/current.md` 的详细交接文档。接手者应先读本文件，再读 `docs/` 下的需求与设计；不要依赖聊天记录来判断实际代码状态。
 >
 > **最近核实时间：** 2026-10-25（ZCode 会话）  
-> **交接版本：** Handoff v9（文件夹「编辑文件夹」弹窗：锁定开关 + 描述，锁定目录拦截一切删除含级联 409）  
+> **交接版本：** Handoff v10（侧栏密度紧凑化：24px 行高 + 13px/层缩进 + 名称 tooltip + 可拖拽调节宽度把手）  
 > **目标仓库：** https://github.com/twj515895394/Ryan_DAM  
 > **主分支：** `main`  
-> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录与项目级联删除全面完成（`cascade_delete_folder_ids` 共享算法 + Apple HIG 影响说明确认弹窗）；**用户报告的删除项目 409 已定位为陈旧后端进程**（Electron 派生的 Python 服务无热重载，旧进程静默忽略 `?cascade=true`），代码无缺陷，**用户完全重启桌面应用后即可正常级联删除**，前端已加固为遇 404 如实提示重启；md 文档预览支持 GFM 表格；导入任务面板 5 秒自动关闭；卡片提示词入口双修复；**侧栏铅笔升级为「编辑文件夹」弹窗（名称 + 描述 + Apple HIG 琥珀锁定开关）**——迁移 0006 增 `folders.locked/description`，锁定目录拦截直接删除与目录/项目级联（409 `folder_locked` 点名锁定目录），锁只拦删除、不向下继承；typecheck + build + **131 pytest** 全绿，5173 浏览器冒烟锁定/拦截/解锁/级联全链路通过。**需完全重启桌面应用使 0006 迁移与守卫生效（前端 vite 热更新即可，后端进程必须重启）。**
+> **当前阶段：** 阶段 0–5 全部开发票落地；多选、移动、弹窗全面升级 Apple HIG；目录与项目级联删除全面完成（`cascade_delete_folder_ids` 共享算法 + Apple HIG 影响说明确认弹窗）；**用户报告的删除项目 409 已定位为陈旧后端进程**（Electron 派生的 Python 服务无热重载，旧进程静默忽略 `?cascade=true`），代码无缺陷，**用户完全重启桌面应用后即可正常级联删除**，前端已加固为遇 404 如实提示重启；md 文档预览支持 GFM 表格；导入任务面板 5 秒自动关闭；卡片提示词入口双修复；**侧栏铅笔升级为「编辑文件夹」弹窗（名称 + 描述 + Apple HIG 琥珀锁定开关）**——迁移 0006 增 `folders.locked/description`，锁定目录拦截直接删除与目录/项目级联（409 `folder_locked` 点名锁定目录），锁只拦删除、不向下继承；typecheck + build + **131 pytest** 全绿，5173 浏览器冒烟锁定/拦截/解锁/级联全链路通过。**需完全重启桌面应用使 0006 迁移与守卫生效（前端 vite 热更新即可，后端进程必须重启）**；最新：**侧栏紧凑化 + 可拖拽宽度**（目录行 24px、缩进 13px/层、截断悬停全名；把手 1:1 跟手拖拽钳制 [220,480]、键盘/双击调节、localStorage 持久化；顺带修复无效类 `h-7.5/py-0.2` 与冒烟揪出的 STORAGE_KEY 损坏字面量），纯前端、刷新即生效。
 
 ---
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 文件夹「编辑文件夹」弹窗：锁定开关 + 描述，级联删除锁定拦截）
+### 0.0 最新迭代摘要（2026-10-25，ZCode 会话 · 侧栏密度紧凑化 + 可拖拽调节宽度）
 
-> **最新会话交接：** [`.handoff/handoff-20261025-165908.md`](./handoff-20261025-165908.md)（设计共识、交付明细、验证记录、codereview 结论与下一会话任务）——接手者务必先读它，再读本文件。上一会话（卡片提示词入口双修复）交接见 [`.handoff/handoff-20261025-163052.md`](./handoff-20261025-163052.md)。
+> **最新会话交接：** [`.handoff/handoff-20261025-171829.md`](./handoff-20261025-171829.md)（设计决策、交付明细、验证记录、冒烟揪出的 STORAGE_KEY 损坏缺陷与下一会话任务）——接手者务必先读它，再读本文件。上一会话（文件夹编辑弹窗：锁定 + 描述）交接见 [`.handoff/handoff-20261025-165908.md`](./handoff-20261025-165908.md)。
 
-- **Git 分支 / 状态：** `main`，本地原子提交（本会话 `f611783` backend + `c234b43` web + docs），未推送，开发期约定统一交付后再推。
-- **本会话已完成工作（后端迁移 + 前端弹窗）：**
-  1. **需求与设计共识（grill-me 三问定案）**：侧栏铅笔 →「重命名文件夹」升级为「编辑文件夹」弹窗；锁定 = 本目录免删（子目录与资产仍可单独删除），**级联删除（目录级与项目级）子树内含锁定目录整次拦截 409 `folder_locked` 点名锁定目录**；锁只拦删除（重命名/移动允许）、不向下继承；本弹窗字段 = 名称 + 锁定开关 + 描述（≤2000）。
-  2. **后端（`f611783`）**：Alembic **0006** 增列 `folders.locked`（NOT NULL default false）与 `folders.description`；`update_folder_info`（`FOLDER_INFO_UNSET` 哨兵区分未提供/显式清空，strip + 超长 422）；`delete_folder` 自身锁定守卫 + `cascade_delete_folder_ids` 子树单查询锁定扫描（目录/项目级联共用）；`PATCH /folders/{id}` 组合分支；测试 +6 → **131 passed**。
-  3. **前端（`c234b43`）**：新组件 `FolderEditDialog.vue`（119 行，名称/描述/Apple HIG 琥珀开关，单「保存」一次组合 PATCH）；树行锁定琥珀锁徽标 + × 禁用与锁定 tooltip；`useFolderDelete` 锁定前置 warning 兜底；store `updateFolder` 替换 `renameFolder`。
-  4. **验证与冒烟**：typecheck ✅ / build:web ✅ 2.03s / **131 passed** ✅；5173 浏览器冒烟（隔离后端 58469 + localStorage 桥，真实数据 0 接触）——锁徽标实测琥珀 `rgb(245,158,11)`、× `disabled=true`、级联删除 toast 如实显示 409 点名「内层」、解锁后徽标消失 + 删除成功、描述编辑持久化、NameDialog 新建回归通过；测毕杀进程、删 `.folder-lock-smoke`、清桥接。
-  5. **codereview**：0 致命、0 需修（`{"locked": null}` 视作不改动的边界与 ConfirmDialog `whitespace-pre-line` 换行均已核实）。
+- **Git 分支 / 状态：** `main`，本地单组原子提交（本会话 `f6c251c` web），未推送，开发期约定统一交付后再推。
+- **本会话已完成工作（纯前端，后端 0 改动）：**
+  1. **需求**：侧栏目录上下间距与逐层缩进过大、层级一深名称即截断；要求左侧区域可拖拽调节宽度。附加 `$apple-design` `$design-taste-frontend`。
+  2. **密度紧凑化**：目录/项目/外部/标签/回收站行高统一 24px（Finder 式），行间 `space-y-px`；缩进 20px/层 → **13px/层**（`ml-2 border-l pl-1`）；目录/项目/标签名 `truncate` + `:title` 悬停全名；顺带修复**无效 Tailwind v3 类 `h-7.5`（3 处）与 `py-0.2`**（默认刻度不存在，此前静默无样式）。
+  3. **可拖拽宽度**：新组合式 `useSidebarResize.ts`（94 行）——布局根节点 CSS 变量 `--sidebar-w`（默认 256、钳制 [220,480]），拖拽期 `setProperty` 直改变量每帧零重渲染、指针 1:1 跟手，松手 commit `localStorage['ryan-dam-sidebar-width']`；键盘 ←/→ ±16px、Home/双击复位；`aside` 改 `w-[var(--sidebar-w)]`；App.vue 插入 `role="separator"` 把手（8px 热区、悬停/聚焦/按下蓝色高亮条、aria + tabindex）。
+  4. **验证与冒烟**：typecheck ✅ / build:web ✅ 1.93s / **131 passed** ✅；5173 冒烟（隔离后端 62841 + localStorage 桥 + 六层嵌套种子目录，真实数据 0 接触）——行高实测 24px、逐层偏移差 13px、cua 真实拖拽跟手/钳制 480 与 220/双击复位、刷新持久化 320→320、悬停高亮 `rgba(37,99,235,0.35)`、截图目检通过；测毕杀进程、删 `.sidebar-smoke`、清桥接与标签页。
+  5. **冒烟揪出真实缺陷（已修）**：`useSidebarResize.ts` 的 `STORAGE_KEY` 字面量曾被写成含 U+2026 的 `ryan-…-width`（首建文件时引入），持久化写错键、刷新丢宽度；经 localStorage 键码点转储定位并复测通过。
+  6. **codereview**：0 致命、0 需修（Vue 样式 patch 比对前 vnode 不拉回拖拽宽度、group-active/focus 成立、App.vue 761 行 <800）。
 - **待处理问题记录（下个会话继续）：**
-  - **用户动作（关键）**：**完全重启桌面应用**（0006 迁移与新守卫需后端进程重启；vite 5173 无需动）后实机验收锁定全链路；连同前会话项目级联删除、票 21/22、卡片芯片观感人工验收。
-  - 编辑弹窗后续字段候选（封面/颜色/归档）待用户点名；review 遗留小项清单见 §12 票 15–20 条目与最新交接文档。
+  - **用户动作**：实机验收侧栏紧凑观感与拖拽手感（**纯前端，Electron 无需重启，刷新即生效**）；连同前会话：完全重启桌面应用后验收锁定/级联链路、票 21/22。
+  - 可选打磨（未开票）：拖拽中宽度数值气泡、侧栏折叠为图标条——需用户点名。
 
 ### 0.0.1 迭代时间线（倒序）
 
-0. **文件夹编辑弹窗：锁定开关 + 描述（本会话，2026-10-25）**——侧栏铅笔升级为「编辑文件夹」弹窗（名称 + 描述 + Apple HIG 琥珀锁定开关，一次组合 PATCH）；迁移 0006 增 `folders.locked/description`；锁定目录拦截直接删除与目录/项目级联（409 `folder_locked` 点名锁定目录），锁只拦删除、不向下继承；树行琥珀锁徽标 + × 禁用 tooltip + `useFolderDelete` 前置兜底。131 pytest 全绿（+6），5173 冒烟锁定/拦截/解锁/级联/描述持久化全链路通过；codereview 0 致命。**用户需完全重启桌面应用使迁移与守卫生效。**详见 [`.handoff/handoff-20261025-165908.md`](./handoff-20261025-165908.md)。
+0. **侧栏密度紧凑化 + 可拖拽调节宽度（本会话，2026-10-25）**——目录/项目/外部/标签/回收站行统一 24px、缩进 13px/层、截断名称 `title` 悬停；修复无效类 `h-7.5/py-0.2`；新 `useSidebarResize` 组合式：把手指针 1:1 拖拽 `--sidebar-w`（每帧零重渲染）、钳制 [220,480]、键盘 ←/→/Home、双击复位、localStorage 持久化；`role=separator` 把手带悬停/聚焦高亮与 aria。冒烟揪出并修复 STORAGE_KEY 损坏字面量（U+2026）。typecheck/build/131 pytest 全绿，5173 冒烟（行高/缩进/拖拽/钳制/持久化/截图目检）全通过；codereview 0 致命。纯前端、刷新即生效。详见 [`.handoff/handoff-20261025-171829.md`](./handoff-20261025-171829.md)。
+1. **文件夹编辑弹窗：锁定开关 + 描述（上一会话，2026-10-25）**——侧栏铅笔升级为「编辑文件夹」弹窗（名称 + 描述 + Apple HIG 琥珀锁定开关，一次组合 PATCH）；迁移 0006 增 `folders.locked/description`；锁定目录拦截直接删除与目录/项目级联（409 `folder_locked` 点名锁定目录），锁只拦删除、不向下继承；树行琥珀锁徽标 + × 禁用 tooltip + `useFolderDelete` 前置兜底。131 pytest 全绿（+6），5173 冒烟锁定/拦截/解锁/级联/描述持久化全链路通过；codereview 0 致命。**用户需完全重启桌面应用使迁移与守卫生效。**详见 [`.handoff/handoff-20261025-165908.md`](./handoff-20261025-165908.md)。
 1. **卡片提示词入口双修复（上一会话，2026-10-25）**——①无提示词资产点卡片「+ 提示词」弹出空查看框而非添加框：`PromptModal` 的 `open` watch 缺 `immediate`，卡片入口挂载即 `open=true` 无变化可监听，`initPrompt` 永不执行；加 `{ immediate: true }` 修复，标题按意图显示添加/编辑/查看。②实心蓝徽标突兀：重设计为深色毛玻璃芯片（`bg-black/55` + `backdrop-blur-sm`，与时长角标同材质），有提示词图标常驻、无提示词悬停显现，`focus-visible` 键盘可达，失效徽标同排不重叠。125 pytest 全绿，5173 四场景冒烟通过；codereview 对比度与焦点 2 建议已落实。详见 [`.handoff/handoff-20261025-163052.md`](./handoff-20261025-163052.md)。
 1. **项目删除 409 诊断 + 预览/导入优化（2026-10-25 上一会话）**——diagnosing-bugs 流程确诊 409 为陈旧后端进程（时间线取证 + worktree RED/GREEN diff loop），前端加固为 404 如实重启提示；md 预览支持 GFM 表格（对齐 + 横向滚动卡片）；导入任务面板完成 5 秒自动关闭。125 pytest 全绿，5173 三项冒烟通过。**用户需完全重启桌面应用使级联项目删除生效。**详见 [`.handoff/handoff-20261025-145000.md`](./handoff-20261025-145000.md)。
 1. **项目级联删除（2026-10-25 上一会话）**——解除「仅允许删除没有任何文件夹的空项目」限制：`cascade_delete_folder_ids` 共享算法 + `GET /projects/{id}/stats` + `DELETE ?cascade` + `useProjectDelete` 影响说明确认弹窗（托管→回收站、外部→仅移除索引），125 pytest 全绿，5173 冒烟通过。详见 [`.handoff/handoff-20261025-143000.md`](./handoff-20261025-143000.md)。
@@ -525,7 +527,16 @@ npm run package:win
 
 ## 12. 迭代记录
 
-### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 文件夹「编辑文件夹」弹窗：锁定开关 + 描述，级联删除锁定拦截）
+### 最近一次迭代（更新日期 2026-10-25，ZCode 会话 · 侧栏密度紧凑化 + 可拖拽调节宽度）
+
+- **Git 分支 / 提交：** `main` 本地单组原子提交（`f6c251c` web + docs），未推送。
+- **开发目标：** 侧栏目录上下间距与逐层缩进过大、深层名称截断；左侧区域需支持拖拽调节宽度。附 `$apple-design` `$design-taste-frontend`（dense 产品 UI 仅采纳密度/工艺部分）。
+- **实际交付：** 见 [`.handoff/handoff-20261025-171829.md`](./handoff-20261025-171829.md) §2–3。密度：全部侧栏行 24px + `space-y-px`、缩进 13px/层、目录/项目/标签名 `title` 悬停、修复无效类 `h-7.5`（×3）与 `py-0.2`。宽度：`useSidebarResize.ts`（CSS 变量 `--sidebar-w` 拖拽期零重渲染 1:1 跟手、钳制 [220,480]、松手持久化、键盘/双击复位）+ App.vue `role="separator"` 把手（8px 热区、悬停/聚焦/按下高亮条、aria/tabindex）。
+- **修改文件：** `apps/web/src/composables/useSidebarResize.ts`（新 94 行）、`apps/web/src/App.vue`（761 行）、`apps/web/src/components/AppSidebar.vue`、`apps/web/src/components/FolderTree.vue`。后端 0 改动。
+- **运行验证：** `npm run typecheck` ✅ / `npm run build:web` ✅ 1.93s / pytest ✅ 131 passed（回归）/ 5173 冒烟（隔离后端 62841，六层嵌套种子目录）✅ 行高 24px 实测、逐层 13px、真实指针拖拽跟手 + 上下钳制 + 双击复位 + 刷新持久化、悬停高亮实测、截图目检；测毕杀进程、删 `.sidebar-smoke`、清桥接关标签页。vite 5173 会话后保持运行。
+- **未完成 / 已知问题：** codereview 0 致命 0 需修；冒烟中揪出并修复 `STORAGE_KEY` 损坏字面量（U+2026）；纯前端改动，Electron 无需重启，刷新即生效。
+
+### 上一次迭代（更新日期 2026-10-25，ZCode 会话 · 文件夹「编辑文件夹」弹窗：锁定开关 + 描述，级联删除锁定拦截）
 
 - **Git 分支 / 提交：** `main` 本地三组原子提交（`f611783` backend / `c234b43` web / 文档），全部未推送。
 - **开发目标：** 侧栏文件夹铅笔从「重命名文件夹」升级为「编辑文件夹」弹窗，可编辑目录信息；第一功能 = 锁定开关：锁定后该目录不能被删除（含父级/项目级联），但子目录与资产仍可单独删除。grill-me 定案：级联遇锁定整次拦截 409、锁只拦删除（重命名/移动允许）、字段 = 名称 + 锁定 + 描述。
