@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, watch } from "vue";
 
 import { library, dismissImportJob, retryFailedImports, forceImportSkipped } from "../stores/library";
+
+/** 导入结束后面板自动关闭的等待时长（毫秒）。 */
+const AUTO_DISMISS_MS = 5000;
 
 const job = computed(() => library.importJob);
 
@@ -27,6 +30,21 @@ const statusLabel = computed(() => {
 });
 
 const done = computed(() => job.value !== null && !["queued", "running"].includes(job.value.status));
+
+let autoDismissTimer: ReturnType<typeof setTimeout> | null = null;
+
+// 完成态出现后 5 秒自动关闭；重试/强制导入等使任务重新进入运行态时撤销计时
+watch(done, (isDone) => {
+  if (autoDismissTimer !== null) {
+    clearTimeout(autoDismissTimer);
+    autoDismissTimer = null;
+  }
+  if (isDone) autoDismissTimer = setTimeout(dismissImportJob, AUTO_DISMISS_MS);
+});
+
+onBeforeUnmount(() => {
+  if (autoDismissTimer !== null) clearTimeout(autoDismissTimer);
+});
 </script>
 
 <template>
