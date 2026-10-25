@@ -19,8 +19,11 @@ const props = withDefaults(
     autoOpenPrompt: boolean;
     trashMode?: boolean;
     trashMeta?: TrashItem | null;
+    /** 1 基序号与目录总数：驱动「n / total」位置指示并决定是否显示切换按钮。 */
+    position?: number | null;
+    total?: number | null;
   }>(),
-  { trashMode: false, trashMeta: null }
+  { trashMode: false, trashMeta: null, position: null, total: null }
 );
 
 const emit = defineEmits<{
@@ -64,7 +67,7 @@ const docKind = computed<"none" | "pdf" | "text" | "office" | "other">(() => {
     if (OFFICE_EXTS.has(ext)) return "office";
     return "other";
   }
-  // 代码扩展并入文档分类之前入库的存量资产仍是 "other"，同样按文本预览。
+  // 代码扩展名文件现注册为 other（见 import_service / 迁移 0008），按扩展名回退文本预览。
   if (props.asset.asset_type === "other" && (TEXT_PREVIEW_EXTS.has(ext) || CODE_PREVIEW_EXTS.has(ext))) {
     return "text";
   }
@@ -275,10 +278,10 @@ function onKeydown(event: KeyboardEvent): void {
       return;
     }
     emit("close");
-  } else if (event.key === "ArrowLeft") {
+  } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
     event.preventDefault();
     emit("prev");
-  } else if (event.key === "ArrowRight") {
+  } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
     event.preventDefault();
     emit("next");
   }
@@ -309,14 +312,17 @@ onUnmounted(() => {
             class="rounded-lg bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
             @click="fitWindow = !fitWindow"
           >{{ fitWindow ? "原始尺寸" : "适应窗口" }}</button>
-          <button
-            class="rounded-lg bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
-            @click="emit('prev')"
-          >← 上一项</button>
-          <button
-            class="rounded-lg bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
-            @click="emit('next')"
-          >下一项 →</button>
+          <template v-if="(total ?? 0) > 1">
+            <button
+              class="rounded-lg bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
+              @click="emit('prev')"
+            >← 上一项</button>
+            <p class="select-none px-0.5 text-xs tabular-nums text-white/60">{{ position }} / {{ total }}</p>
+            <button
+              class="rounded-lg bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
+              @click="emit('next')"
+            >下一项 →</button>
+          </template>
         </div>
       </header>
 

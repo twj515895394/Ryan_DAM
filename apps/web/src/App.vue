@@ -485,12 +485,47 @@ function closePreview(): void {
   });
 }
 
-function stepPreview(delta: number): void {
+let steppingPreview = false;
+
+/**
+ * 预览内上下切换：在当前目录（过滤视图）已加载列表内往返；
+ * 到达末尾但目录尚有未加载页时自动追加下一页，使切换可遍历整个目录。
+ */
+async function stepPreview(delta: number): Promise<void> {
+  if (steppingPreview) return;
   const assets = library.assets;
   if (previewIndex.value === null || !assets || assets.items.length === 0) return;
-  const count = assets.items.length;
-  previewIndex.value = ((previewIndex.value + delta) % count + count) % count;
+  const target = previewIndex.value + delta;
+  if (target >= 0 && target < assets.items.length) {
+    previewIndex.value = target;
+    return;
+  }
+  if (target >= assets.items.length && assets.items.length < assets.total) {
+    steppingPreview = true;
+    try {
+      await refreshCurrentAssets(true, assets.page + 1);
+      const latest = library.assets;
+      if (previewIndex.value !== null && latest && latest.items.length > 0) {
+        previewIndex.value = Math.min(previewIndex.value + delta, latest.items.length - 1);
+      }
+    } finally {
+      steppingPreview = false;
+    }
+    return;
+  }
+  // 环形回绕：首项的上一步到末项，末项的下一步回第一项
+  previewIndex.value = target < 0 ? assets.items.length - 1 : 0;
 }
+
+const previewPosition = computed(() => (previewIndex.value === null ? null : previewIndex.value + 1));
+const previewTotal = computed(() => (previewIndex.value === null ? null : library.assets?.total ?? null));
+const trashPreviewPosition = computed(() => {
+  const item = trashPreviewItem.value;
+  if (!item) return null;
+  const idx = library.trash.findIndex((t) => t.id === item.id);
+  return idx < 0 ? null : idx + 1;
+});
+const trashPreviewTotal = computed(() => (trashPreviewItem.value ? library.trash.length : null));
 
 const canImport = computed(
   () => !["queued", "running"].includes(library.importJob?.status ?? "")
@@ -672,6 +707,8 @@ onUnmounted(() => {
       :asset="previewAsset"
       :move-groups="allFolderGroups"
       :auto-open-prompt="promptRequested"
+      :position="previewPosition"
+      :total="previewTotal"
       @close="closePreview"
       @prev="stepPreview(-1)"
       @next="stepPreview(1)"
@@ -689,6 +726,8 @@ onUnmounted(() => {
       :auto-open-prompt="false"
       trash-mode
       :trash-meta="trashPreviewItem"
+      :position="trashPreviewPosition"
+      :total="trashPreviewTotal"
       @close="closeTrashPreview"
       @prev="stepTrashPreview(-1)"
       @next="stepTrashPreview(1)"
