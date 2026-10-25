@@ -14,6 +14,25 @@ export interface MoveFolderGroup {
   options: MoveFolderOption[];
 }
 
+// ── 树形目标选择器（TargetFolderDialog / FolderPickerTree）共用节点 ──
+export interface FolderPickerNode {
+  /** "general" | `project:<id>` | `folder:<id>` */
+  key: string;
+  label: string;
+  icon?: "folder" | "project";
+  disabled?: boolean;
+  children?: FolderPickerNode[];
+}
+
+/** 库内目录树 → 选择器节点（folder:<id>）。 */
+export function toPickerNodes(nodes: FolderNode[]): FolderPickerNode[] {
+  return nodes.map((node) => ({
+    key: `folder:${node.id}`,
+    label: node.name,
+    children: toPickerNodes(node.children)
+  }));
+}
+
 export function flattenFolderNodes(
   nodes: FolderNode[],
   prefix: string,

@@ -143,6 +143,7 @@ export interface ExternalSource {
   display_name: string | null;
   target_folder_id: number;
   target_folder_name: string | null;
+  mount_folder: boolean;
   last_scan_at: string | null;
   status: string;
   asset_count: number;

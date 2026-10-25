@@ -525,12 +525,16 @@ export async function loadExternalSources(): Promise<void> {
   }
 }
 
-export async function linkExternalSource(rootPath: string, targetFolderId: number): Promise<boolean> {
+export async function linkExternalSource(
+  rootPath: string,
+  target: { targetFolderId?: number | null; targetProjectId?: number | null; createMountFolder: boolean }
+): Promise<boolean> {
   try {
-    const result = await api.createExternalSource(rootPath, targetFolderId);
+    const result = await api.createExternalSource(rootPath, target);
     await Promise.all([loadExternalSources(), loadAll(), refreshCurrentAssetsQuiet()]);
     const scan = result.scan;
-    notify("success", `外部目录已关联：新增 ${scan.added} 项。`);
+    const mount = result.source.mount_folder ? `已挂载为「${result.source.target_folder_name}」，` : "";
+    notify("success", `外部目录已关联：${mount}新增 ${scan.added} 项。`);
     return true;
   } catch (error) {
     notify("error", errText(error));
@@ -556,8 +560,9 @@ export async function rescanExternalSource(sourceId: number): Promise<void> {
 export async function unlinkExternalSource(sourceId: number): Promise<boolean> {
   try {
     const result = await api.unlinkExternalSource(sourceId);
-    await Promise.all([loadExternalSources(), refreshCurrentAssetsQuiet()]);
-    notify("success", `已解除关联，移除 ${result.removed} 个外部资产索引；源文件未受影响。`);
+    await Promise.all([loadExternalSources(), loadAll(), refreshCurrentAssetsQuiet()]);
+    const pruned = result.mount_folder_removed ? "，挂载的空目录已清理" : "";
+    notify("success", `已解除关联，移除 ${result.removed} 个外部资产索引${pruned}；源文件未受影响。`);
     return true;
   } catch (error) {
     notify("error", errText(error));

@@ -184,15 +184,25 @@ export const api = {
     request<AssetOut>(`/api/v1/assets/${id}/move`, { method: "POST", json: { folder_id: folderId } }),
 
   listExternalSources: () => request<ExternalSource[]>("/api/v1/external-sources"),
-  createExternalSource: (rootPath: string, targetFolderId: number) =>
+  createExternalSource: (
+    rootPath: string,
+    target: { targetFolderId?: number | null; targetProjectId?: number | null; createMountFolder: boolean }
+  ) =>
     request<{ source: ExternalSource; scan: ScanResult }>("/api/v1/external-sources", {
       method: "POST",
-      json: { root_path: rootPath, target_folder_id: targetFolderId }
+      json: {
+        root_path: rootPath,
+        target_folder_id: target.targetFolderId ?? null,
+        target_project_id: target.targetProjectId ?? null,
+        create_mount_folder: target.createMountFolder
+      }
     }),
   scanExternalSource: (id: number) =>
     request<ScanResult>(`/api/v1/external-sources/${id}/scan`, { method: "POST" }),
   unlinkExternalSource: (id: number) =>
-    request<{ removed: number }>(`/api/v1/external-sources/${id}`, { method: "DELETE" }),
+    request<{ removed: number; mount_folder_removed: boolean }>(`/api/v1/external-sources/${id}`, {
+      method: "DELETE"
+    }),
   convertToManaged: (id: number) =>
     request<AssetOut>(`/api/v1/assets/${id}/convert-to-managed`, { method: "POST" }),
   getAssetPrompt: (id: number) =>

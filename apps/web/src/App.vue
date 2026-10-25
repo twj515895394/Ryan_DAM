@@ -14,7 +14,7 @@ import TrashView from "./components/TrashView.vue";
 import BatchActionBar from "./components/BatchActionBar.vue";
 import TargetFolderDialog from "./components/TargetFolderDialog.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
-import { useFolderOptions } from "./composables/useFolderOptions";
+import { useFolderOptions, toPickerNodes, type FolderPickerNode } from "./composables/useFolderOptions";
 import { useConfirmDialog } from "./composables/useConfirmDialog";
 import { useDialogFlows } from "./composables/useDialogFlows";
 import { useFolderDelete } from "./composables/useFolderDelete";
@@ -73,7 +73,7 @@ const galleryRef = ref<InstanceType<typeof AssetGallery> | null>(null);
 const viewMode = ref<"library" | "trash">("library");
 let savedScrollTop = 0;
 
-const { allFolderGroups, allFolderOptions, flattenFolderNodes } = useFolderOptions();
+const { allFolderGroups } = useFolderOptions();
 
 // Apple HIG 确认弹窗 / 通用输入对话框 / 目录与项目级联删除 / 回收站沉浸式预览
 const { confirmDialog, ask, resolveConfirm, dismissConfirm } = useConfirmDialog();
@@ -181,14 +181,18 @@ async function startLinkExternal(): Promise<void> {
   targetDialog.value = { kind: "external-link", root: folder };
 }
 
-async function onTargetDialogPick(folderId: number): Promise<void> {
+async function onTargetDialogConfirm(key: string, createMountFolder: boolean): Promise<void> {
   const request = targetDialog.value;
   targetDialog.value = null;
   if (!request) return;
   if (request.kind === "external-link") {
-    await linkExternalSource(request.root, folderId);
+    if (key === "general") await linkExternalSource(request.root, { createMountFolder });
+    else if (key.startsWith("project:"))
+      await linkExternalSource(request.root, { targetProjectId: Number(key.slice(8)), createMountFolder });
+    else await linkExternalSource(request.root, { targetFolderId: Number(key.slice(7)), createMountFolder });
     return;
   }
+  const folderId = Number(key.slice(7));
   if (request.kind === "import-files") await runFilesImport(folderId);
   else await runFolderImport(folderId);
 }
@@ -364,7 +368,8 @@ async function createAndPickFolder(name: string): Promise<void> {
 
   const folder = await ensureTopLevelFolder(scope, name, projectId);
   if (!folder) return;
-  await onTargetDialogPick(folder.id);
+  // 导入流程：直接落到新建的顶层目录（无外部关联挂载语义）
+  await onTargetDialogConfirm(`folder:${folder.id}`, false);
 }
 
 async function refreshCurrentAssets(append = false, page = 1): Promise<void> {
@@ -531,18 +536,24 @@ const canImport = computed(
   () => !["queued", "running"].includes(library.importJob?.status ?? "")
 );
 
-const targetDialogOptions = computed(() => {
-  if (targetDialog.value?.kind === "external-link") {
-    return allFolderOptions.value;
+const targetDialogRoots = computed<FolderPickerNode[]>(() => {
+  const kind = targetDialog.value?.kind;
+  if (!kind) return [];
+  if (kind === "external-link") {
+    // 任意节点可选：通用资产库 / 各项目顶层，或任意已有目录
+    return [
+      { key: "general", label: "通用资产库", children: toPickerNodes(library.generalTree) },
+      ...library.projects.map((project) => ({
+        key: `project:${project.id}`,
+        label: project.name,
+        icon: "project" as const,
+        children: toPickerNodes(library.projectTrees[project.id] ?? [])
+      }))
+    ];
   }
-  // 导入对话框在通用/项目范围
-  const out: { id: number; label: string }[] = [];
-  if (activeScope.value === "general") {
-    flattenFolderNodes(library.generalTree, "", out as any);
-  } else if (activeProjectId.value !== null) {
-    flattenFolderNodes(library.projectTrees[activeProjectId.value] ?? [], "", out as any);
-  }
-  return out;
+  // 导入对话框限定在通用/当前项目范围
+  if (activeScope.value === "general") return toPickerNodes(library.generalTree);
+  return toPickerNodes(library.projectTrees[activeProjectId.value ?? -1] ?? []);
 });
 
 watch(
@@ -758,8 +769,8 @@ onUnmounted(() => {
     <!-- 目标目录选择对话框 -->
     <TargetFolderDialog
       :request="targetDialog"
-      :options="targetDialogOptions"
-      @pick="onTargetDialogPick"
+      :roots="targetDialogRoots"
+      @confirm="onTargetDialogConfirm"
       @create-and-pick="createAndPickFolder"
       @close="targetDialog = null"
     />
