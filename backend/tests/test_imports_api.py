@@ -184,8 +184,10 @@ def test_relative_import_path_rejected(iso_client, headers, tmp_path) -> None:
 def test_guess_asset_type_covers_code_extensions() -> None:
     from backend.app.services.import_service import guess_asset_type
 
+    # 用户要求：代码/配置/日志文件归「其他」，不再并入「文档」。
     for suffix in (".py", ".ts", ".tsx", ".vue", ".html", ".yaml", ".sql", ".log", ".ps1"):
-        assert guess_asset_type(Path(f"demo{suffix}")) == "document", suffix
+        assert guess_asset_type(Path(f"demo{suffix}")) == "other", suffix
     assert guess_asset_type(Path("notes.docx")) == "document"
+    assert guess_asset_type(Path("data.json")) == "document"
     assert guess_asset_type(Path("photo.png")) == "image"
     assert guess_asset_type(Path("archive.zip")) == "other"

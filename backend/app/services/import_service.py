@@ -34,8 +34,10 @@ CHUNK_SIZE = 1024 * 1024
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".avif", ".ico", ".tif", ".tiff"}
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".flv", ".wmv"}
 AUDIO_EXTS = {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma"}
-# Source/config/log files are registered as documents so the immersive preview
-# renders them as text (AssetPreview.vue keeps a parallel CODE_PREVIEW_EXTS list).
+# Source/config/log files belong to the "other" category (用户要求代码类不并入文档):
+# the immersive preview still renders them as text via AssetPreview.vue's
+# CODE_PREVIEW_EXTS fallback, and migration 0008 reclassifies any rows that a
+# previous build registered as documents.
 CODE_EXTS = {
     ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".vue", ".svelte",
     ".html", ".htm", ".css", ".scss", ".less", ".yml", ".yaml", ".xml",
@@ -44,10 +46,7 @@ CODE_EXTS = {
     ".cc", ".cs", ".go", ".rs", ".rb", ".php", ".swift", ".kt", ".lua",
     ".pl", ".r", ".gradle", ".proto", ".graphql", ".log",
 }
-DOC_EXTS = (
-    {".pdf", ".txt", ".md", ".json", ".csv", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"}
-    | CODE_EXTS
-)
+DOC_EXTS = {".pdf", ".txt", ".md", ".json", ".csv", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"}
 
 JOB_TERMINAL = {"completed", "completed_with_errors", "failed", "interrupted"}
 
