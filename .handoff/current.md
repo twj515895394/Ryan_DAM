@@ -3,16 +3,25 @@
 > **必读：** 这是 Ryan_DAM 项目根目录 `.handoff/current.md` 的详细交接文档。接手者应先读本文件，再读 `docs/` 下的需求与设计；不要依赖聊天记录来判断实际代码状态。
 >
 > **最近核实时间：** 2026-10-26（ZCode 会话）  
-> **交接版本：** Handoff v20（第一版 V1 完结交付：票 21 正式资产卡片/预览原生文件拖出落地 + `App.vue` 架构治理瘦身至 690 行；承 v19 RD 品牌图标全套接线、v18 外部关联目录「全部刷新」、v17 侧栏目录树双击逐层展开/收起、v16 外部目录关联重构/迁移 0009、v15 预览边缘圆形悬浮按钮、v14 预览同目录切换增强、v13「其他」分类/迁移 0008、v12 侧栏目录置顶、v11 代码文件文本预览/缩略图 LRU 缓存）  
+> **交接版本：** Handoff v21（优化：批量选择外部链接素材时新增「转为系统托管」批量操作项；承 v20 第一版 V1 完结交付与票 21 正式资产拖出、v19 RD 品牌图标全套接线、v18 外部关联目录「全部刷新」、v17 侧栏目录树双击逐层展开/收起）  
 > **目标仓库：** https://github.com/twj515895394/Ryan_DAM  
 > **主分支：** `main`  
-> **当前阶段：** **第一版 V1 全功能正式完结**。阶段 0–6 全部 22 票开发任务全部落地完成！最新交付：**票 21 正式资产原生拖出**（`drag:start-asset` 受控安全 IPC，主进程经 Token 向本地后端校验真实物理路径，防止任意路径逃逸；`assetPathCache` 预热缓存保证零延迟响应；卡片媒体区与预览「拖出文件」手柄均支持拖入 Chrome 等外部应用；不干扰单击大图预览与多选操作）；**`App.vue` 瘦身治理**（抽取 `useImportFlow.ts`，`App.vue` 从 819 行骤降至 690 行，全库无超限上帝组件）。所有 143 项 pytest 单元测试、Vite 生产构建（4.17s）、TypeScript 类型检查全部 100% 绿灯通过。
+> **当前阶段：** **第一版 V1 优化迭代**。最新交付：**批量选择外部链接素材时新增「转为系统托管」操作**（后端新增 `POST /api/v1/assets/bulk-convert-to-managed` 接口，支持批量就地转托管并返回 `BulkResult`；前端 `BatchActionBar.vue` 在检测到选中有外部链接素材时自动呈现「转为系统托管」操作按钮；配合 Apple HIG `ConfirmDialog` 确认弹窗，转托管后自动刷新画廊、外部来源与逻辑树）。所有 144 项 pytest 单元测试、Vite 生产构建、TypeScript 类型检查全部 100% 绿灯通过，`App.vue` 仅 714 行持续严格守卫 800 行上限。
 
 ---
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-26，ZCode 会话 · 第一版 V1 完结交付与票 21 正式拖出）
+### 0.0 最新迭代摘要（2026-10-26，ZCode 会话 · 批量转为系统托管小优化）
+
+- **Git：** `main`，本票 1 代码提交 + docs 提交。
+- **本票：**
+  1. **需求**：当批量选择到外部链接的素材的时候，在现有批量操作项里添加一个批量操作项，“转为系统托管”。
+  2. **后端实现**：新增 Pydantic schema `BulkConvertPayload`（`asset_ids` 1–200）；新增业务方法 `bulk_service.bulk_convert_to_managed(db, asset_ids)`，逐个调用 `external_service.convert_to_managed` 保证原子落盘与就地更新，非外部资产及异常逐项记录；新增端点 `POST /api/v1/assets/bulk-convert-to-managed` 返回 `BulkResult`；补充 `test_bulk_convert_to_managed` 单元测试。
+  3. **前端实现**：`api/client.ts` 补 `bulkConvertToManaged`；`stores/library.ts` 补 `bulkConvertToManagedSelected`（转完联动刷新外部源、目录树与画廊并清空选择）；`BatchActionBar.vue` computed `hasExternalSelected`，当选中项含外部素材时在「移动到…」后渲染「转为系统托管」按钮并 emit `ask-convert`；`App.vue` 接入 `askBulkConvertToManaged`，按 Apple HIG `ConfirmDialog`（intent: default）展示所涉外部素材数量与安全说明。
+- **验证：** node --check / typecheck / build:web / **144 pytest** 全绿；`App.vue`（714行）远低于 800 行上限。
+
+### 0.0.0 上一迭代摘要（2026-10-26，ZCode 会话 · 第一版 V1 完结交付与票 21 正式拖出）
 
 > **最新会话交接：** [`.handoff/handoff-20261026-v20-v1-release.md`](./handoff-20261026-v20-v1-release.md)——接手者务必先读它，再读本文件。上一票（RD 品牌图标全套接线）交接见 [`.handoff/handoff-20261025-222500.md`](./handoff-20261025-222500.md)。
 
@@ -587,7 +596,29 @@ npm run package:win
 
 ## 12. 迭代记录
 
-### 最近一次迭代（更新日期 2026-10-26，ZCode 会话 · 第一版 V1 完结交付与票 21 正式资产拖出）
+### 最近一次迭代（更新日期 2026-10-26，ZCode 会话 · 批量转为系统托管小优化）
+
+- **Git 分支 / 提交：** `main` 本地代码提交 + docs 提交。
+- **开发目标：** 当批量选择到外部链接的素材的时候，在现有批量操作项里添加一个批量操作项，“转为系统托管”。
+- **实际交付：**
+  1. **后端**：
+     - `backend/app/schemas/bulk.py`：新增 `BulkConvertPayload`（`asset_ids` 1–200）；
+     - `backend/app/services/bulk_service.py`：新增 `bulk_convert_to_managed`，逐项调用 `external_service.convert_to_managed` 完成原子落盘、就地更新记录，妥善处理托管跳过与异常，返回 `list[ItemResult]`；
+     - `backend/app/api/v1/bulk.py`：暴露 `POST /api/v1/assets/bulk-convert-to-managed` 接口，输出统一 `BulkResult`；
+     - `backend/tests/test_bulk_api.py`：新增 `test_bulk_convert_to_managed` 自动化测试，验证外部批量转换、混合非外部资产提示、原文件保留等场景。
+  2. **前端**：
+     - `apps/web/src/api/client.ts`：增加 `bulkConvertToManaged` API 声明；
+     - `apps/web/src/stores/library.ts`：增加 `bulkConvertToManagedSelected`，并在完成后自动刷新外部源列表、主数据与画廊，自动清除选中状态；
+     - `apps/web/src/components/BatchActionBar.vue`：新增 `hasExternalSelected` 响应式计算属性，当选中的素材包含外部链接素材时，在「移动到…」后渲染「转为系统托管」按钮，点击时触发 `@ask-convert` 并关闭下拉浮层；
+     - `apps/web/src/App.vue`：实现 `askBulkConvertToManaged`，严格遵循 Apple HIG `ConfirmDialog`（intent="default"）给出选中的外部素材数量与安全说明（保留原记录、目录、标签且源文件不删），确认后调用批量转托管。`App.vue` 总行数 714 行，完全在 800 行上限之内。
+- **运行验证：**
+  - `npm run typecheck` ✅
+  - `npm run build:web` ✅（3.72s 构建成功）
+  - `.venv/Scripts/python.exe -m pytest backend/tests` ✅ **144 passed**（100% 绿灯通过）
+- **未完成 / 已知问题：** 无。
+- **下一步第一任务：** 用户在桌面应用端刷新/使用批量选择外部素材，体验「转为系统托管」快捷操作；整体验收后统一 push 远端。
+
+### 上一迭代（更新日期 2026-10-26，ZCode 会话 · 第一版 V1 完结交付与票 21 正式资产拖出）
 
 - **Git 分支 / 提交：** `main` 本地代码提交 + docs 提交，第一版 V1 完结。
 - **开发目标：** 盘点第一版所有未完成的 Issue，完成票 21 正式资产原生拖拽（`drag:start-asset`）及 `App.vue` 架构治理，第一版做完结交付与本地提交。
