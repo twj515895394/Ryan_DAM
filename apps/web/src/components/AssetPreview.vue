@@ -287,6 +287,15 @@ function onKeydown(event: KeyboardEvent): void {
   }
 }
 
+function onPrepareDrag(): void {
+  window.ryanDam?.prepareAssetDrag?.(props.asset.id);
+}
+
+function onDragStart(e: DragEvent): void {
+  e.preventDefault();
+  window.ryanDam?.startAssetDrag?.(props.asset.id);
+}
+
 window.addEventListener("keydown", onKeydown);
 watch(() => props.asset.id, loadContent, { immediate: true });
 onUnmounted(() => {
@@ -307,6 +316,18 @@ onUnmounted(() => {
           <p class="truncate text-sm font-medium" :title="asset.name">{{ asset.name }}</p>
         </div>
         <div class="flex items-center gap-2">
+          <div
+            class="flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white/90 cursor-grab active:cursor-grabbing select-none hover:bg-white/20 transition"
+            draggable="true"
+            title="按住此手柄可直接将原始文件拖出到其他应用（如 Chrome 上传区域）"
+            @pointerenter="onPrepareDrag"
+            @dragstart="onDragStart"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5" aria-hidden="true">
+              <path d="M8 2.5v11M3.5 7l4.5-4.5L12.5 7" />
+            </svg>
+            <span>拖出文件</span>
+          </div>
           <button
             v-if="asset.asset_type === 'image'"
             class="rounded-lg bg-white/10 px-3 py-1.5 text-sm transition hover:bg-white/20"
@@ -366,8 +387,12 @@ onUnmounted(() => {
             v-else-if="objectUrl && asset.asset_type === 'image'"
             :src="objectUrl"
             :class="fitWindow ? 'max-h-full max-w-full object-contain' : 'max-w-none'"
-            class="select-none"
+            class="select-none cursor-grab active:cursor-grabbing"
+            draggable="true"
+            title="按住可拖出真实文件至 Chrome 或其他应用"
             alt=""
+            @pointerenter="onPrepareDrag"
+            @dragstart="onDragStart"
           />
           <video
             v-else-if="objectUrl && asset.asset_type === 'video' && !playbackFailed"

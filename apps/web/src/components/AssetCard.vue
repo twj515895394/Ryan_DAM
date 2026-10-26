@@ -41,6 +41,16 @@ function onCheckboxClick(e: MouseEvent): void {
   emit("toggle-select", props.asset, e);
 }
 
+function onPrepareDrag(): void {
+  window.ryanDam?.prepareAssetDrag?.(props.asset.id);
+}
+
+function onDragStart(e: DragEvent): void {
+  if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+  e.preventDefault();
+  window.ryanDam?.startAssetDrag?.(props.asset.id);
+}
+
 const canUsePrompt = computed(() => props.asset.asset_type === "image" || props.asset.asset_type === "video");
 
 const objectUrl = useThumbnailObjectUrl(
@@ -96,7 +106,13 @@ const durationLabel = computed(() => {
     @keydown.enter="onCardClick"
     @keydown.space.prevent="emit('open', asset)"
   >
-    <div class="relative flex aspect-square items-center justify-center overflow-hidden bg-canvas">
+    <div
+      class="relative flex aspect-square items-center justify-center overflow-hidden bg-canvas cursor-grab active:cursor-grabbing"
+      draggable="true"
+      title="按住可拖出真实文件至 Chrome 或其他应用"
+      @pointerenter="onPrepareDrag"
+      @dragstart="onDragStart"
+    >
       <!-- 左上角大感应触控区（44×44px，覆盖整个左上边缘，彻底解决小靶心误触问题） -->
       <button
         type="button"

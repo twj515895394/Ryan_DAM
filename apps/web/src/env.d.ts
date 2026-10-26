@@ -8,6 +8,8 @@ declare global {
       selectFolder(): Promise<string | null>;
       createSampleFile(): Promise<{ name: string }>;
       startSampleDrag(): void;
+      prepareAssetDrag(assetId: number): Promise<string | null>;
+      startAssetDrag(assetId: number): void;
     };
   }
 }

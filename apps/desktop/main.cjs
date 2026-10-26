@@ -278,6 +278,49 @@ ipcMain.on("drag:start-sample", (event) => {
   event.sender.startDrag({ file: dragSamplePath, icon });
 });
 
+// 票 21：受控正式资产拖出（按资产 ID 经本地后端鉴权校验真实路径，防任意路径逃逸）
+const assetPathCache = new Map();
+
+async function verifyAndCacheAsset(assetId) {
+  if (!backendInfo || typeof assetId !== "number" || !Number.isInteger(assetId) || assetId <= 0) {
+    return null;
+  }
+  try {
+    const res = await fetch(`${backendInfo.baseUrl}/api/v1/assets/${assetId}`, {
+      headers: { "X-Ryan-DAM-Token": backendInfo.token }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && typeof data.file_path === "string" && fs.existsSync(data.file_path)) {
+      assetPathCache.set(assetId, { filePath: data.file_path, time: Date.now() });
+      return data.file_path;
+    }
+  } catch (err) {
+    log("WARN", `Failed to verify asset ${assetId}: ${err?.message || err}`);
+  }
+  return null;
+}
+
+ipcMain.handle("drag:prepare-asset", async (_event, assetId) => {
+  return await verifyAndCacheAsset(assetId);
+});
+
+ipcMain.on("drag:start-asset", async (event, assetId) => {
+  if (typeof assetId !== "number") return;
+  const cached = assetPathCache.get(assetId);
+  let filePath = cached ? cached.filePath : null;
+  if (!filePath || !fs.existsSync(filePath)) {
+    filePath = await verifyAndCacheAsset(assetId);
+  }
+  if (filePath && fs.existsSync(filePath)) {
+    const icon = nativeImage.createFromPath(dragIconPath);
+    event.sender.startDrag({ file: filePath, icon });
+    log("INFO", `Started native drag for asset ${assetId}: ${filePath}`);
+  } else {
+    log("WARN", `Asset ${assetId} file unavailable on disk for native drag`);
+  }
+});
+
 app.on("before-quit", (event) => {
   if (isQuitting) return;
   event.preventDefault();
