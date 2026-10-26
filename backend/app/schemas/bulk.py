@@ -24,6 +24,12 @@ class BulkTrashPayload(BaseModel):
     asset_ids: list[int] = Field(min_length=1, max_length=200)
 
 
+class BulkConvertPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    asset_ids: list[int] = Field(min_length=1, max_length=200)
+
+
 class BulkItemResult(BaseModel):
     asset_id: int
     ok: bool

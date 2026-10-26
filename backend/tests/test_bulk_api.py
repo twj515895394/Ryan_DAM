@@ -115,3 +115,47 @@ def test_bulk_move_with_scope_guards(iso_client, headers, tmp_path) -> None:
         headers=headers,
     )
     assert unknown_folder.status_code == 404
+
+
+def test_bulk_convert_to_managed(iso_client, headers, tmp_path) -> None:
+    folder = iso_client.post("/api/v1/folders", json={"name": "外部转托管目录", "scope": "general"}, headers=headers).json()
+    ext_dir = tmp_path / "ext_source"
+    ext_dir.mkdir()
+    f1 = ext_dir / "ext1.txt"
+    f1.write_text("ext1 content", encoding="utf-8")
+    f2 = ext_dir / "ext2.txt"
+    f2.write_text("ext2 content", encoding="utf-8")
+
+    iso_client.post(
+        "/api/v1/external-sources",
+        json={"root_path": str(ext_dir), "target_folder_id": folder["id"], "create_mount_folder": False},
+        headers=headers,
+    )
+
+    assets = iso_client.get("/api/v1/assets", params={"folder_id": folder["id"]}, headers=headers).json()
+    assert assets["total"] == 2
+    ext_ids = [a["id"] for a in assets["items"]]
+    assert all(a["source_type"] == "external" for a in assets["items"])
+
+    managed_src = tmp_path / "managed.txt"
+    managed_src.write_text("managed content", encoding="utf-8")
+    managed_id = import_one(iso_client, headers, folder["id"], managed_src)
+
+    all_ids = ext_ids + [managed_id]
+    result = iso_client.post(
+        "/api/v1/assets/bulk-convert-to-managed",
+        json={"asset_ids": all_ids},
+        headers=headers,
+    )
+    assert result.status_code == 200
+    body = result.json()
+    assert body["ok_count"] == 2
+    assert body["failed_count"] == 1
+    managed_res = next(item for item in body["items"] if item["asset_id"] == managed_id)
+    assert managed_res["ok"] is False
+    assert "无需转换" in managed_res["error"]
+
+    updated_assets = iso_client.get("/api/v1/assets", params={"folder_id": folder["id"]}, headers=headers).json()
+    converted_items = [a for a in updated_assets["items"] if a["id"] in ext_ids]
+    assert all(a["source_type"] == "managed" for a in converted_items)
+    assert f1.exists() and f2.exists()

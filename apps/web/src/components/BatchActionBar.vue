@@ -18,9 +18,16 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "select-all"): void;
   (e: "ask-trash"): void;
+  (e: "ask-convert"): void;
 }>();
 
 const { allFolderGroups } = useFolderOptions();
+
+const hasExternalSelected = computed(() => {
+  const selectedSet = new Set(library.selectedAssetIds);
+  if (!library.assets?.items) return false;
+  return library.assets.items.some((a) => selectedSet.has(a.id) && a.source_type === "external");
+});
 
 const batchPanel = ref<"none" | "add-tag" | "remove-tag" | "move">("none");
 const batchTagQuery = ref("");
@@ -265,6 +272,17 @@ function handleBatchMove(folderId: number): void {
           </div>
         </div>
       </div>
+
+      <!-- 当选中有外部链接素材时，提供转为系统托管批量操作项 -->
+      <button
+        v-if="hasExternalSelected"
+        type="button"
+        class="rounded-lg px-3 py-1.5 text-sm text-ink transition hover:bg-canvas"
+        title="将选中的外部链接素材复制为系统托管存储"
+        @click="batchPanel = 'none'; emit('ask-convert')"
+      >
+        转为系统托管
+      </button>
 
       <button
         class="rounded-lg px-3 py-1.5 text-sm text-rose-600 transition hover:bg-rose-50"

@@ -25,6 +25,7 @@ import { useImportFlow } from "./composables/useImportFlow";
 
 import type { ExternalSource, FolderEditPayload, FolderNode } from "./api/types";
 import {
+  bulkConvertToManagedSelected,
   bulkTrashSelected,
   clearAssetSelection,
   clearAssets,
@@ -142,6 +143,28 @@ function askBulkTrash(): void {
     intent: "danger",
     action: () => {
       void bulkTrashSelected();
+    }
+  });
+}
+
+function askBulkConvertToManaged(): void {
+  const selectedSet = new Set(library.selectedAssetIds);
+  const externalAssets = (library.assets?.items ?? []).filter(
+    (a) => selectedSet.has(a.id) && a.source_type === "external"
+  );
+  const count = externalAssets.length;
+  if (count === 0) return;
+
+  const totalSelected = library.selectedAssetIds.length;
+  const note = totalSelected > count ? `（当前已选 ${totalSelected} 项，其中包含 ${count} 个外部链接素材）\n\n` : "";
+
+  ask({
+    title: "转为系统托管存储？",
+    description: `${note}确定把选中的 ${count} 个外部链接素材转为系统托管吗？\n\n文件将复制到托管存储并就地更新资产记录（保留目录与标签），原外部文件不会被删除。`,
+    confirmText: "转为托管",
+    intent: "default",
+    action: () => {
+      void bulkConvertToManagedSelected(externalAssets.map((a) => a.id));
     }
   });
 }
@@ -632,6 +655,7 @@ onUnmounted(() => {
           :total-current-assets="library.assets?.items.length ?? 0"
           @select-all="selectAllCurrentAssets"
           @ask-trash="askBulkTrash"
+          @ask-convert="askBulkConvertToManaged"
         />
       </Transition>
     </Teleport>

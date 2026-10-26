@@ -102,3 +102,25 @@ def bulk_move(db: Session, asset_ids: list[int], target_folder_id: int) -> list[
         results.append(ItemResult(asset_id, True))
     db.commit()
     return results
+
+
+def bulk_convert_to_managed(db: Session, asset_ids: list[int]) -> list[ItemResult]:
+    from backend.app.services import external_service
+
+    assets = _load_assets(db, asset_ids)
+    results: list[ItemResult] = []
+    for asset_id in asset_ids:
+        asset = assets.get(asset_id)
+        if asset is None:
+            continue
+        if asset.source_type != "external":
+            results.append(ItemResult(asset_id, False, "该资产已经是系统托管，无需转换。"))
+            continue
+        try:
+            external_service.convert_to_managed(db, asset_id)
+            results.append(ItemResult(asset_id, True))
+        except ApiError as error:
+            results.append(ItemResult(asset_id, False, error.message))
+        except Exception as error:
+            results.append(ItemResult(asset_id, False, str(error)))
+    return results

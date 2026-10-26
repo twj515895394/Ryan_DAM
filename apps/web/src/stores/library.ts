@@ -489,6 +489,21 @@ export async function bulkMove(targetFolderId: number): Promise<void> {
   }
 }
 
+export async function bulkConvertToManagedSelected(targetAssetIds?: number[]): Promise<boolean> {
+  const ids = targetAssetIds ?? library.selectedAssetIds;
+  if (ids.length === 0) return false;
+  try {
+    const result = await api.bulkConvertToManaged({ asset_ids: ids });
+    notify(result.failed_count ? "error" : "success", summarize(result));
+    await Promise.all([loadExternalSources(), loadAll(), refreshCurrentAssetsQuiet()]);
+    clearAssetSelection();
+    return result.failed_count === 0;
+  } catch (error) {
+    notify("error", errText(error));
+    return false;
+  }
+}
+
 export async function renameAssetById(assetId: number, name: string): Promise<boolean> {
   try {
     await api.renameAsset(assetId, name);

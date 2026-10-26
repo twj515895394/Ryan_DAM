@@ -232,6 +232,11 @@ export const api = {
       "/api/v1/assets/bulk-move",
       { method: "POST", json: payload }
     ),
+  bulkConvertToManaged: (payload: { asset_ids: number[] }) =>
+    request<BulkResult>("/api/v1/assets/bulk-convert-to-managed", {
+      method: "POST",
+      json: payload
+    }),
 
   deleteAsset: (id: number) => request<void>(`/api/v1/assets/${id}`, { method: "DELETE" }),
   listTrash: () => request<TrashList>("/api/v1/trash"),

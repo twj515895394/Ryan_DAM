@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.v1.deps import get_db
 from backend.app.core.errors import ApiError
-from backend.app.schemas.bulk import BulkMovePayload, BulkResult, BulkTagsPayload
+from backend.app.schemas.bulk import BulkConvertPayload, BulkMovePayload, BulkResult, BulkTagsPayload
 from backend.app.services import bulk_service
 
 router = APIRouter(tags=["bulk"])
@@ -37,3 +37,8 @@ def bulk_tags(payload: BulkTagsPayload, db: Session = Depends(get_db)) -> BulkRe
 @router.post("/assets/bulk-move", response_model=BulkResult)
 def bulk_move(payload: BulkMovePayload, db: Session = Depends(get_db)) -> BulkResult:
     return _to_result(bulk_service.bulk_move(db, payload.asset_ids, payload.target_folder_id))
+
+
+@router.post("/assets/bulk-convert-to-managed", response_model=BulkResult)
+def bulk_convert_to_managed(payload: BulkConvertPayload, db: Session = Depends(get_db)) -> BulkResult:
+    return _to_result(bulk_service.bulk_convert_to_managed(db, payload.asset_ids))
