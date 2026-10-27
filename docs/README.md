@@ -5,7 +5,9 @@
 ## 二期：AI 创作工作台（需求讨论与设计进行中）
 
 1. **[V2 产品需求 Spec](./Ryan_DAM_Product_Spec_v2.md)** — **二期当前需求事实基线**：已确认决策①–㉑，Provider/模型、反推与 Prompt 优化、图片生图/编辑、ComfyUI、任务中心、永久生成历史、手动入库；包含明确暂缓与待讨论事项。
-2. V2 技术架构 / UI 设计 / 实施计划 **尚未编写**，后续以 V2 Spec 为基准另建文档，不能将 V1 方案直接当成 V2 的已确认实现。
+2. [V2 技术架构详细设计](./TECHNICAL_ARCHITECTURE_V2.md) — Provider/Model/Workflow Adapter、SQLite 增量数据模型、受控任务状态机、永久历史、安全策略与 API 草案。**设计建议，尚未编码。**
+3. [V2 UI/UX 详细设计](./UI_UX_DESIGN_V2.md) — AI 设置、创作工作台、多图编辑、反推审核、ComfyUI 参数映射、任务中心与历史交互。**待 UI 评审。**
+4. [V2 开发实施计划](./IMPLEMENTATION_PLAN_V2.md) — 需求模块 M1–M7、18 张纵向开发票、依赖关系、测试矩阵与风险关卡。**实施建议，不承诺排期。**
 
 ## 一期：现有产品与实现
 
