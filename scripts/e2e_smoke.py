@@ -55,6 +55,9 @@ def start_backend() -> tuple[subprocess.Popen, int]:
 
 
 def main() -> None:
+    import shutil
+    if DATA_DIR.exists():
+        shutil.rmtree(DATA_DIR, ignore_errors=True)
     headers = {"X-Ryan-DAM-Token": TOKEN}
     proc, port = start_backend()
     base = f"http://127.0.0.1:{port}"
