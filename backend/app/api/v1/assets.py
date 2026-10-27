@@ -191,18 +191,42 @@ def get_asset_prompt(asset_id: int, db: Session = Depends(get_db)) -> AssetPromp
         asset_id=asset.id,
         prompt_text=asset.prompt_text,
         has_prompt=asset.prompt_text is not None,
+        prompt_origin=asset.prompt_origin,
+        prompt_revision=asset.prompt_revision or 1,
     )
 
 
 @router.put("/assets/{asset_id}/prompt", response_model=AssetPromptOut)
 def set_asset_prompt(asset_id: int, payload: PromptPayload, db: Session = Depends(get_db)) -> AssetPromptOut:
-    """Save the full multi-line prompt verbatim (newlines and special chars kept)."""
+    """Save the full multi-line prompt verbatim (newlines and special chars kept).
+
+    Supports CAS (Compare-And-Swap) optimistic concurrency control via expected_revision.
+    """
     asset = _get_prompt_asset_or_404(db, asset_id)
-    asset.prompt_text = payload.prompt_text if payload.prompt_text else None
+
+    # CAS check if expected_revision provided
+    current_rev = asset.prompt_revision or 1
+    if payload.expected_revision is not None and payload.expected_revision != current_rev:
+        raise ApiError(
+            code="prompt_conflict",
+            message=f"提示词已被修改（当前版本 v{current_rev}，预期 v{payload.expected_revision}），请刷新后确认覆盖",
+            status_code=409,
+        )
+
+    clean_text = payload.prompt_text if payload.prompt_text else None
+    asset.prompt_text = clean_text
+    asset.prompt_revision = current_rev + 1
+    if clean_text:
+        asset.prompt_origin = payload.prompt_origin or "manual"
+    else:
+        asset.prompt_origin = None
+
     db.commit()
     db.refresh(asset)
     return AssetPromptOut(
         asset_id=asset.id,
         prompt_text=asset.prompt_text,
         has_prompt=asset.prompt_text is not None,
+        prompt_origin=asset.prompt_origin,
+        prompt_revision=asset.prompt_revision,
     )

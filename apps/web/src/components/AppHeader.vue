@@ -18,6 +18,9 @@ const emit = defineEmits<{
   (e: "empty-trash"): void;
   (e: "start-import"): void;
   (e: "start-folder-import"): void;
+  (e: "open-ai-tasks"): void;
+  (e: "open-ai-workbench"): void;
+  (e: "open-ai-history"): void;
 }>();
 
 // ── 搜索状态与防抖 ───────────────────────────────────────────
@@ -225,6 +228,39 @@ const quickTypes: Array<{
 
       <!-- Apple HIG 连体排序组件 -->
       <SortControl />
+
+      <!-- AI 创作生图入口按钮 -->
+      <button
+        type="button"
+        class="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-accent/20 bg-accent/5 hover:bg-accent/10 px-2.5 text-xs font-semibold text-accent transition active:scale-97 select-none"
+        title="打开 AI 图像创作工作台"
+        @click="emit('open-ai-workbench')"
+      >
+        <SidebarIcon name="star" class="h-3.5 w-3.5 text-accent" />
+        <span class="hidden md:inline">AI 创作</span>
+      </button>
+
+      <!-- AI 任务中心入口按钮 -->
+      <button
+        type="button"
+        class="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-line bg-white hover:bg-canvas/50 px-2.5 text-xs font-medium text-ink transition active:scale-97 select-none"
+        title="打开 AI 任务中心"
+        @click="emit('open-ai-tasks')"
+      >
+        <SidebarIcon name="grid" class="h-3.5 w-3.5 text-muted" />
+        <span class="hidden md:inline">AI 任务</span>
+      </button>
+
+      <!-- AI 永久历史总览入口按钮 -->
+      <button
+        type="button"
+        class="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-line bg-white hover:bg-canvas/50 px-2.5 text-xs font-medium text-ink transition active:scale-97 select-none"
+        title="打开 AI 生成历史总览与多维检索"
+        @click="emit('open-ai-history')"
+      >
+        <SidebarIcon name="clock" class="h-3.5 w-3.5 text-muted" />
+        <span class="hidden md:inline">AI 历史</span>
+      </button>
 
       <!-- 垂直微分隔线 -->
       <div class="hidden sm:block h-5 w-[1px] bg-line/80 mx-0.5"></div>

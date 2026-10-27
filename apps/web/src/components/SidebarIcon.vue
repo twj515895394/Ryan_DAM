@@ -20,7 +20,10 @@ defineProps<{
     | "arrow-down"
     | "check"
     | "lock"
-    | "pin";
+    | "pin"
+    | "star"
+    | "clock"
+    | "image";
 }>();
 </script>
 
@@ -160,6 +163,24 @@ defineProps<{
       <path d="M12 4v6.5" />
       <path d="M7 10.5h10l-1.2 3.9a1.5 1.5 0 0 1-1.44 1.07H9.64a1.5 1.5 0 0 1-1.44-1.07z" />
       <path d="M12 15.5v5" />
+    </template>
+
+    <!-- AI / 星星 / Sparkle -->
+    <template v-else-if="name === 'star'">
+      <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z" />
+    </template>
+
+    <!-- 历史记录 / 时钟 -->
+    <template v-else-if="name === 'clock'">
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 15 15" />
+    </template>
+
+    <!-- 图片单据 -->
+    <template v-else-if="name === 'image'">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
     </template>
   </svg>
 </template>

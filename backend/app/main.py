@@ -20,6 +20,7 @@ from backend.app.db.session import create_session_factory, create_sqlite_engine
 from backend.app.services.import_service import bind_worker_factory
 from backend.app.services.settings_service import seed_default_settings
 from backend.app.services.thumbnail_service import bind_thumbnail_worker
+from backend.app.services.ai.task_scheduler import init_task_scheduler
 
 APP_VERSION = "0.1.0"
 READY_PREFIX = "RYAN_DAM_READY "
@@ -62,6 +63,7 @@ def create_app(api_token: str | None = None, db_path: str | None = None) -> Fast
         bind_worker_factory(application.state.session_factory)
         cache_dir = Path(os.environ.get("RYAN_DAM_CACHE_DIR", str(Path(db_path).parent / "cache" / "thumbnails")))
         bind_thumbnail_worker(application.state.session_factory, cache_dir)
+        application.state.ai_task_scheduler = init_task_scheduler(application.state.session_factory)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=sorted(ALLOWED_ORIGINS),

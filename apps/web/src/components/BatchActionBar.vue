@@ -19,9 +19,16 @@ const emit = defineEmits<{
   (e: "select-all"): void;
   (e: "ask-trash"): void;
   (e: "ask-convert"): void;
+  (e: "ask-batch-reverse"): void;
 }>();
 
 const { allFolderGroups } = useFolderOptions();
+
+const selectedImageAssets = computed(() => {
+  const selectedSet = new Set(library.selectedAssetIds);
+  if (!library.assets?.items) return [];
+  return library.assets.items.filter((a) => selectedSet.has(a.id) && a.asset_type === "image");
+});
 
 const hasExternalSelected = computed(() => {
   const selectedSet = new Set(library.selectedAssetIds);
@@ -272,6 +279,18 @@ function handleBatchMove(folderId: number): void {
           </div>
         </div>
       </div>
+
+      <!-- 批量 AI 提示词反推 -->
+      <button
+        v-if="selectedImageAssets.length > 0"
+        type="button"
+        class="flex items-center gap-1.5 rounded-lg bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20"
+        :title="`对选中的 ${selectedImageAssets.length} 张图片批量反推视觉提示词`"
+        @click="batchPanel = 'none'; emit('ask-batch-reverse')"
+      >
+        <SidebarIcon name="star" class="h-3.5 w-3.5" />
+        <span>AI 批量反推 ({{ selectedImageAssets.length }})</span>
+      </button>
 
       <!-- 当选中有外部链接素材时，提供转为系统托管批量操作项 -->
       <button

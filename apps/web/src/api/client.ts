@@ -1,7 +1,38 @@
 import type {
+  AiDefaultBinding,
+  AiDefaultBindingPayload,
+  AiModelProfile,
+  AiModelProfileCreatePayload,
+  AiModelProfileUpdatePayload,
+  AiProviderCreatePayload,
+  AiProviderInstance,
+  AiProviderTestPayload,
+  AiProviderTestResponse,
+  AiProviderUpdatePayload,
+  AiReverseTemplate,
+  AiReverseTemplateCreatePayload,
+  SingleImageReverseRequest,
+  SingleImageReverseResult,
+  AiTaskCancelResponse,
+  AiTaskDetail,
+  AiTaskListResponse,
+  AiTaskSummary,
+  AiResult,
+  AiResultListResponse,
+  BatchImportResultsResponse,
+  AiCreationPreset,
+  PromptOptimizeRequest,
+  PromptOptimizeResult,
+  SubmitImageGeneratePayload,
+  SubmitBatchReversePayload,
+  CommitBatchReversePayload,
+  CommitBatchReverseResponse,
+  UpdateTaskItemDraftPayload,
+  AiTaskItem,
   ApiErrorBody,
   AssetOut,
   AssetPage,
+  AssetPromptOut,
   BulkResult,
   ExternalSource,
   FolderCreatePayload,
@@ -178,6 +209,7 @@ export const api = {
 
   openExternal: (assetId: number) => request<void>(`/api/v1/assets/${assetId}/open`, { method: "POST" }),
 
+  getAsset: (id: number) => request<AssetOut>(`/api/v1/assets/${id}`),
   renameAsset: (id: number, name: string) =>
     request<AssetOut>(`/api/v1/assets/${id}`, { method: "PATCH", json: { name } }),
   moveAsset: (id: number, folderId: number) =>
@@ -206,13 +238,24 @@ export const api = {
   convertToManaged: (id: number) =>
     request<AssetOut>(`/api/v1/assets/${id}/convert-to-managed`, { method: "POST" }),
   getAssetPrompt: (id: number) =>
-    request<{ asset_id: number; prompt_text: string | null; has_prompt: boolean }>(
+    request<AssetPromptOut>(
       `/api/v1/assets/${id}/prompt`
     ),
-  setAssetPrompt: (id: number, promptText: string | null) =>
-    request<{ asset_id: number; prompt_text: string | null; has_prompt: boolean }>(
+  setAssetPrompt: (
+    id: number,
+    promptText: string | null,
+    options?: { expectedRevision?: number; promptOrigin?: string }
+  ) =>
+    request<AssetPromptOut>(
       `/api/v1/assets/${id}/prompt`,
-      { method: "PUT", json: { prompt_text: promptText } }
+      {
+        method: "PUT",
+        json: {
+          prompt_text: promptText,
+          expected_revision: options?.expectedRevision,
+          prompt_origin: options?.promptOrigin ?? "manual"
+        }
+      }
     ),
 
   listTags: () => request<Tag[]>("/api/v1/tags"),
@@ -248,5 +291,120 @@ export const api = {
 
   getSettings: () => request<Settings>("/api/v1/settings"),
   updateSettings: (managedRoot: string) =>
-    request<Settings>("/api/v1/settings", { method: "PATCH", json: { managed_root: managedRoot } })
+    request<Settings>("/api/v1/settings", { method: "PATCH", json: { managed_root: managedRoot } }),
+
+  // V2 AI Provider Instances
+  listAiProviders: () => request<AiProviderInstance[]>("/api/v1/ai/providers"),
+  getAiProvider: (id: number) => request<AiProviderInstance>(`/api/v1/ai/providers/${id}`),
+  createAiProvider: (payload: AiProviderCreatePayload) =>
+    request<AiProviderInstance>("/api/v1/ai/providers", { method: "POST", json: payload }),
+  updateAiProvider: (id: number, payload: AiProviderUpdatePayload) =>
+    request<AiProviderInstance>(`/api/v1/ai/providers/${id}`, { method: "PATCH", json: payload }),
+  deleteAiProvider: (id: number) =>
+    request<void>(`/api/v1/ai/providers/${id}`, { method: "DELETE" }),
+  testAiProvider: (id: number, payload: AiProviderTestPayload) =>
+    request<AiProviderTestResponse>(`/api/v1/ai/providers/${id}/test`, { method: "POST", json: payload }),
+
+  // V2 AI Model Profiles & Defaults
+  listAllModels: () => request<AiModelProfile[]>("/api/v1/ai/models"),
+  listProviderModels: (providerId: number) =>
+    request<AiModelProfile[]>(`/api/v1/ai/providers/${providerId}/models`),
+  createModelProfile: (providerId: number, payload: AiModelProfileCreatePayload) =>
+    request<AiModelProfile>(`/api/v1/ai/providers/${providerId}/models`, { method: "POST", json: payload }),
+  updateModelProfile: (modelId: number, payload: AiModelProfileUpdatePayload) =>
+    request<AiModelProfile>(`/api/v1/ai/models/${modelId}`, { method: "PATCH", json: payload }),
+  deleteModelProfile: (modelId: number) =>
+    request<void>(`/api/v1/ai/models/${modelId}`, { method: "DELETE" }),
+
+  listDefaultBindings: () => request<AiDefaultBinding[]>("/api/v1/ai/defaults"),
+  setDefaultBinding: (payload: AiDefaultBindingPayload) =>
+    request<AiDefaultBinding>("/api/v1/ai/defaults", { method: "POST", json: payload }),
+
+  // V2 Reverse Templates & API
+  listReverseTemplates: (enabledOnly = false) =>
+    request<AiReverseTemplate[]>(`/api/v1/ai/reverse/templates${enabledOnly ? "?enabled_only=true" : ""}`),
+  createReverseTemplate: (payload: AiReverseTemplateCreatePayload) =>
+    request<AiReverseTemplate>("/api/v1/ai/reverse/templates", { method: "POST", json: payload }),
+  updateReverseTemplate: (id: number, payload: Partial<AiReverseTemplateCreatePayload>) =>
+    request<AiReverseTemplate>(`/api/v1/ai/reverse/templates/${id}`, { method: "PUT", json: payload }),
+  deleteReverseTemplate: (id: number) =>
+    request<void>(`/api/v1/ai/reverse/templates/${id}`, { method: "DELETE" }),
+  reverseSingleImage: (assetId: number, payload: SingleImageReverseRequest) =>
+    request<SingleImageReverseResult>(`/api/v1/ai/reverse/assets/${assetId}`, { method: "POST", json: payload }),
+
+  // V2 AI Task Center
+  listAiTasks: (params?: { task_type?: string; status?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.task_type) q.set("task_type", params.task_type);
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return request<AiTaskListResponse>(`/api/v1/ai/tasks${qs ? `?${qs}` : ""}`);
+  },
+  getAiTask: (id: string) => request<AiTaskDetail>(`/api/v1/ai/tasks/${id}`),
+  cancelAiTask: (id: string) =>
+    request<AiTaskCancelResponse>(`/api/v1/ai/tasks/${id}/cancel`, { method: "POST" }),
+  retryAiTask: (id: string) =>
+    request<AiTaskSummary>(`/api/v1/ai/tasks/${id}/retry`, { method: "POST" }),
+
+  submitImageGenerate: (payload: SubmitImageGeneratePayload) =>
+    request<AiTaskSummary>("/api/v1/ai/tasks", { method: "POST", json: payload }),
+  submitBatchReverse: (payload: SubmitBatchReversePayload) =>
+    request<AiTaskSummary>("/api/v1/ai/tasks/batch-reverse", { method: "POST", json: payload }),
+  commitBatchReverseItems: (taskId: string, payload: CommitBatchReversePayload) =>
+    request<CommitBatchReverseResponse>(`/api/v1/ai/tasks/${taskId}/commit-items`, { method: "POST", json: payload }),
+  updateTaskItemDraft: (taskId: string, itemId: number, payload: UpdateTaskItemDraftPayload) =>
+    request<AiTaskItem>(`/api/v1/ai/tasks/${taskId}/items/${itemId}`, { method: "PUT", json: payload }),
+  stageUploadReference: (payload: { filename: string; content_base64?: string | null; file_path?: string | null }) =>
+    request<{ upload_id: string; filename: string; size_bytes: number; width: number; height: number }>(
+      "/api/v1/ai/tasks/staging/upload",
+      { method: "POST", json: payload }
+    ),
+
+  // V2 Creation Presets & Prompt Optimize
+  listCreationPresets: (creationMode = "image_generate", enabledOnly = false) => {
+    const q = new URLSearchParams();
+    if (creationMode) q.set("creation_mode", creationMode);
+    if (enabledOnly) q.set("enabled_only", "true");
+    const qs = q.toString();
+    return request<AiCreationPreset[]>(`/api/v1/ai/presets${qs ? `?${qs}` : ""}`);
+  },
+  getCreationPreset: (id: number) => request<AiCreationPreset>(`/api/v1/ai/presets/${id}`),
+  createCreationPreset: (payload: Partial<AiCreationPreset>) =>
+    request<AiCreationPreset>("/api/v1/ai/presets", { method: "POST", json: payload }),
+  updateCreationPreset: (id: number, payload: Partial<AiCreationPreset>) =>
+    request<AiCreationPreset>(`/api/v1/ai/presets/${id}`, { method: "PUT", json: payload }),
+  deleteCreationPreset: (id: number) =>
+    request<void>(`/api/v1/ai/presets/${id}`, { method: "DELETE" }),
+  optimizePrompt: (payload: PromptOptimizeRequest) =>
+    request<PromptOptimizeResult>("/api/v1/ai/prompt/optimize", { method: "POST", json: payload }),
+
+  // V2 AI History Results
+  listAiResults: (params?: {
+    task_id?: string;
+    task_type?: string;
+    model_profile_id?: number;
+    query?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.task_id) q.set("task_id", params.task_id);
+    if (params?.task_type) q.set("task_type", params.task_type);
+    if (params?.model_profile_id !== undefined) q.set("model_profile_id", String(params.model_profile_id));
+    if (params?.query) q.set("query", params.query);
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return request<AiResultListResponse>(`/api/v1/ai/results${qs ? `?${qs}` : ""}`);
+  },
+  getAiResult: (id: string) => request<AiResult>(`/api/v1/ai/results/${id}`),
+  deleteAiResult: (id: string, confirm = true) =>
+    request<{ id: string; status: string }>(`/api/v1/ai/results/${id}?confirm=${confirm}`, { method: "DELETE" }),
+  getAiResultContentUrl: (id: string) => `/api/v1/ai/results/${id}/content`,
+  importAiResultToAsset: (id: string, payload?: { target_folder_id?: number; custom_name?: string }) =>
+    request<AssetOut>(`/api/v1/ai/results/${id}/import`, { method: "POST", json: payload || {} }),
+  batchImportAiResults: (payload: { result_ids: string[]; target_folder_id?: number }) =>
+    request<BatchImportResultsResponse>("/api/v1/ai/results/batch-import", { method: "POST", json: payload })
 };

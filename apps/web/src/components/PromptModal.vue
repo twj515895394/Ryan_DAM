@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { api } from "../api/client";
 
 const props = defineProps<{
@@ -11,7 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "close"): void;
-  (e: "saved", hasPrompt: boolean): void;
+  (e: "saved", hasPrompt: boolean, info?: { prompt_origin?: string | null; prompt_revision?: number }): void;
 }>();
 
 const promptLoading = ref(false);
@@ -20,20 +20,35 @@ const promptEditing = ref(false);
 const promptError = ref("");
 const promptText = ref<string | null>(null);
 const promptDraft = ref("");
+const promptOrigin = ref<string | null>(null);
+const promptRevision = ref<number>(1);
 const promptCopied = ref(false);
 let promptCopyTimer: ReturnType<typeof setTimeout> | null = null;
 
-// immediate: 卡片入口会在本组件挂载前就把 open 置为 true（AssetPreview setup 期
-// 同步响应 autoOpenPrompt），此时 open 没有"变化"可监听，必须挂载即初始化一次
+// CAS 冲突状态
+const hasConflict = ref(false);
+
+const originLabel = computed(() => {
+  switch (promptOrigin.value) {
+    case "manual": return "手动录入";
+    case "ai_reverse": return "AI 视觉反推";
+    case "generation_prompt": return "生图提示词";
+    case "edit_prompt": return "编辑提示词";
+    default: return "未标注";
+  }
+});
+
 watch(
   () => props.open,
   (isOpen) => {
     if (isOpen) {
+      hasConflict.value = false;
       void initPrompt();
     } else {
       promptEditing.value = false;
       promptError.value = "";
       promptText.value = null;
+      hasConflict.value = false;
     }
   },
   { immediate: true }
@@ -44,12 +59,18 @@ async function initPrompt(): Promise<void> {
   promptEditing.value = !props.hasPrompt;
   promptDraft.value = "";
   promptText.value = null;
+  promptOrigin.value = null;
+  promptRevision.value = 1;
+  hasConflict.value = false;
+
   if (!props.hasPrompt) return;
 
   promptLoading.value = true;
   try {
     const result = await api.getAssetPrompt(props.assetId);
     promptText.value = result.prompt_text ?? "";
+    promptOrigin.value = result.prompt_origin ?? null;
+    promptRevision.value = result.prompt_revision || 1;
   } catch (error) {
     promptError.value = error instanceof Error ? error.message : "提示词加载失败";
   } finally {
@@ -61,19 +82,34 @@ function startPromptEdit(): void {
   promptDraft.value = promptText.value ?? "";
   promptEditing.value = true;
   promptError.value = "";
+  hasConflict.value = false;
 }
 
-async function savePrompt(): Promise<void> {
+async function savePrompt(forceOverwrite = false): Promise<void> {
   promptSaving.value = true;
   promptError.value = "";
+  hasConflict.value = false;
   try {
-    const result = await api.setAssetPrompt(props.assetId, promptDraft.value || null);
+    const result = await api.setAssetPrompt(props.assetId, promptDraft.value || null, {
+      expectedRevision: forceOverwrite ? undefined : promptRevision.value,
+      promptOrigin: promptOrigin.value || "manual"
+    });
     promptText.value = result.prompt_text;
-    emit("saved", result.has_prompt);
+    promptOrigin.value = result.prompt_origin ?? null;
+    promptRevision.value = result.prompt_revision;
+    emit("saved", result.has_prompt, {
+      prompt_origin: result.prompt_origin,
+      prompt_revision: result.prompt_revision
+    });
     promptEditing.value = false;
     if (!result.has_prompt) emit("close");
-  } catch (error) {
-    promptError.value = error instanceof Error ? error.message : "保存失败";
+  } catch (err: any) {
+    if (err?.code === "prompt_conflict") {
+      hasConflict.value = true;
+      promptError.value = err.message || "提示词已被修改，出现并发冲突";
+    } else {
+      promptError.value = err instanceof Error ? err.message : "保存失败";
+    }
   } finally {
     promptSaving.value = false;
   }
@@ -103,9 +139,17 @@ async function copyPrompt(): Promise<void> {
     >
       <div class="w-[560px] max-w-[92vw] rounded-2xl bg-white p-5 shadow-soft">
         <div class="flex items-center justify-between">
-          <h3 class="truncate text-sm font-semibold text-ink">
-            {{ promptEditing ? (hasPrompt ? "编辑提示词" : "添加提示词") : "提示词" }} · {{ assetName }}
-          </h3>
+          <div class="flex items-center gap-2">
+            <h3 class="truncate text-sm font-semibold text-ink">
+              {{ promptEditing ? (hasPrompt ? "编辑提示词" : "添加提示词") : "提示词" }} · {{ assetName }}
+            </h3>
+            <span
+              v-if="hasPrompt && !promptEditing"
+              class="rounded-md bg-canvas px-1.5 py-0.5 text-[10px] text-muted border border-line/60"
+            >
+              {{ originLabel }} · v{{ promptRevision }}
+            </span>
+          </div>
           <button
             class="rounded-lg px-2 py-1 text-xs text-muted transition hover:bg-canvas hover:text-ink"
             @click="emit('close')"
@@ -113,6 +157,7 @@ async function copyPrompt(): Promise<void> {
             关闭
           </button>
         </div>
+
         <p v-if="promptError" class="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">
           {{ promptError }}
         </p>
@@ -125,6 +170,19 @@ async function copyPrompt(): Promise<void> {
             class="mt-3 w-full resize-y rounded-xl border border-line bg-white px-3 py-2.5 font-mono text-xs leading-6 text-ink outline-none focus:border-accent"
           ></textarea>
           <p class="mt-1.5 text-[11px] text-muted">完整多行提示词，保留原始换行与特殊字符，不拆分正负提示词。</p>
+
+          <!-- 冲突确认提示条 -->
+          <div v-if="hasConflict" class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 flex items-center justify-between">
+            <span>提示词已被修改，是否放弃冲突检查直接覆盖？</span>
+            <button
+              type="button"
+              class="rounded-md bg-amber-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-700 transition"
+              @click="savePrompt(true)"
+            >
+              强制覆盖保存
+            </button>
+          </div>
+
           <div class="mt-3 flex justify-end gap-2">
             <button
               v-if="hasPrompt"
@@ -136,7 +194,7 @@ async function copyPrompt(): Promise<void> {
             <button
               class="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
               :disabled="promptSaving"
-              @click="savePrompt"
+              @click="savePrompt(false)"
             >
               {{ promptSaving ? "保存中…" : "保存" }}
             </button>

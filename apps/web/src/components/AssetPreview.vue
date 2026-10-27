@@ -6,6 +6,7 @@ import AssetIcon from "./AssetIcon.vue";
 import AssetTagEditor from "./AssetTagEditor.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import PromptModal from "./PromptModal.vue";
+import AiReverseModal from "./AiReverseModal.vue";
 import { renderMarkdown } from "../utils/markdown";
 import type { AssetOut, TrashItem } from "../api/types";
 import type { ConfirmIntent } from "./ConfirmDialog.vue";
@@ -37,6 +38,8 @@ const emit = defineEmits<{
   (e: "prompt-opened"): void;
   (e: "restore", assetId: number): void;
   (e: "permanent-delete", assetId: number): void;
+  (e: "open-task", taskId: string): void;
+  (e: "open-workbench", asset: AssetOut): void;
 }>();
 
 const objectUrl = ref<string | null>(null);
@@ -133,6 +136,25 @@ const durationLabel = computed(() => {
   return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
 });
 
+const originLabel = computed(() => {
+  switch (props.asset.asset_origin) {
+    case "ai_generated": return "AI 生图";
+    case "ai_edited": return "AI 编辑";
+    case "local_import":
+    default: return "本地导入";
+  }
+});
+
+const promptOriginLabel = computed(() => {
+  switch (props.asset.prompt_origin) {
+    case "ai_reverse": return "AI 视觉反推";
+    case "generation_prompt": return "生图提示词";
+    case "edit_prompt": return "编辑提示词";
+    case "manual": return "手动录入";
+    default: return "未标注";
+  }
+});
+
 const updatedAtLabel = computed(() => {
   if (!props.asset.updated_at) return "—";
   const date = new Date(props.asset.updated_at + (props.asset.updated_at.endsWith("Z") ? "" : "Z"));
@@ -204,14 +226,17 @@ function askConvert(): void {
   };
 }
 
-// ── 提示词 ────────────────────────────────────────────────────
+// ── 提示词与 AI 反推 ──────────────────────────────────────────
 const promptModalOpen = ref(false);
+const aiReverseModalOpen = ref(false);
 const canUsePrompt = computed(() => props.asset.asset_type === "image" || props.asset.asset_type === "video");
+const canUseAiReverse = computed(() => props.asset.asset_type === "image");
 
 watch(
   () => props.asset.id,
   () => {
     promptModalOpen.value = false;
+    aiReverseModalOpen.value = false;
   }
 );
 
@@ -226,8 +251,18 @@ watch(
   { immediate: true }
 );
 
-function onPromptSaved(hasPrompt: boolean): void {
+function onPromptSaved(hasPrompt: boolean, info?: { prompt_origin?: string | null; prompt_revision?: number }): void {
   props.asset.has_prompt = hasPrompt;
+  if (info) {
+    if (info.prompt_origin !== undefined) props.asset.prompt_origin = info.prompt_origin as any;
+    if (info.prompt_revision !== undefined) props.asset.prompt_revision = info.prompt_revision;
+  }
+}
+
+function onReverseSaved(payload: { prompt_text: string; prompt_origin: string; prompt_revision: number }): void {
+  props.asset.has_prompt = true;
+  props.asset.prompt_origin = payload.prompt_origin as any;
+  props.asset.prompt_revision = payload.prompt_revision;
 }
 
 function clearContent(): void {
@@ -272,6 +307,10 @@ async function loadContent(): Promise<void> {
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === "Escape") {
     event.preventDefault();
+    if (aiReverseModalOpen.value) {
+      aiReverseModalOpen.value = false;
+      return;
+    }
     if (promptModalOpen.value) {
       // Esc 只关最上层的提示词弹窗，不连预览一起关
       promptModalOpen.value = false;
@@ -444,10 +483,26 @@ onUnmounted(() => {
           <p class="break-all text-sm font-semibold leading-6">{{ asset.name }}</p>
           <dl class="mt-4 space-y-3 text-xs">
             <div class="flex justify-between gap-3"><dt class="shrink-0 text-muted">类型</dt><dd>{{ typeLabel }}</dd></div>
-            <div class="flex justify-between gap-3"><dt class="shrink-0 text-muted">来源</dt>
+            <div class="flex justify-between gap-3"><dt class="shrink-0 text-muted">存储方式</dt>
               <dd :class="asset.source_type === 'external' ? 'text-amber-700' : ''">
                 {{ asset.source_type === 'external' ? '外部链接' : '系统托管' }}
               </dd>
+            </div>
+            <div class="flex justify-between gap-3"><dt class="shrink-0 text-muted">资产来源</dt>
+              <dd class="text-ink font-medium">{{ originLabel }}</dd>
+            </div>
+            <div v-if="asset.generation_task_id" class="flex justify-between gap-3">
+              <dt class="shrink-0 text-muted">生成任务</dt>
+              <dd
+                class="text-accent font-mono text-[11px] hover:underline cursor-pointer"
+                title="查看 AI 任务中心"
+                @click="emit('open-task', asset.generation_task_id)"
+              >
+                #{{ asset.generation_task_id.slice(-8) }}
+              </dd>
+            </div>
+            <div v-if="asset.has_prompt" class="flex justify-between gap-3"><dt class="shrink-0 text-muted">提示词来源</dt>
+              <dd class="text-ink">{{ promptOriginLabel }} · v{{ asset.prompt_revision || 1 }}</dd>
             </div>
             <div v-if="asset.status === 'missing'" class="flex justify-between gap-3">
               <dt class="shrink-0 text-muted">状态</dt>
@@ -506,11 +561,38 @@ onUnmounted(() => {
             >转为系统托管</button>
           </div>
           <div v-if="canUsePrompt && !trashMode" class="mt-4 border-t border-line pt-3">
-            <p class="text-xs font-medium text-muted">提示词</p>
-            <button
-              class="mt-2 w-full rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink transition hover:bg-canvas"
-              @click="promptModalOpen = true"
-            >{{ asset.has_prompt ? "查看提示词" : "添加提示词" }}</button>
+            <p class="text-xs font-medium text-muted">提示词与 AI</p>
+            <div class="mt-2 flex flex-col gap-1.5">
+              <button
+                class="w-full rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink transition hover:bg-canvas text-left flex items-center justify-between"
+                @click="promptModalOpen = true"
+              >
+                <span>{{ asset.has_prompt ? "查看 / 编辑提示词" : "添加提示词" }}</span>
+                <span v-if="asset.has_prompt" class="text-[10px] text-muted">v{{ asset.prompt_revision || 1 }}</span>
+              </button>
+              <button
+                v-if="canUseAiReverse"
+                class="w-full rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-xs font-medium text-accent transition hover:bg-accent/10 text-left flex items-center justify-between"
+                @click="aiReverseModalOpen = true"
+              >
+                <span class="flex items-center gap-1.5">
+                  <span>✨</span>
+                  <span>AI 视觉反推提示词</span>
+                </span>
+                <span class="text-[10px] text-muted">Vision</span>
+              </button>
+              <button
+                v-if="asset.asset_type === 'image'"
+                class="w-full rounded-lg border border-purple-200 bg-purple-50/50 px-3 py-2 text-xs font-medium text-purple-700 transition hover:bg-purple-100/60 text-left flex items-center justify-between"
+                @click="emit('open-workbench', asset)"
+              >
+                <span class="flex items-center gap-1.5">
+                  <span>🎨</span>
+                  <span>AI 图像编辑 / 图生图</span>
+                </span>
+                <span class="text-[10px] text-purple-600/80">Workbench</span>
+              </button>
+            </div>
           </div>
           <!-- 回收站上下文：原目录与删除时间（回收站项不提供路径与常规管理） -->
           <div v-if="trashMode && trashMeta" class="mt-4 border-t border-line pt-3">
@@ -555,6 +637,16 @@ onUnmounted(() => {
       :has-prompt="asset.has_prompt"
       @close="promptModalOpen = false"
       @saved="onPromptSaved"
+    />
+
+    <AiReverseModal
+      :open="aiReverseModalOpen"
+      :asset-id="asset.id"
+      :asset-name="asset.name"
+      :has-existing-prompt="asset.has_prompt"
+      :current-prompt-revision="asset.prompt_revision"
+      @close="aiReverseModalOpen = false"
+      @saved="onReverseSaved"
     />
 
     <ConfirmDialog

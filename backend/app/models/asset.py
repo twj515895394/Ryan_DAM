@@ -16,6 +16,14 @@ class Asset(Base):
         CheckConstraint("source_type IN ('managed','external')", name="ck_assets_source_type"),
         CheckConstraint("asset_type IN ('image','video','audio','document','other')", name="ck_assets_asset_type"),
         CheckConstraint("status IN ('active','trashed','missing')", name="ck_assets_status"),
+        CheckConstraint(
+            "asset_origin IN ('local_import', 'ai_generated', 'ai_edited')",
+            name="ck_assets_asset_origin",
+        ),
+        CheckConstraint(
+            "prompt_origin IS NULL OR prompt_origin IN ('manual', 'ai_reverse', 'generation_prompt', 'edit_prompt')",
+            name="ck_assets_prompt_origin",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -30,6 +38,14 @@ class Asset(Base):
     external_source_id: Mapped[int | None] = mapped_column(ForeignKey("external_sources.id"), nullable=True, index=True)
     sha256: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     prompt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # V2 Origins & Prompt CAS Revision
+    asset_origin: Mapped[str] = mapped_column(String(32), default="local_import", index=True)
+    prompt_origin: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    prompt_revision: Mapped[int] = mapped_column(Integer, default=1)
+    generation_task_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    generation_result_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     media_width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     media_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     media_duration_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

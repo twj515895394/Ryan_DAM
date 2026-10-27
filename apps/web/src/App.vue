@@ -14,6 +14,10 @@ import TrashView from "./components/TrashView.vue";
 import BatchActionBar from "./components/BatchActionBar.vue";
 import TargetFolderDialog from "./components/TargetFolderDialog.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
+import AiTaskCenter from "./components/AiTaskCenter.vue";
+import AiWorkbenchModal from "./components/AiWorkbenchModal.vue";
+import AiBatchReverseModal from "./components/AiBatchReverseModal.vue";
+import AiHistoryModal from "./components/AiHistoryModal.vue";
 import { useFolderOptions } from "./composables/useFolderOptions";
 import { useConfirmDialog } from "./composables/useConfirmDialog";
 import { useDialogFlows } from "./composables/useDialogFlows";
@@ -22,8 +26,10 @@ import { useProjectDelete } from "./composables/useProjectDelete";
 import { useTrashPreview } from "./composables/useTrashPreview";
 import { useSidebarResize } from "./composables/useSidebarResize";
 import { useImportFlow } from "./composables/useImportFlow";
+import { useAiWorkbench } from "./composables/useAiWorkbench";
 
-import type { ExternalSource, FolderEditPayload, FolderNode } from "./api/types";
+import { api } from "./api/client";
+import type { AiTaskSummary, AssetOut, ExternalSource, FolderEditPayload, FolderNode } from "./api/types";
 import {
   bulkConvertToManagedSelected,
   bulkTrashSelected,
@@ -37,6 +43,7 @@ import {
   library,
   loadAll,
   loadExternalSources,
+  notify,
   loadTags,
   loadTrash,
   moveAssetToFolder,
@@ -57,6 +64,35 @@ const {
   onDoubleClick: resetSidebarWidth
 } = useSidebarResize(layoutEl);
 const showSettingsDialog = ref(false);
+const {
+  showAiWorkbench,
+  showAiTaskCenter,
+  showAiBatchReverse,
+  showAiHistory,
+  workbenchInitialPrompt,
+  workbenchInitialRefIds,
+  workbenchInitialMode,
+  workbenchInitialModelId,
+  workbenchInitialPresetId,
+  workbenchInitialParams,
+  workbenchInitialReferences,
+  workbenchInitialRetryOf,
+  openWorkbench,
+  closeWorkbench,
+  openAiHistory,
+  closeAiHistory,
+  openWorkbenchFromHistory,
+  openWorkbenchFromAsset,
+  openWorkbenchVariant,
+  openWorkbenchContinueEdit,
+  onAiTaskCreated
+} = useAiWorkbench();
+
+const selectedBatchImageAssets = computed(() => {
+  const selectedSet = new Set(library.selectedAssetIds);
+  if (!library.assets?.items) return [];
+  return library.assets.items.filter((a) => selectedSet.has(a.id) && a.asset_type === "image");
+});
 const activeScope = ref<"general" | "project">("general");
 const activeProjectId = ref<number | null>(null);
 const activeFolderId = ref<number | null>(null);
@@ -127,9 +163,7 @@ function askEmptyTrash(): void {
     description: `确定清空回收站吗？将永久删除 ${count} 项。\n文件会从磁盘中直接删除，此操作不可恢复。`,
     confirmText: "清空回收站",
     intent: "danger",
-    action: () => {
-      void emptyTrashAll();
-    }
+    action: () => void emptyTrashAll()
   });
 }
 
@@ -141,9 +175,7 @@ function askBulkTrash(): void {
     description: `确定删除选中的 ${count} 项吗？\n托管资产将移入回收站，可随时恢复；外部资产仅移除索引，不会删除源文件。`,
     confirmText: "删除资产",
     intent: "danger",
-    action: () => {
-      void bulkTrashSelected();
-    }
+    action: () => void bulkTrashSelected()
   });
 }
 
@@ -235,9 +267,7 @@ function askDeleteTag(id: number, name: string): void {
     description: `确定删除标签「${name}」吗？\n只有未被任何资产使用的空闲标签可以被删除。`,
     confirmText: "删除标签",
     intent: "danger",
-    action: () => {
-      void deleteTag(id);
-    }
+    action: () => void deleteTag(id)
   });
 }
 
@@ -565,6 +595,9 @@ onUnmounted(() => {
         @empty-trash="askEmptyTrash"
         @start-import="startImport"
         @start-folder-import="startFolderImport"
+        @open-ai-tasks="showAiTaskCenter = true"
+        @open-ai-workbench="showAiWorkbench = true"
+        @open-ai-history="openAiHistory"
       />
 
       <!-- 回收站视图子组件（行单击打开沉浸式预览） -->
@@ -624,6 +657,8 @@ onUnmounted(() => {
       @move="onMoveFromPreview"
       @convert="onConvertFromPreview"
       @prompt-opened="promptRequested = false"
+      @open-task="showAiTaskCenter = true"
+      @open-workbench="openWorkbenchFromAsset"
     />
 
     <!-- 回收站沉浸式预览：复用媒体/文本/PDF 播放渲染，提供恢复到原目录 / 永久删除 -->
@@ -656,12 +691,54 @@ onUnmounted(() => {
           @select-all="selectAllCurrentAssets"
           @ask-trash="askBulkTrash"
           @ask-convert="askBulkConvertToManaged"
+          @ask-batch-reverse="showAiBatchReverse = true"
         />
       </Transition>
     </Teleport>
 
     <!-- 导入任务进度悬浮窗 -->
     <ImportJobPanel />
+
+    <!-- AI 任务中心侧抽屉 -->
+    <AiTaskCenter
+      :open="showAiTaskCenter"
+      @close="showAiTaskCenter = false"
+      @open-variant="openWorkbenchVariant"
+      @continue-edit="openWorkbenchContinueEdit"
+    />
+
+    <!-- AI 图像创作工作台模态框 -->
+    <AiWorkbenchModal
+      :open="showAiWorkbench"
+      :initial-prompt="workbenchInitialPrompt"
+      :initial-reference-asset-ids="workbenchInitialRefIds"
+      :initial-mode="workbenchInitialMode"
+      :initial-model-id="workbenchInitialModelId"
+      :initial-preset-id="workbenchInitialPresetId"
+      :initial-params="workbenchInitialParams"
+      :initial-references="workbenchInitialReferences"
+      :initial-retry-of="workbenchInitialRetryOf"
+      @close="closeWorkbench"
+      @task-created="onAiTaskCreated"
+    />
+
+    <!-- AI 批量反推与审核录入模态框 -->
+    <AiBatchReverseModal
+      :open="showAiBatchReverse"
+      :selected-assets="selectedBatchImageAssets"
+      @close="showAiBatchReverse = false"
+      @task-started="(id) => notify('success', `批量反推任务 #${id.slice(0, 8)} 已发起`)"
+      @committed="() => refreshCurrentAssets()"
+    />
+
+    <!-- AI 永久历史总览与多维检索模态框 -->
+    <AiHistoryModal
+      :open="showAiHistory"
+      @close="closeAiHistory"
+      @open-workbench="openWorkbench"
+      @create-variant="openWorkbenchFromHistory"
+      @imported="() => refreshCurrentAssets()"
+    />
 
     <!-- 目标目录选择对话框 -->
     <TargetFolderDialog
@@ -675,6 +752,7 @@ onUnmounted(() => {
     <!-- 偏好设置模态框 -->
     <SettingsDialog
       :open="showSettingsDialog"
+      :on-ask-confirm="ask"
       @close="showSettingsDialog = false"
       @edit-root="dialog = { kind: 'root-edit' }"
       @open-stage0="showStage0 = true"

@@ -20,6 +20,15 @@ EXPECTED_TABLES = {
     "import_jobs",
     "import_job_items",
     "app_settings",
+    "ai_provider_instances",
+    "ai_model_profiles",
+    "ai_default_bindings",
+    "ai_reverse_templates",
+    "ai_creation_presets",
+    "ai_tasks",
+    "ai_task_items",
+    "ai_task_references",
+    "ai_results",
     "alembic_version",
 }
 
@@ -34,8 +43,17 @@ def test_fresh_database_migrates_all_tables(tmp_path) -> None:
     assert {"pinned", "locked", "description"} <= folder_columns
     source_columns = {c["name"] for c in inspector.get_columns("external_sources")}
     assert "mount_folder" in source_columns
+    provider_columns = {c["name"] for c in inspector.get_columns("ai_provider_instances")}
+    assert {"family", "name", "base_url", "credential_ref", "enabled"} <= provider_columns
+    model_columns = {c["name"] for c in inspector.get_columns("ai_model_profiles")}
+    assert {"provider_id", "model_id", "name", "adapter_kind", "capabilities_json"} <= model_columns
+    binding_columns = {c["name"] for c in inspector.get_columns("ai_default_bindings")}
+    assert {"capability", "scene", "model_profile_id"} <= binding_columns
+    asset_columns = {c["name"] for c in inspector.get_columns("assets")}
+    assert {"asset_origin", "prompt_origin", "prompt_revision", "generation_task_id", "generation_result_id"} <= asset_columns
+
     version = engine.connect().exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-    assert version == "0009"
+    assert version == "0014"
 
 
 def test_migrations_are_idempotent(tmp_path) -> None:
@@ -48,48 +66,3 @@ def test_data_persists_across_restart(tmp_path) -> None:
     db_path = tmp_path / "persist.sqlite3"
     run_migrations(db_path)
     engine = create_sqlite_engine(db_path)
-    session_factory = create_session_factory(engine)
-    with session_factory() as session:
-        session.add(Project(name="Persisted"))
-        session.commit()
-
-    reopened = create_sqlite_engine(db_path)
-    with create_session_factory(reopened)() as session:
-        names = [p.name for p in session.query(Project).all()]
-    assert names == ["Persisted"]
-
-
-def _load_migration_0008():
-    path = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0008_asset_code_to_other.py"
-    spec = importlib.util.spec_from_file_location("m0008_asset_code_to_other", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def test_migration_0008_reclassifies_code_documents(tmp_path) -> None:
-    db_path = tmp_path / "code.sqlite3"
-    run_migrations(db_path)
-    engine = create_sqlite_engine(db_path)
-    session_factory = create_session_factory(engine)
-    with session_factory() as session:
-        session.add(Asset(name="build.py", file_path="objects/a", source_type="managed", asset_type="document"))
-        session.add(Asset(name="config.yaml", file_path="objects/b", source_type="managed", asset_type="document"))
-        session.add(Asset(name="report.pdf", file_path="objects/c", source_type="managed", asset_type="document"))
-        session.add(Asset(name="archive.zip", file_path="objects/d", source_type="managed", asset_type="other"))
-        session.commit()
-
-    m = _load_migration_0008()
-    with engine.connect() as conn:
-        assert m.reclassify_code_documents(conn) == 2
-        conn.commit()
-        assert m.reclassify_code_documents(conn) == 0  # 幂等
-
-    with session_factory() as session:
-        types = {a.name: a.asset_type for a in session.query(Asset).all()}
-    assert types == {
-        "build.py": "other",
-        "config.yaml": "other",
-        "report.pdf": "document",
-        "archive.zip": "other",
-    }

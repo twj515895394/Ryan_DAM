@@ -32,6 +32,13 @@ class AssetOut(BaseModel):
     tags: list[TagBrief] = []
     has_prompt: bool = False
 
+    # V2 Origins & Prompt Versioning
+    asset_origin: str = "local_import"
+    prompt_origin: str | None = None
+    prompt_revision: int = 1
+    generation_task_id: str | None = None
+    generation_result_id: str | None = None
+
 
 class AssetPage(BaseModel):
     total: int
@@ -56,9 +63,13 @@ class PromptPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     prompt_text: str | None = Field(default=None, max_length=100_000)
+    expected_revision: int | None = Field(default=None, description="CAS validation: revision must match if provided")
+    prompt_origin: str | None = Field(default="manual", description="Origin: manual, ai_reverse, generation_prompt, edit_prompt")
 
 
 class AssetPromptOut(BaseModel):
     asset_id: int
     prompt_text: str | None
     has_prompt: bool
+    prompt_origin: str | None = None
+    prompt_revision: int = 1

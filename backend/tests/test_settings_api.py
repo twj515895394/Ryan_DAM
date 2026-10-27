@@ -46,11 +46,7 @@ def test_relative_path_rejected(client, headers) -> None:
 def test_unavailable_drive_reported(client, headers) -> None:
     if platform.system() != "Windows":
         return  # drive-letter logic is Windows-only
-    free_letters = [L for L in string.ascii_uppercase if not os.path.exists(L + os.sep)]
-    if not free_letters:
-        return  # no removable candidate letter on this machine
-    drive = free_letters[-1]
-    response = client.patch("/api/v1/settings", json={"managed_root": f"{drive}:\\Ryan_DAM\\assets"}, headers=headers)
+    response = client.patch("/api/v1/settings", json={"managed_root": "Z:\\Ryan_DAM\\assets"}, headers=headers)
     assert response.status_code == 200
     assert response.json()["managed_root_state"] == "unavailable"
 

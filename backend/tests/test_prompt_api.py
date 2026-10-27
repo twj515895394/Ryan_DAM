@@ -88,3 +88,50 @@ def test_prompt_rejected_on_trashed_asset(iso_client, headers, tmp_path) -> None
     assert iso_client.get(f"/api/v1/assets/{asset_id}/prompt", headers=headers).status_code == 404
     rejected = iso_client.put(f"/api/v1/assets/{asset_id}/prompt", json={"prompt_text": "x"}, headers=headers)
     assert rejected.status_code == 404
+
+
+def test_prompt_cas_conflict_handling(iso_client, headers, tmp_path) -> None:
+    asset_id = _import_image(iso_client, headers, tmp_path, "cas-prompt.png")
+
+    # 1. First write without CAS (initial revision is 1, becomes 2)
+    p1 = iso_client.put(
+        f"/api/v1/assets/{asset_id}/prompt",
+        json={"prompt_text": "初始提示词", "prompt_origin": "manual"},
+        headers=headers,
+    )
+    assert p1.status_code == 200
+    assert p1.json()["prompt_revision"] == 2
+    assert p1.json()["prompt_origin"] == "manual"
+
+    # 2. Concurrent write with old expected_revision=1 must fail with 409 Conflict
+    conflict = iso_client.put(
+        f"/api/v1/assets/{asset_id}/prompt",
+        json={
+            "prompt_text": "被过期的修改",
+            "expected_revision": 1,
+            "prompt_origin": "ai_reverse",
+        },
+        headers=headers,
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "prompt_conflict"
+
+    # Verify content was NOT modified
+    current = iso_client.get(f"/api/v1/assets/{asset_id}/prompt", headers=headers).json()
+    assert current["prompt_text"] == "初始提示词"
+    assert current["prompt_revision"] == 2
+
+    # 3. Write with correct expected_revision=2 succeeds and increments to 3
+    success = iso_client.put(
+        f"/api/v1/assets/{asset_id}/prompt",
+        json={
+            "prompt_text": "AI 反推成功更新",
+            "expected_revision": 2,
+            "prompt_origin": "ai_reverse",
+        },
+        headers=headers,
+    )
+    assert success.status_code == 200
+    assert success.json()["prompt_text"] == "AI 反推成功更新"
+    assert success.json()["prompt_origin"] == "ai_reverse"
+    assert success.json()["prompt_revision"] == 3
