@@ -1,6 +1,6 @@
 # Ryan_DAM 二期技术架构详细设计（V2）
 
-- **版本**：v0.1 / 技术设计建议（2026-10-27）
+- **版本**：v0.2 / 技术设计建议（2026-10-27）
 - **需求事实基线**：[V2 Spec](./Ryan_DAM_Product_Spec_v2.md)
 - **既有架构**：[V1 技术架构](./TECHNICAL_ARCHITECTURE_V1.md)
 - **适用分支**：feat/phase2-ai-workbench
@@ -11,17 +11,18 @@
 ### 已确认需求（不可擅改）
 - Windows 本地个人使用；V1 资产库不重做；独立 AI 工作台 + 现有画廊/预览快捷动作。
 - 自定义第三方 OpenAI Compatible 是 Provider 添加时的优先入口；支持多连接、多模型、多能力；默认图片生成使用经用户配置的 GPT 图像模型，场景级覆盖；官方接入保留。
-- 模型能力分别包含文本 LLM 优化、视觉理解/反推、图片生成、图片编辑；ComfyUI API Workflow、参数映射及预设管理。
+- 模型能力分别包含文本 LLM 优化、视觉理解/反推、图片生成、图片编辑；本期执行器只覆盖正式纳入的模型服务，不接 ComfyUI。
 - 图片生成/编辑统一工作台但明确模式；参考图来自资产、历史、本地、拖放、剪贴板；不强制临时图入库。
 - 任务后台受控并发；所有生成结果永久保留在生成历史，**绝不自动转正式资产**；用户选择后入库；生成历史不随入库消失。
 - 每张正式资产最多一份 Prompt；保留 prompt_text；要区分物理存储 source_type、资产创作来源、Prompt 来源；已有 Prompt 替换必须确认。
 - 单图/批量反推；反推结果审核与选择保存；反推可选后续 LLM 优化；提示词优化可跳过。
 - 再生成/变体/继续编辑产生新任务；通过任务关联追溯来源，不创建跨项目通用资产使用图谱。
-- AI 自动打标签明确暂缓。
+- AI 自动打标签明确暂缓；**ComfyUI 依据产品决策㉒移出整个二期交付**，二期完成后再评估是否接入。
 
 ### 范围工作假设（**尚待产品最终确认，不写回“已确认决策”**）
 - 首批仅实现**图片**的生成、编辑、反推；V1 视频提示词仍可手动保存。视频生成/视频反推仅预留执行器任务类型，不安排本批开发。
 - 软件维持单机本地模式，不引入服务器端账号体系、Redis、Celery、云端 DAM。
+- 二期开发与验收不需要 ComfyUI 实例、API Workflow 适配器或 ComfyUI 专项 PoC；不以“预留扩展”为由提前实现相关功能。
 - “永久生成历史”指应用**不自动按时间删除本地结果**；用户明确手动删除或磁盘/文件丢失是单独异常。
 
 ## 1. V1 代码依据与可复用组件
@@ -50,10 +51,8 @@ flowchart TB
   API --> J[持久化 AI Task Scheduler]
   J --> V[视觉分析 / LLM 优化适配器]
   J --> G[图像生成/编辑适配器]
-  J --> C[ComfyUI Workflow Adapter]
   V --> EXT[远程/本地 AI 服务]
   G --> EXT
-  C --> COMFY[ComfyUI 实例]
   J --> H[历史结果物理存储]
   A --> DB[(SQLite)]
   P --> DB
@@ -69,16 +68,16 @@ flowchart TB
 
 ~~~
 backend/app/api/v1/ai/
-  providers.py models.py capabilities.py workflows.py
+  providers.py models.py capabilities.py
   presets.py templates.py prompt.py
   jobs.py results.py reverse.py uploads.py
 backend/app/models/ai/
-  provider.py model.py workflow.py template.py preset.py
+  provider.py model.py template.py preset.py
   task.py task_item.py result.py reference.py
 backend/app/services/ai/
   credentials.py provider_registry.py capability_service.py
-  adapter_base.py adapters/{openai_compatible.py,openai_native.py,gemini_native.py,comfyui.py}
-  workflow_mapping.py prompt_optimizer.py reverse_service.py
+  adapter_base.py adapters/{openai_compatible.py,openai_native.py,gemini_native.py}
+  prompt_optimizer.py reverse_service.py
   task_scheduler.py task_executor.py task_recovery.py
   reference_service.py history_store.py result_import_service.py
 apps/web/src/features/ai/
@@ -90,10 +89,9 @@ apps/web/src/features/ai/
 ## 4. AI Provider、模型能力与路由
 
 ### 4.1 领域对象
-- **ProviderInstance**：用户命名的单个连接配置，family={openai_compatible, openai_native, gemini_native, comfyui}；包含 base_url、启用状态、credential_ref、超时等非秘密设置。同类 Provider 可多实例。
+- **ProviderInstance**：用户命名的单个连接配置，family={openai_compatible, openai_native, gemini_native}；包含 base_url、启用状态、credential_ref、超时等非秘密设置。同类 Provider 可多实例。
 - **ModelProfile**：归属一个 ProviderInstance，具有 model_id、显示名、adapter_kind、能力集合与 capability_schema；由用户手动添加为主，第三方 model list 可选，不依赖自动发现。
 - **Capability**：text_optimize / image_understand / image_generate / image_edit；可为模型/能力分别配置支持情况、格式、最大参考数量与可用参数。能力表是**运行契约**，不是只读展示标签。
-- **WorkflowProfile**：归属 ComfyUI 实例，保存 API 格式 JSON 快照、受控输入/输出节点绑定、版本指纹、字段表单声明；在工作台中作为可执行目标选择。
 - **DefaultBinding**：全局生成 GPT 模型、视觉反推模型、Prompt 优化 LLM、场景预设覆盖模型；选择顺序：本次手动 > 场景默认 > 全局该能力默认。无可用模型必须明确要求用户配置，不能悄悄切换供应商。
 
 ### 4.2 Adapter 协议（建议）
@@ -106,7 +104,7 @@ apps/web/src/features/ai/
 - submit/poll/cancel(resumable_handle) -> JobState (仅支持的异步 Provider 实现)
 - normalize_error(provider_error) -> {code, message, retryable, provider_request_id}
 
-采用**按动作适配**：OpenAI Compatible 的聊天兼容不推出它的生图兼容；对 /images/generations、/images/edits、Responses 类交互、非标准代理响应分别按实际合同处理。Gemini Native 与 ComfyUI 分开实现。任何所谓“万能 OpenAI 兼容模式”只能是明确声明了协议的适配器，失败时清楚告知不支持。
+采用**按动作适配**：OpenAI Compatible 的聊天兼容不推出它的生图兼容；对 /images/generations、/images/edits、Responses 类交互、非标准代理响应分别按实际合同处理。Gemini Native 独立实现。任何所谓“万能 OpenAI 兼容模式”只能是明确声明了协议的适配器，失败时清楚告知不支持。
 
 ### 4.3 动态参数描述
 
@@ -121,7 +119,7 @@ CapabilitySchema 推荐字段：
 ### 4.4 配置安全
 
 - Windows 优先使用系统用户作用域安全存储（如 Windows Credential Manager/DPAPI）的封装；SQLite 保存 key 引用与非秘密配置，不明文保存 API Key。
-- 服务端只对用户登记的连接目标发外部请求；验证 scheme/目标域名/端口，安全处理重定向、代理、TLS，默认不把本地 asset 内容或 Key 发到未知 host；本地 ComfyUI HTTP 可以显式允许 loopback。
+- 服务端只对用户登记的连接目标发外部请求；验证 scheme/目标域名/端口，安全处理重定向、代理、TLS，默认不把本地 asset 内容或 Key 发到未知 host；不额外开放本期未使用的 ComfyUI 服务入口。
 - Provider API 响应、日志、失败信息脱敏；敏感请求体、参考图片和 Prompt 不写原始 debug 日志；连接测试按能力单独报告。
 - UI 不支持未经额外安全审核任意 URL 直接载入远程文件/重定向访问内网地址。
 
@@ -134,9 +132,8 @@ CapabilitySchema 推荐字段：
 | assets 增量 | asset_origin, prompt_origin, generation_task_id(nullable), generation_result_id(nullable), prompt_revision | 保留 prompt_text/source_type；在 V1 文本已有时默认 prompt_origin=manual；未知历史资产来源标成 legacy/imported 并在迁移说明体现，不伪造创作信息 |
 | ai_provider_instances | id, family, name, base_url, credential_ref, enabled, settings_json | 多连接实例；API Key 不入普通 TEXT |
 | ai_model_profiles | id, provider_id, model_id, adapter_kind, capability_json, enabled | 模型能力与参数定义 |
-| ai_workflows | id, provider_id, name, api_json, bindings_json, fingerprint, revision | Workflow 定义与参数映射；编辑时版本化定义快照 |
 | ai_templates | id, kind(reverse/create), name, system_rules, variable_schema_json, builtin, updated_at | 内置/用户自定义分类，不混淆反推与创作 |
-| ai_presets | id, name, mode, model_profile_id, template_id, settings_json, ref_slots_json | 创作场景或 ComfyUI 工作流预设；可选覆盖 |
+| ai_presets | id, name, mode, model_profile_id, template_id, settings_json, ref_slots_json | 图片创作场景预设；可选覆盖 |
 | ai_tasks | id, task_type, provider_id, model_id/workflow_id, status, retry_of, idempotency_key, input_snapshot_json, external_handle, error_code, created/updated/finished_at | 持久任务与执行配置快照 |
 | ai_task_items | id, task_id, asset_id(nullable), status, draft_prompt_text, prompt_revision_at_start, error | 单/批量反推逐项结果及审核状态 |
 | ai_task_references | id, task_id, seq, role, source_kind, source_id, snapshot_path, hash | 永久的输入图快照，保序；角色用途只是语义 |
@@ -168,12 +165,11 @@ CapabilitySchema 推荐字段：
 ~~~
 
 **不变量**：
-- 云端 API 返回、ComfyUI result URL、ComfyUI output 文件都不能成为“永久历史的唯一文件地址”；在任务成功时校验文件格式、大小、hash，再**拷贝到 Ryan_DAM 控制的历史区**、原子提交。
+- 云端 API 返回的临时图片 URL 或第三方短期可用下载地址都不能成为“永久历史的唯一文件地址”；在任务成功时校验文件格式、大小、hash，再**拷贝到 Ryan_DAM 控制的历史区**、原子提交。
 - 生成历史 → 正式资产入库，推荐**复制 + 校验 + 原子改名**到 assets/objects 对应位置，以保证两个独立生命周期；同源文件再入库须避免未经确认重复创建，禁止复用原结果文件作为可删共享对象。
 - 临时本地参考图不强制成为正式 asset，但参与执行前复制不可变快照；按任务保留。用户移动原文件不影响已完成任务复现。
 - 托管根/历史盘满、移除或断联要明确报错，不能默默切到 C 盘；落盘前空间预检及崩溃补偿。
 - 删除生成历史时与“删除正式资产”区分：已入库资产副本不被删除；历史记录/快照的删除要有危险确认与物理文件安全检查。**没有自动 TTL 清理**。
-- 对 ComfyUI output 只读获取/复制，不自动删除、覆盖 ComfyUI 本身的 output 文件。
 
 ## 7. AI Task Scheduler 与持久化状态
 
@@ -181,7 +177,7 @@ CapabilitySchema 推荐字段：
 
 - 新增独立 task scheduler，进程内有界执行器，SQLite 负责持久任务和去重；不复用 V1 ImportWorker 的单线程队列。
 - 每 Provider/连接实例限流、全局小并发，默认值由技术 PoC 决定并暴露后续可调的设置（**非用户已确认固定值**）。
-- DB 事务只负责领取任务、更新状态、提交结果；第三方 HTTP 等待、图像下载、ComfyUI 长时间轮询必须放在事务外。SQLite WAL 下短事务写入，避免对资产浏览造成写锁阻塞。
+- DB 事务只负责领取任务、更新状态、提交结果；第三方 HTTP 等待、图像下载、外部异步任务长时间轮询必须放在事务外。SQLite WAL 下短事务写入，避免对资产浏览造成写锁阻塞。
 - 任务优先保持输入快照完整、执行可追溯；API 开始执行前检查 Provider、模型、输入图存在、磁盘空间、格式及参考数限制。
 
 ### 7.2 状态机
@@ -216,7 +212,6 @@ stateDiagram-v2
 | /api/v1/ai/providers | GET/POST/PATCH/DELETE | 连接实例管理，响应严格不含密钥 |
 | /api/v1/ai/providers/{id}/test | POST | 测试连接或具体能力 |
 | /api/v1/ai/models | GET/POST/PATCH/DELETE | ModelProfile 和 CapabilitySchema |
-| /api/v1/ai/workflows | GET/POST/PATCH/DELETE | Workflow 导入/映射/预设 |
 | /api/v1/ai/templates | GET/POST/PATCH/DELETE | 视觉反推与创作 Prompt 规则 |
 | /api/v1/ai/presets | GET/POST/PATCH/DELETE | 创作场景预设 |
 | /api/v1/ai/prompts/optimize | POST | 简单描述 → LLM 生成可审阅最终 Prompt（后端可落任务记录） |
@@ -238,7 +233,7 @@ stateDiagram-v2
 
 ### 8.1 示例业务接口字段（概念示例）
 
-- SubmitImageJob: mode(generate/edit), model_profile_id 或 workflow_id, prompt_final, raw_user_request?, preset_id?, references:[{source_kind,source_id/upload_token,seq,role}], params, client_request_id。
+- SubmitImageJob: mode(generate/edit), model_profile_id, prompt_final, raw_user_request?, preset_id?, references:[{source_kind,source_id/upload_token,seq,role}], params, client_request_id。
 - ResultToLibrary: result_ids[], target_folder_id, confirmed_by_user, duplication_policy（具体去重约束待定）。
 - ReverseBatch: asset_ids[], template_id, model_profile_id, optional_overrides；返回 task_id。
 - ReverseCommit: items:[{asset_id, draft_text, expected_prompt_revision, confirm_overwrite}]；逐项报告冲突，不静默重试覆盖。
@@ -252,23 +247,11 @@ stateDiagram-v2
 - 任务记录保存实际发送给模型的 final prompt；正式资产只保存一份实际 Prompt。不建立版本集合。
 - Prompt 保存不能破坏换行/特殊字符；此前用户手工输入内容遇覆盖须确认。
 
-## 10. ComfyUI 集成专项
+## 10. 二期执行器边界与后续扩展（决策㉒）
 
-### 10.1 工作流导入与验证
+**本期没有 ComfyUI 实现工作量**：不创建 ComfyUI 连接表单、API Workflow 导入/映射、ComfyUI Adapter、ComfyUI 任务状态适配器或专项测试；不做相关技术 PoC。
 
-1. 导入 API-format JSON；检查 JSON 根结构、节点 ID、class_type、inputs、引用闭环，拒绝不能解析的格式并提供导出指引。
-2. 用户指定输入映射：例如 text 参数 → 指定节点 inputs 的路径；image 参数 → 上传后的 ComfyUI 文件名；number/enumeration → 真实节点 schema 控件。
-3. 指定结果收集节点/字段与输出类型；不假设结果总由 SaveImage 节点提供，支持指定多输出收集规则。
-4. 根据目标 ComfyUI 实例可用节点信息做尽力验证；缺模型/自定义节点要显示“服务端依赖异常”而不是替用户修改 Workflow。
-5. 保存导入版本与映射指纹；替换 JSON 时重新匹配参数并要求确认失效绑定，老任务保留旧 Workflow 快照用于追踪。
-
-### 10.2 执行和结果抓取（需以接入版本的 API 核实）
-
-- 上传已快照的本地参考图到受信任的 ComfyUI 实例，完成节点参数注入。
-- 通过队列提交接口，持久化上游 prompt_id；通过 WS/状态轮询监控；从 history/视图接口拉取输出。
-- 所有输出进入本应用 ai-history/results，并进行格式、大小与 hash 检查；不直接使用临时 URL 作为永久记录。
-- 远程 ComfyUI 可能开放公网服务：配置时要求明确地址和认证策略；不要自动扫描任意本机/局域网服务。
-- workflow 最大任务数、输出筛选策略、特殊自定义节点输入多样性必须以实际测试校验。
+架构层面的图像执行器通过 Provider/Model/Capability Adapter 协议隔离即可，不必提前实现未用到的 Workflow 领域对象。**二期全部完成后**如果用户决定接入 ComfyUI，再基于⑪的历史方案单独出 Spec/技术设计：API Workflow JSON → 输入输出映射 → 预设 → 队列任务 → 结果回收。是否真正接入届时重新评估，**不视作承诺开发**。
 
 ## 11. 设计验证与测试矩阵
 
@@ -283,7 +266,7 @@ stateDiagram-v2
 | ARCH-07 | 生成 4 张，仅 2 张入库；4 张历史和 Prompt/来源/任务关联均保留 |
 | ARCH-08 | 覆盖已有 Prompt 时 CAS 检查冲突，旧值未经确认不变 |
 | ARCH-09 | V1 DB 升级保留 prompt_text、source_type、file_path；V1 回收站/外部引用行为不变 |
-| ARCH-10 | ComfyUI Workflow 导入/映射/执行/回收；断开 ComfyUI 后明确失败/恢复，不丢历史 |
+| ARCH-10 | 第三方图片 API 返回临时链接或 base64 图像；均正确保存为本地永久历史副本，断网后仍可预览 |
 | ARCH-11 | 历史删除不会误删已入库资产；磁盘空间不足/崩溃 staging 清理可恢复 |
 | ARCH-12 | 未经本地 token 和允许 Origin 的 AI API 被拒绝；任意路径访问被拒绝 |
 
@@ -292,7 +275,6 @@ stateDiagram-v2
 - OpenAI 图片 API 生成/编辑： https://developers.openai.com/api/docs/guides/image-generation
 - OpenAI 图片编辑参考： https://developers.openai.com/api/reference/resources/images/methods/edit
 - Gemini 图片接口： https://ai.google.dev/gemini-api/docs/image-generation
-- ComfyUI：以实际连接实例版本 API 路由与 API Workflow 导出作为集成验证对象，禁止仅据固定示例假定节点结构稳定。
 
 **协议随供应商与模型版本变化**：本设计不写死“GPT Image 永远只有某个 Model ID”、固定参考图数、固定尺寸枚举或 Gemini 统一返回结构；均通过能力声明/Adapter/集成测试保证。
 
@@ -309,4 +291,4 @@ stateDiagram-v2
 | 同一结果重复入库 | UI 阻止默认重复，明确复制选项另评估 | 否 |
 | 视频功能范围 | **暂未确认**，当前仅为图片路径设计 | **不阻塞图片开发，但影响未来批次排期** |
 
-> 本文是可交付给开发者 review 的详细技术方案；正式实施前先开展 Provider 协议、ComfyUI Workflow、Windows 凭据存储及磁盘原子化流程的小型 PoC，结果反哺本设计。
+> 本文是可交付给开发者 review 的详细技术方案；正式实施前先开展 **本期 Provider 图片协议**、Windows 凭据存储及磁盘原子化流程的小型 PoC，结果反哺本设计。**ComfyUI 专项 PoC 不属于二期。**
