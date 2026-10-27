@@ -9,6 +9,7 @@ import type {
   AiProviderUpdatePayload
 } from "../api/types";
 import SidebarIcon from "./SidebarIcon.vue";
+import { notify } from "../stores/library";
 
 import type { ConfirmRequest } from "../composables/useConfirmDialog";
 
@@ -145,8 +146,9 @@ function handleDelete(provider: AiProviderInstance): void {
         showEditor.value = false;
       }
       await loadProviders();
+      notify("success", "AI 连接已删除");
     } catch (err: any) {
-      alert(err.message || "删除连接失败");
+      notify("error", err.message || "删除连接失败");
     }
   };
 

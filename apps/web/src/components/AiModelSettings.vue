@@ -10,6 +10,7 @@ import type {
 } from "../api/types";
 import SidebarIcon from "./SidebarIcon.vue";
 import type { ConfirmRequest } from "../composables/useConfirmDialog";
+import { notify } from "../stores/library";
 
 const props = defineProps<{
   providers: AiProviderInstance[];
@@ -106,8 +107,9 @@ function handleDeleteModel(model: AiModelProfile): void {
     try {
       await api.deleteModelProfile(model.id);
       await loadData();
+      notify("success", "模型配置已删除");
     } catch (err: any) {
-      alert(err.message || "删除模型失败");
+      notify("error", err.message || "删除模型失败");
     }
   };
 
@@ -134,8 +136,9 @@ async function handleSetDefault(capability: AiCapabilityType, modelProfileId: nu
       model_profile_id: modelProfileId
     });
     await loadData();
+    notify("success", "默认模型策略已更新");
   } catch (err: any) {
-    alert(err.message || "设置默认模型失败");
+    notify("error", err.message || "设置默认模型失败");
   }
 }
 

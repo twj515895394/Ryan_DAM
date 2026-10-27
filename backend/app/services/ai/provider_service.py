@@ -46,7 +46,6 @@ def _to_provider_response(instance: AiProviderInstance) -> ProviderResponse:
 
 
 def list_providers(db: Session, enabled_only: bool = False) -> list[ProviderResponse]:
-    stmt = select(AiProviderInstance).order_id = select(AiProviderInstance)
     if enabled_only:
         stmt = select(AiProviderInstance).where(AiProviderInstance.enabled.is_(True)).order_by(AiProviderInstance.id.asc())
     else:

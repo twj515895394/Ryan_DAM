@@ -357,23 +357,27 @@ async function executeCommit(allowOverwrite: boolean): Promise<void> {
       <div v-else class="flex flex-1 flex-col overflow-hidden">
         <!-- 进度与过滤工具栏 -->
         <div class="flex items-center justify-between border-b border-line bg-canvas/40 px-6 py-3">
-          <div class="flex items-center gap-4">
-            <label class="flex items-center gap-2 text-xs font-medium text-ink cursor-pointer">
-              <input
-                type="checkbox"
-                :checked="isAllSelected"
-                class="rounded border-line text-accent focus:ring-accent"
-                @change="toggleSelectAll"
-              />
-              全选当前显示
+          <div class="flex items-center gap-2">
+            <label class="flex items-center gap-1.5 text-xs font-medium text-ink cursor-pointer select-none">
+              <span class="flex h-9 w-9 items-center justify-center">
+                <input
+                  type="checkbox"
+                  :checked="isAllSelected"
+                  class="h-4 w-4 rounded border-line text-accent focus:ring-accent"
+                  @change="toggleSelectAll"
+                />
+              </span>
+              <span>全选当前显示</span>
             </label>
-            <label class="flex items-center gap-2 text-xs text-muted cursor-pointer">
-              <input
-                v-model="filterNoPromptOnly"
-                type="checkbox"
-                class="rounded border-line text-accent focus:ring-accent"
-              />
-              仅看尚未设置提示词的素材
+            <label class="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none">
+              <span class="flex h-9 w-9 items-center justify-center">
+                <input
+                  v-model="filterNoPromptOnly"
+                  type="checkbox"
+                  class="h-4 w-4 rounded border-line text-accent focus:ring-accent"
+                />
+              </span>
+              <span>仅看尚未设置提示词的素材</span>
             </label>
           </div>
 
@@ -396,13 +400,15 @@ async function executeCommit(allowOverwrite: boolean): Promise<void> {
             class="flex items-start gap-4 p-3 transition rounded-xl"
             :class="selectedItemIds.includes(item.id) ? 'bg-accent/5' : 'hover:bg-canvas/60'"
           >
-            <input
-              type="checkbox"
-              :checked="selectedItemIds.includes(item.id)"
-              :disabled="item.status !== 'succeeded'"
-              class="mt-2 rounded border-line text-accent focus:ring-accent"
-              @change="toggleItemSelection(item.id)"
-            />
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center">
+              <input
+                type="checkbox"
+                :checked="selectedItemIds.includes(item.id)"
+                :disabled="item.status !== 'succeeded'"
+                class="h-4 w-4 rounded border-line text-accent focus:ring-accent"
+                @change="toggleItemSelection(item.id)"
+              />
+            </div>
 
             <!-- 资产名称与状态 -->
             <div class="w-40 shrink-0">
