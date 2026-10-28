@@ -518,6 +518,7 @@ export interface PromptOptimizeRequest {
   preset_id?: number | null;
   model_profile_id?: number | null;
   custom_instruction?: string | null;
+  language?: "zh" | "en";
 }
 
 export interface PromptOptimizeResult {

@@ -141,3 +141,13 @@ async def test_prompt_optimize_endpoint(client: TestClient, headers: dict[str, s
         assert "masterpiece" in data["optimized_prompt"]
         assert data["model_profile_id"] == model.id
         assert data["provider_name"] == "Chat Opt Provider"
+
+        # 验证 language="en" 传参与英文指令下发
+        opt_payload_en = {
+            "prompt": "tea room at morning",
+            "language": "en",
+        }
+        resp_en = client.post("/api/v1/ai/prompt/optimize", json=opt_payload_en, headers=headers)
+        assert resp_en.status_code == 200
+        last_call_messages = mock_chat.call_args[1]["messages"]
+        assert any("output in English" in m["content"] for m in last_call_messages)

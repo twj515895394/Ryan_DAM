@@ -10,7 +10,8 @@ export function usePromptOptimize() {
 
   async function optimizePrompt(
     currentPrompt: string,
-    presetId: number | null
+    presetId: number | null,
+    language: "zh" | "en" = "zh"
   ): Promise<string | null> {
     if (!currentPrompt.trim() || optimizing.value) return null;
     optimizing.value = true;
@@ -21,7 +22,8 @@ export function usePromptOptimize() {
       const res = await api.optimizePrompt({
         prompt: currentPrompt,
         preset_id: presetId,
-        model_profile_id: undefined
+        model_profile_id: undefined,
+        language
       });
       lastOptimizedResult.value = res;
       return res.optimized_prompt;

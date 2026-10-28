@@ -64,6 +64,7 @@ const seed = ref<number | null>(null);
 // 参考图与智能润色
 const showRefPicker = ref(false);
 const references = ref<SelectedReferenceItem[]>([]);
+const optimizeLanguage = ref<"zh" | "en">("zh");
 const {
   optimizing,
   optimizeError,
@@ -340,7 +341,7 @@ function applyPresetDefaults(presetId: number): void {
 
 // ── 提示词智能润色 (V2-11) ──────────────────────────────────────────────
 async function handleOptimizePrompt(): Promise<void> {
-  const optimized = await doOptimizePrompt(prompt.value, selectedPresetId.value);
+  const optimized = await doOptimizePrompt(prompt.value, selectedPresetId.value, optimizeLanguage.value);
   if (optimized) {
     prompt.value = optimized;
   }
@@ -425,20 +426,9 @@ async function handleSubmit(): Promise<void> {
 
 <template>
   <Teleport to="body">
-    <Transition
-      enter-active-class="transition duration-200 ease-out"
-      enter-from-class="opacity-0"
-      leave-active-class="transition duration-150 ease-in"
-      leave-to-class="opacity-0"
-    >
-      <div
-        v-if="open"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-md"
-        @click.self="emit('close')"
-      >
-        <div
-          class="relative flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl border border-line/80 bg-white/95 shadow-2xl backdrop-blur-xl transition-all"
-        >
+    <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0" leave-active-class="transition duration-150 ease-in" leave-to-class="opacity-0">
+      <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-md" @click.self="emit('close')">
+        <div class="relative flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl border border-line/80 bg-white/95 shadow-2xl backdrop-blur-xl transition-all">
           <!-- 顶部标题栏 -->
           <div class="flex items-center justify-between border-b border-line/60 px-6 py-4">
             <div class="flex items-center gap-2.5">
@@ -577,6 +567,31 @@ async function handleSubmit(): Promise<void> {
                   >
                     撤销润色
                   </button>
+
+                  <!-- 润色语言版本切换 (中文默认 / 英文) -->
+                  <div class="inline-flex items-center rounded-lg border border-line bg-canvas/60 p-0.5 text-[11px]">
+                    <button
+                      type="button"
+                      class="rounded-md px-1.5 py-0.5 font-medium transition"
+                      :class="optimizeLanguage === 'zh' ? 'bg-white text-ink shadow-xs' : 'text-muted hover:text-ink'"
+                      :disabled="optimizing"
+                      title="输出专业中文提示词"
+                      @click="optimizeLanguage = 'zh'"
+                    >
+                      中文
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-md px-1.5 py-0.5 font-medium transition"
+                      :class="optimizeLanguage === 'en' ? 'bg-white text-ink shadow-xs' : 'text-muted hover:text-ink'"
+                      :disabled="optimizing"
+                      title="输出英文生图提示词"
+                      @click="optimizeLanguage = 'en'"
+                    >
+                      EN
+                    </button>
+                  </div>
+
                   <button
                     type="button"
                     class="inline-flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent transition hover:bg-accent/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
@@ -698,31 +713,19 @@ async function handleSubmit(): Promise<void> {
                   <label class="text-xs font-semibold text-ink">分辨率规格</label>
                   <span class="text-[11px] text-muted font-mono">联动 {{ selectedAspectRatio }}</span>
                 </div>
-                <AppleSelect
-                  v-model="selectedSize"
-                  size="sm"
-                  :options="sizeOptions"
-                />
+                <AppleSelect v-model="selectedSize" size="sm" :options="sizeOptions" />
               </div>
 
               <!-- 动态参数：画质选项（如 DALL-E 3 standard/hd） -->
               <div v-if="supportedQualities.length > 0">
                 <label class="block text-xs font-semibold text-ink pb-1.5">生成画质</label>
-                <AppleSelect
-                  v-model="selectedQuality"
-                  size="sm"
-                  :options="qualityOptions"
-                />
+                <AppleSelect v-model="selectedQuality" size="sm" :options="qualityOptions" />
               </div>
 
               <!-- 动态参数：风格倾向（如 DALL-E 3 vivid/natural） -->
               <div v-if="supportedStyles.length > 0">
                 <label class="block text-xs font-semibold text-ink pb-1.5">风格偏好</label>
-                <AppleSelect
-                  v-model="selectedStyle"
-                  size="sm"
-                  :options="styleOptions"
-                />
+                <AppleSelect v-model="selectedStyle" size="sm" :options="styleOptions" />
               </div>
             </div>
 

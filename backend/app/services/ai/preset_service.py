@@ -266,13 +266,21 @@ async def optimize_prompt(
     api_key = CredentialManager.get_credential(provider.credential_ref) if provider.credential_ref else ""
 
     # 3. 构建 System Prompt
+    lang = (request.language or "zh").strip().lower()
+    if lang == "en":
+        lang_rule = "3. Output ONLY the refined English prompt. Never include any greetings, quotes, markdown wrappers, or conversational explanations."
+        user_prompt_instruction = f"Please optimize this prompt for text-to-image generation (output in English):\n{raw_prompt}"
+    else:
+        lang_rule = "3. 严格输出润色后的高质量中文提示词（可适度融合专业生图术语）。严禁输出任何问候语、说明前缀（如'润色后的提示词：'）、引号、Markdown 标记或解释性文字，直接输出提示词正文本体。"
+        user_prompt_instruction = f"请将以下生图提示词进行专业扩写与美学润色（请直接输出中文润色版本）：\n{raw_prompt}"
+
     system_rules = (
         "You are an expert AI image prompt engineer. Your job is to refine and expand the user's raw prompt "
         "into a descriptive, vivid, and aesthetically superior text-to-image prompt.\n"
         "Requirements:\n"
         "1. Faithfully preserve the user's core subjects, actions, and intent.\n"
         "2. Enrich with specific details: subject appearance, environment/background, lighting/mood, camera framing/angle, and visual style.\n"
-        "3. Output ONLY the refined English prompt. Never include any greetings, quotes, markdown wrappers, or conversational explanations."
+        f"{lang_rule}"
     )
     if preset and preset.system_rules:
         system_rules += f"\n\nStyle & Rule Guidance:\n{preset.system_rules}"
@@ -281,7 +289,7 @@ async def optimize_prompt(
 
     messages = [
         {"role": "system", "content": system_rules},
-        {"role": "user", "content": f"Please optimize this prompt for text-to-image generation:\n{raw_prompt}"},
+        {"role": "user", "content": user_prompt_instruction},
     ]
 
     settings_dict = json.loads(provider.settings_json) if provider.settings_json else {}

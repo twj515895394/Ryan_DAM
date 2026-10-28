@@ -94,6 +94,7 @@ class PromptOptimizeRequest(BaseModel):
     preset_id: int | None = None
     model_profile_id: int | None = None
     custom_instruction: str | None = None
+    language: str = Field("zh", description="输出语言版本：zh 为中文，en 为英文")
 
 
 class PromptOptimizeResult(BaseModel):
