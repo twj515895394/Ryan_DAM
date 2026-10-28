@@ -200,6 +200,7 @@ class SubmitBatchReversePayload(BaseModel):
     asset_ids: list[int] = Field(min_length=1)
     template_id: int | None = None
     model_profile_id: int | None = None
+    language: Literal["zh", "en"] = "zh"
     custom_system_prompt: str | None = None
     user_instruction: str | None = None
 

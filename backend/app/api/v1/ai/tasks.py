@@ -315,6 +315,7 @@ async def create_batch_reverse_task(
         asset_ids=payload.asset_ids,
         template_id=payload.template_id,
         model_profile_id=payload.model_profile_id,
+        language=payload.language,
         custom_system_prompt=payload.custom_system_prompt,
         user_instruction=payload.user_instruction,
     )

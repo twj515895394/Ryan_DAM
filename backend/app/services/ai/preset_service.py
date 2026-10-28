@@ -68,6 +68,55 @@ BUILTIN_CREATION_PRESETS = [
         },
         "sort_order": 4,
     },
+    # ── 图生图与参考图编辑预设 (image_edit) ──────────────────────────────────
+    {
+        "code": "edit_character_retouch",
+        "name": "角色重绘与换装 (Character Redress)",
+        "description": "基于参考图面部与体态，精准保持角色五官一致，更换服装与发型配饰",
+        "creation_mode": "image_edit",
+        "system_rules": "严格保持参考图中人物的五官比例、面容特征与基本身材比例一致。根据用户新 Prompt 的要求更换服饰设计、微调发型姿态或微表情，画面过渡自然，无任何拼接撕裂感。",
+        "default_params": {
+            "prompt_suffix": ", consistent face, high fidelity character likeness, natural lighting, highly detailed clothing texture, masterpiece",
+            "negative_prompt": "face distortion, bad anatomy, deformed eyes, mismatched facial features, low quality",
+        },
+        "sort_order": 11,
+    },
+    {
+        "code": "edit_anime_remix",
+        "name": "日漫次元转换 (Anime & Comic Remix)",
+        "description": "提取参考图构图透视与人物动作轮廓，转变为清透细腻的新海诚日漫手绘风",
+        "creation_mode": "image_edit",
+        "system_rules": "保留原参考图的主体轮廓、姿势动态与空间透视关系，全面重构为精致清透的日本动漫电影风格。强化干净手绘线稿、通透高光与水彩漫反射氛围。",
+        "default_params": {
+            "prompt_suffix": ", Makoto Shinkai style, vibrant colors, clean delicate anime lineart, beautiful anime skies and lighting, masterpiece illustration",
+            "negative_prompt": "photorealistic, western comic, muddy, 3d plastic, lowres",
+        },
+        "sort_order": 12,
+    },
+    {
+        "code": "edit_relight_atmosphere",
+        "name": "光影氛围重构 (Relighting & Mood Shift)",
+        "description": "保留参考图主体对象与空间布局，重新渲染电影级全局光影（如日落金辉/暗夜霓虹）",
+        "creation_mode": "image_edit",
+        "system_rules": "保留参考图中主体的物理结构与场景布局，重新进行电影级光影重新布光与色彩基调渲染。产生逼真自然的阴影投射与环境反射。",
+        "default_params": {
+            "prompt_suffix": ", dramatic cinematic lighting, volumetric rays, rich color atmosphere, realistic shadows and highlights, 8k resolution",
+            "negative_prompt": "flat lighting, overexposed, washed out, low contrast, blurry",
+        },
+        "sort_order": 13,
+    },
+    {
+        "code": "edit_detail_enhance",
+        "name": "微表面质感增强 (Micro-Detail Enhancement)",
+        "description": "原构图与内容完全不变，针对微表面纹理、毛孔、织物纤维与清晰度进行高保真增强",
+        "creation_mode": "image_edit",
+        "system_rules": "极其严格忠实于参考图的原始内容、构图与色彩，只针对微表面纹理、皮肤毛孔细节、织物纹路、金属边缘反光与清晰度进行高保真增强。",
+        "default_params": {
+            "prompt_suffix": ", extremely detailed micro-surface textures, sharp focus, 8k uhd, realistic skin pores, fine fabric weave, crystal clear",
+            "negative_prompt": "blur, noisy, smooth plastic skin, low resolution, artifact",
+        },
+        "sort_order": 14,
+    },
 ]
 
 
@@ -164,6 +213,29 @@ def delete_creation_preset(db: Session, preset_id: int) -> None:
         raise ApiError(code="cannot_delete_builtin", message="系统内置创作预设不可删除", status_code=400)
     db.delete(preset)
     db.commit()
+
+
+def reset_creation_preset(db: Session, preset_id: int) -> AiCreationPreset:
+    """将修改过的内置创作预设一键恢复为系统默认初始状态。"""
+    preset = get_creation_preset(db, preset_id)
+    if not preset.is_builtin or not preset.code:
+        raise ApiError(code="cannot_reset_custom", message="只有系统内置创作预设可重置恢复默认", status_code=400)
+
+    matched = next((item for item in BUILTIN_CREATION_PRESETS if item["code"] == preset.code), None)
+    if not matched:
+        raise ApiError(code="builtin_preset_missing", message=f"未找到预设 code={preset.code} 的系统初始配置", status_code=404)
+
+    preset.name = matched["name"]
+    preset.description = matched["description"]
+    preset.creation_mode = matched["creation_mode"]
+    preset.system_rules = matched["system_rules"]
+    preset.default_params_json = json.dumps(matched["default_params"], ensure_ascii=False)
+    preset.sort_order = matched["sort_order"]
+    preset.enabled = True
+
+    db.commit()
+    db.refresh(preset)
+    return preset
 
 
 async def optimize_prompt(

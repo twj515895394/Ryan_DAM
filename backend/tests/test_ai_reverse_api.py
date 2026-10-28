@@ -55,6 +55,20 @@ def test_reverse_templates_crud(client: TestClient, headers) -> None:
     assert del_builtin_resp.status_code == 400
     assert del_builtin_resp.json()["error"]["code"] == "cannot_delete_builtin"
 
+    # 6. 内置反推模板支持修改与一键恢复默认 (Reset)
+    orig_tpl_name = builtin_tpl["name"]
+    put_builtin_resp = client.put(
+        f"/api/v1/ai/reverse/templates/{builtin_tpl['id']}",
+        json={"name": f"{orig_tpl_name} (定制版)", "system_prompt": "修改后的系统反推提示词"},
+        headers=headers,
+    )
+    assert put_builtin_resp.status_code == 200
+    assert put_builtin_resp.json()["name"] == f"{orig_tpl_name} (定制版)"
+
+    reset_resp = client.post(f"/api/v1/ai/reverse/templates/{builtin_tpl['id']}/reset", headers=headers)
+    assert reset_resp.status_code == 200
+    assert reset_resp.json()["name"] == orig_tpl_name
+
 
 @pytest.mark.anyio
 async def test_single_image_reverse_mock(client: TestClient, app, headers, tmp_path) -> None:
@@ -130,3 +144,33 @@ async def test_single_image_reverse_mock(client: TestClient, app, headers, tmp_p
         assert data["current_asset_prompt"] == "旧的手动提示词"
         assert data["current_asset_revision"] == 1
         assert data["model_id"] == "gpt-4o-mini"
+
+        # 测试语言参数传递 (中文默认 vs 英文)
+        with patch(
+            "backend.app.services.ai.adapters.openai_compatible.OpenAICompatibleAdapter.understand_image",
+            new_callable=AsyncMock,
+            return_value="中文高清画面描述",
+        ) as mock_understand:
+            resp_zh = client.post(
+                f"/api/v1/ai/reverse/assets/{asset_id}",
+                json={"language": "zh"},
+                headers=headers,
+            )
+            assert resp_zh.status_code == 200
+            _, kwargs = mock_understand.call_args
+            assert "语言要求" in kwargs["system_prompt"]
+
+        with patch(
+            "backend.app.services.ai.adapters.openai_compatible.OpenAICompatibleAdapter.understand_image",
+            new_callable=AsyncMock,
+            return_value="English prompt details",
+        ) as mock_understand_en:
+            resp_en = client.post(
+                f"/api/v1/ai/reverse/assets/{asset_id}",
+                json={"language": "en"},
+                headers=headers,
+            )
+            assert resp_en.status_code == 200
+            _, kwargs = mock_understand_en.call_args
+            assert "Language Requirement" in kwargs["system_prompt"]
+

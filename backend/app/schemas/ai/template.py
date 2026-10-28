@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
@@ -39,6 +39,7 @@ class ReverseTemplateOut(ReverseTemplateBase):
 class SingleImageReverseRequest(BaseModel):
     template_id: int | None = None
     model_profile_id: int | None = None
+    language: Literal["zh", "en"] = "zh"
     custom_system_prompt: str | None = None
     user_instruction: str | None = None
 

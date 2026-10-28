@@ -244,10 +244,28 @@ async function loadModels(): Promise<void> {
   }
 }
 
+const showAllPresets = ref(false);
+
+const filteredPresets = computed(() => {
+  if (showAllPresets.value) return presets.value;
+  return presets.value.filter(
+    (p) => !p.creation_mode || p.creation_mode === creationMode.value
+  );
+});
+
+watch(creationMode, () => {
+  if (selectedPresetId.value) {
+    const cur = presets.value.find((p) => p.id === selectedPresetId.value);
+    if (cur && cur.creation_mode && cur.creation_mode !== creationMode.value) {
+      selectedPresetId.value = null;
+    }
+  }
+});
+
 async function loadPresets(): Promise<void> {
   loadingPresets.value = true;
   try {
-    const list = await api.listCreationPresets("image_generate", true);
+    const list = await api.listCreationPresets(undefined as any, true);
     presets.value = list;
 
     // 如果未选预设且存在写实预设，默认推荐或保持 null
@@ -502,7 +520,7 @@ async function handleSubmit(): Promise<void> {
                 </button>
 
                 <button
-                  v-for="p in presets"
+                  v-for="p in filteredPresets"
                   :key="p.id"
                   type="button"
                   class="flex flex-col items-start gap-1 rounded-xl border p-2.5 text-left transition active:scale-98"

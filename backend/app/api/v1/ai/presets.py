@@ -20,6 +20,7 @@ from backend.app.services.ai.preset_service import (
     get_creation_preset,
     list_creation_presets,
     optimize_prompt,
+    reset_creation_preset,
     update_creation_preset,
 )
 
@@ -95,6 +96,16 @@ def remove_preset(
 ) -> None:
     """删除自定义创作预设（系统内置预设不允许删除）。"""
     delete_creation_preset(db, preset_id)
+
+
+@router.post("/ai/presets/{preset_id}/reset", response_model=CreationPresetOut)
+def reset_preset(
+    preset_id: int,
+    db: Annotated[Session, Depends(get_db)],
+) -> CreationPresetOut:
+    """将修改过的内置创作预设一键恢复为系统默认初始状态。"""
+    preset = reset_creation_preset(db, preset_id)
+    return _preset_to_out(preset)
 
 
 @router.post("/ai/prompt/optimize", response_model=PromptOptimizeResult)

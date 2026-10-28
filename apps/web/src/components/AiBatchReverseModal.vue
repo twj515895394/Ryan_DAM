@@ -37,7 +37,13 @@ const templates = ref<AiReverseTemplate[]>([]);
 const visionModels = ref<AiModelProfile[]>([]);
 const selectedTemplateId = ref<number | null>(null);
 const selectedModelProfileId = ref<number | null>(null);
+const selectedLanguage = ref<"zh" | "en">("zh");
 const customInstruction = ref("");
+
+const languageOptions: AppleSelectOption[] = [
+  { value: "zh", label: "中文 (默认推荐)", subLabel: "输出结构化中文视觉描述", badge: "中文", badgeColor: "emerald" },
+  { value: "en", label: "英文 (English)", subLabel: "输出英文 SD/MJ 提示词", badge: "英文", badgeColor: "zinc" }
+];
 
 const visionModelOptions = computed<AppleSelectOption[]>(() =>
   visionModels.value.map((m) => ({
@@ -97,6 +103,7 @@ watch(
       editedDrafts.value = {};
       filterNoPromptOnly.value = false;
       showOverwriteConfirm.value = false;
+      selectedLanguage.value = "zh";
       stopPolling();
       await loadInitialData();
     } else {
@@ -141,6 +148,7 @@ async function handleStartBatchReverse(): Promise<void> {
       asset_ids: props.selectedAssets.map((a) => a.id),
       template_id: selectedTemplateId.value,
       model_profile_id: selectedModelProfileId.value,
+      language: selectedLanguage.value,
       user_instruction: customInstruction.value.trim() || undefined,
     });
     currentTaskId.value = task.id;
@@ -319,13 +327,23 @@ async function executeCommit(allowOverwrite: boolean): Promise<void> {
           </div>
         </div>
 
-        <div>
-          <label class="block text-xs font-semibold uppercase tracking-wider text-muted mb-2">视觉理解模型</label>
-          <AppleSelect
-            v-model="selectedModelProfileId"
-            :options="visionModelOptions"
-            placeholder="请选择视觉理解模型"
-          />
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-muted mb-2">视觉理解模型</label>
+            <AppleSelect
+              v-model="selectedModelProfileId"
+              :options="visionModelOptions"
+              placeholder="请选择视觉理解模型"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-muted mb-2">输出语言 (Language)</label>
+            <AppleSelect
+              v-model="selectedLanguage"
+              :options="languageOptions"
+              placeholder="选择语言"
+            />
+          </div>
         </div>
 
         <div>

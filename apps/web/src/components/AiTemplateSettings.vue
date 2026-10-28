@@ -23,8 +23,9 @@ const reverseTemplates = ref<AiReverseTemplate[]>([]);
 const loadingReverse = ref(false);
 const expandedReverseIds = ref<Set<number>>(new Set());
 
-// 新增反推模板表单
+// 新增 / 编辑反推模板表单
 const showAddReverse = ref(false);
+const editingReverseId = ref<number | null>(null);
 const savingReverse = ref(false);
 const reverseFormError = ref("");
 const reverseForm = ref<AiReverseTemplateCreatePayload>({
@@ -40,8 +41,9 @@ const creationPresets = ref<AiCreationPreset[]>([]);
 const loadingPresets = ref(false);
 const expandedPresetIds = ref<Set<number>>(new Set());
 
-// 新增创作预设表单
+// 新增 / 编辑创作预设表单
 const showAddPreset = ref(false);
+const editingPresetId = ref<number | null>(null);
 const savingPreset = ref(false);
 const presetFormError = ref("");
 const presetForm = ref<{
@@ -98,12 +100,26 @@ function toggleExpandReverse(id: number): void {
 }
 
 function openAddReverseModal(): void {
+  editingReverseId.value = null;
   reverseForm.value = {
     name: "",
     code: "",
     description: "",
     system_prompt: "",
     enabled: true
+  };
+  reverseFormError.value = "";
+  showAddReverse.value = true;
+}
+
+function openEditReverseModal(tpl: AiReverseTemplate): void {
+  editingReverseId.value = tpl.id;
+  reverseForm.value = {
+    name: tpl.name,
+    code: tpl.code || "",
+    description: tpl.description || "",
+    system_prompt: tpl.system_prompt,
+    enabled: tpl.enabled
   };
   reverseFormError.value = "";
   showAddReverse.value = true;
@@ -128,14 +144,44 @@ async function handleSaveReverse(): Promise<void> {
       system_prompt: reverseForm.value.system_prompt.trim(),
       enabled: true
     };
-    await api.createReverseTemplate(payload);
-    notify("success", "自定义视觉反推模板已创建");
+    if (editingReverseId.value) {
+      await api.updateReverseTemplate(editingReverseId.value, payload);
+      notify("success", "视觉反推模板已更新");
+    } else {
+      await api.createReverseTemplate(payload);
+      notify("success", "自定义视觉反推模板已创建");
+    }
     showAddReverse.value = false;
+    editingReverseId.value = null;
     await loadReverseTemplates();
   } catch (err: any) {
-    reverseFormError.value = err.message || "创建反推模板失败";
+    reverseFormError.value = err.message || (editingReverseId.value ? "更新反推模板失败" : "创建反推模板失败");
   } finally {
     savingReverse.value = false;
+  }
+}
+
+function handleResetReverse(tpl: AiReverseTemplate): void {
+  const doReset = async () => {
+    try {
+      await api.resetReverseTemplate(tpl.id);
+      notify("success", `反推模板「${tpl.name}」已恢复为系统初始配置`);
+      await loadReverseTemplates();
+    } catch (err: any) {
+      notify("error", `重置失败: ${err.message || err}`);
+    }
+  };
+
+  if (props.onAskConfirm) {
+    props.onAskConfirm({
+      title: "恢复系统默认反推模板",
+      description: `确定要将「${tpl.name}」恢复为系统初始预设吗？您对其进行的自定义修改将被重置。`,
+      intent: "warning",
+      confirmText: "恢复默认",
+      action: () => void doReset()
+    });
+  } else {
+    void doReset();
   }
 }
 
@@ -177,6 +223,7 @@ function toggleExpandPreset(id: number): void {
 }
 
 function openAddPresetModal(): void {
+  editingPresetId.value = null;
   presetForm.value = {
     name: "",
     code: "",
@@ -184,6 +231,20 @@ function openAddPresetModal(): void {
     creation_mode: "image_generate",
     system_rules: "",
     negative_prompt: ""
+  };
+  presetFormError.value = "";
+  showAddPreset.value = true;
+}
+
+function openEditPresetModal(preset: AiCreationPreset): void {
+  editingPresetId.value = preset.id;
+  presetForm.value = {
+    name: preset.name,
+    code: preset.code || "",
+    description: preset.description || "",
+    creation_mode: preset.creation_mode === "image_edit" ? "image_edit" : "image_generate",
+    system_rules: preset.system_rules || "",
+    negative_prompt: preset.default_params?.negative_prompt || ""
   };
   presetFormError.value = "";
   showAddPreset.value = true;
@@ -208,14 +269,44 @@ async function handleSavePreset(): Promise<void> {
       },
       enabled: true
     };
-    await api.createCreationPreset(payload);
-    notify("success", "自定义创作风格预设已创建");
+    if (editingPresetId.value) {
+      await api.updateCreationPreset(editingPresetId.value, payload);
+      notify("success", "创作风格预设已更新");
+    } else {
+      await api.createCreationPreset(payload);
+      notify("success", "自定义创作风格预设已创建");
+    }
     showAddPreset.value = false;
+    editingPresetId.value = null;
     await loadCreationPresets();
   } catch (err: any) {
-    presetFormError.value = err.message || "创建创作预设失败";
+    presetFormError.value = err.message || (editingPresetId.value ? "更新创作预设失败" : "创建创作预设失败");
   } finally {
     savingPreset.value = false;
+  }
+}
+
+function handleResetPreset(preset: AiCreationPreset): void {
+  const doReset = async () => {
+    try {
+      await api.resetCreationPreset(preset.id);
+      notify("success", `创作预设「${preset.name}」已恢复为系统初始配置`);
+      await loadCreationPresets();
+    } catch (err: any) {
+      notify("error", `重置失败: ${err.message || err}`);
+    }
+  };
+
+  if (props.onAskConfirm) {
+    props.onAskConfirm({
+      title: "恢复系统默认创作预设",
+      description: `确定要将创作预设「${preset.name}」恢复为系统初始配置吗？自定义修改将被重置。`,
+      intent: "warning",
+      confirmText: "恢复默认",
+      action: () => void doReset()
+    });
+  } else {
+    void doReset();
   }
 }
 
@@ -334,13 +425,30 @@ onMounted(() => {
               </p>
             </div>
 
-            <div class="flex items-center gap-2 shrink-0 ml-3">
+            <div class="flex items-center gap-1.5 shrink-0 ml-3">
               <button
                 type="button"
                 class="rounded-md border border-line/70 bg-canvas/40 px-2 py-1 text-[11px] font-medium text-ink hover:bg-canvas transition"
                 @click="toggleExpandReverse(tpl.id)"
               >
                 {{ expandedReverseIds.has(tpl.id) ? "收起提示词" : "查看提示词" }}
+              </button>
+              <button
+                type="button"
+                class="rounded-md border border-line/70 bg-canvas/40 px-2 py-1 text-[11px] font-medium text-ink hover:bg-canvas transition"
+                title="编辑模板规则"
+                @click="openEditReverseModal(tpl)"
+              >
+                编辑
+              </button>
+              <button
+                v-if="tpl.is_builtin"
+                type="button"
+                class="rounded-md border border-line/70 bg-canvas/40 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-50 hover:border-amber-200 transition"
+                title="重置为系统默认配置"
+                @click="handleResetReverse(tpl)"
+              >
+                恢复默认
               </button>
               <button
                 v-if="!tpl.is_builtin"
@@ -368,13 +476,15 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 添加反推模板抽屉 -->
+      <!-- 添加/编辑反推模板抽屉 -->
       <div
         v-if="showAddReverse"
         class="mt-3 rounded-xl border border-line bg-canvas/50 p-4 space-y-3"
       >
         <div class="flex items-center justify-between border-b border-line/60 pb-2">
-          <h5 class="text-xs font-semibold text-ink">添加自定义视觉反推模板</h5>
+          <h5 class="text-xs font-semibold text-ink">
+            {{ editingReverseId ? "编辑视觉反推模板" : "添加自定义视觉反推模板" }}
+          </h5>
           <button class="text-xs text-muted hover:text-ink" @click="showAddReverse = false">取消</button>
         </div>
 
@@ -436,7 +546,7 @@ onMounted(() => {
               :disabled="savingReverse"
               @click="handleSaveReverse"
             >
-              {{ savingReverse ? "正在保存…" : "保存模板" }}
+              {{ savingReverse ? "正在保存…" : editingReverseId ? "保存修改" : "保存模板" }}
             </button>
           </div>
         </div>
@@ -495,13 +605,30 @@ onMounted(() => {
               </p>
             </div>
 
-            <div class="flex items-center gap-2 shrink-0 ml-3">
+            <div class="flex items-center gap-1.5 shrink-0 ml-3">
               <button
                 type="button"
                 class="rounded-md border border-line/70 bg-canvas/40 px-2 py-1 text-[11px] font-medium text-ink hover:bg-canvas transition"
                 @click="toggleExpandPreset(p.id)"
               >
                 {{ expandedPresetIds.has(p.id) ? "收起规则" : "查看规则" }}
+              </button>
+              <button
+                type="button"
+                class="rounded-md border border-line/70 bg-canvas/40 px-2 py-1 text-[11px] font-medium text-ink hover:bg-canvas transition"
+                title="编辑预设规则"
+                @click="openEditPresetModal(p)"
+              >
+                编辑
+              </button>
+              <button
+                v-if="p.is_builtin"
+                type="button"
+                class="rounded-md border border-line/70 bg-canvas/40 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-50 hover:border-amber-200 transition"
+                title="重置为系统默认配置"
+                @click="handleResetPreset(p)"
+              >
+                恢复默认
               </button>
               <button
                 v-if="!p.is_builtin"
@@ -532,13 +659,15 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 添加创作预设抽屉 -->
+      <!-- 添加/编辑创作预设抽屉 -->
       <div
         v-if="showAddPreset"
         class="mt-3 rounded-xl border border-line bg-canvas/50 p-4 space-y-3"
       >
         <div class="flex items-center justify-between border-b border-line/60 pb-2">
-          <h5 class="text-xs font-semibold text-ink">添加自定义创作风格预设</h5>
+          <h5 class="text-xs font-semibold text-ink">
+            {{ editingPresetId ? "编辑创作风格预设" : "添加自定义创作风格预设" }}
+          </h5>
           <button class="text-xs text-muted hover:text-ink" @click="showAddPreset = false">取消</button>
         </div>
 
@@ -619,7 +748,7 @@ onMounted(() => {
               :disabled="savingPreset"
               @click="handleSavePreset"
             >
-              {{ savingPreset ? "正在保存…" : "保存预设" }}
+              {{ savingPreset ? "正在保存…" : editingPresetId ? "保存修改" : "保存预设" }}
             </button>
           </div>
         </div>

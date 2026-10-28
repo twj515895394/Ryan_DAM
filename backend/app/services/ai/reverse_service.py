@@ -28,6 +28,21 @@ from backend.app.services.ai.task_scheduler import get_task_scheduler
 
 logger = logging.getLogger(__name__)
 
+
+def build_language_instruction(language: str | None) -> str:
+    lang = (language or "zh").lower().strip()
+    if lang == "en":
+        return (
+            "\n\n【Language Requirement】"
+            "You MUST output the detailed visual description and prompt entirely in English. "
+            "Adopt the phrasing and syntax conventions of Stable Diffusion, Midjourney, and Flux prompts."
+        )
+    return (
+        "\n\n【语言要求】"
+        "你必须完全使用中文输出详尽生动、客观专业的画面视觉描述提示词。"
+        "包含主体特征、场景细节、光影氛围与艺术构图，便于中文阅读理解及国产主流生图模型调用。"
+    )
+
 BUILTIN_TEMPLATES = [
     {
         "name": "通用画面描述",
@@ -149,6 +164,28 @@ def delete_reverse_template(db: Session, template_id: int) -> None:
     db.commit()
 
 
+def reset_reverse_template(db: Session, template_id: int) -> AiReverseTemplate:
+    """将修改过的内置反推模板一键恢复为系统默认初始状态。"""
+    tpl = get_reverse_template(db, template_id)
+    if not tpl.is_builtin or not tpl.code:
+        raise ApiError(code="cannot_reset_custom", message="只有系统内置反推模板可重置恢复默认", status_code=400)
+
+    matched = next((item for item in BUILTIN_TEMPLATES if item["code"] == tpl.code), None)
+    if not matched:
+        raise ApiError(code="builtin_template_missing", message=f"未找到模板 code={tpl.code} 的系统初始配置", status_code=404)
+
+    tpl.name = matched["name"]
+    tpl.description = matched["description"]
+    tpl.system_prompt = matched["system_prompt"]
+    tpl.user_prompt_template = matched["user_prompt_template"]
+    tpl.sort_order = matched["sort_order"]
+    tpl.enabled = True
+
+    db.commit()
+    db.refresh(tpl)
+    return tpl
+
+
 async def reverse_single_image(
     db: Session, asset_id: int, request: SingleImageReverseRequest
 ) -> SingleImageReverseResult:
@@ -189,6 +226,10 @@ async def reverse_single_image(
 
     if not user_instruction:
         user_instruction = "请输出该图片的详细视觉提示词："
+
+    # 注入输出语言约束规则（默认中文，可切换英文）
+    lang_instruction = build_language_instruction(request.language)
+    system_prompt = (system_prompt or "请客观描述图片中的所有视觉细节要素与构图质感。") + lang_instruction
 
     # 2. 路由视觉模型 (image_understand)
     model_profile, provider = resolve_model_for_capability(
@@ -244,6 +285,7 @@ def submit_batch_reverse(
     asset_ids: list[int],
     template_id: int | None = None,
     model_profile_id: int | None = None,
+    language: str = "zh",
     custom_system_prompt: str | None = None,
     user_instruction: str | None = None,
 ) -> AiTask:
@@ -278,6 +320,10 @@ def submit_batch_reverse(
     system_prompt = system_prompt or "请客观描述图片中的所有视觉细节要素与构图质感。"
     user_prompt = user_prompt or "请输出该图片的详细视觉提示词："
 
+    # 注入输出语言约束规则
+    lang_instruction = build_language_instruction(language)
+    system_prompt = system_prompt + lang_instruction
+
     # 路由视觉模型 (image_understand)
     model_profile, provider = resolve_model_for_capability(
         db,
@@ -293,13 +339,14 @@ def submit_batch_reverse(
         provider_id=provider.id,
         model_profile_id=model_profile.id,
         preset_id=None,
-        prompt_final=f"批量反推 {len(image_assets)} 张图片（{template_name}）",
+        prompt_final=f"批量反推 {len(image_assets)} 张图片（{template_name} · {'中文' if language == 'zh' else '英文'}）",
         raw_user_request=user_prompt,
         params={
             "template_id": template_id,
             "template_name": template_name,
             "system_prompt": system_prompt,
             "user_prompt": user_prompt,
+            "language": language,
         },
     )
 

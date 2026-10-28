@@ -341,6 +341,7 @@ export interface AiReverseTemplateCreatePayload {
 export interface SingleImageReverseRequest {
   template_id?: number | null;
   model_profile_id?: number | null;
+  language?: "zh" | "en";
   custom_system_prompt?: string | null;
   user_instruction?: string | null;
 }
@@ -409,6 +410,7 @@ export interface SubmitBatchReversePayload {
   asset_ids: number[];
   template_id?: number | null;
   model_profile_id?: number | null;
+  language?: "zh" | "en";
   custom_system_prompt?: string | null;
   user_instruction?: string | null;
 }

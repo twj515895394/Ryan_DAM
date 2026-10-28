@@ -88,6 +88,26 @@ def delete_template(template_id: int, db: Session = Depends(get_db)):
     reverse_service.delete_reverse_template(db, template_id)
 
 
+@router.post("/templates/{template_id}/reset", response_model=ReverseTemplateOut)
+def reset_template(template_id: int, db: Session = Depends(get_db)):
+    """将内置反推模板重置恢复为系统初始默认状态。"""
+    t = reverse_service.reset_reverse_template(db, template_id)
+    return ReverseTemplateOut(
+        id=t.id,
+        name=t.name,
+        code=t.code,
+        description=t.description,
+        system_prompt=t.system_prompt,
+        user_prompt_template=t.user_prompt_template,
+        default_model_profile_id=t.default_model_profile_id,
+        enabled=t.enabled,
+        sort_order=t.sort_order,
+        is_builtin=t.is_builtin,
+        created_at=t.created_at.isoformat() if t.created_at else "",
+        updated_at=t.updated_at.isoformat() if t.updated_at else "",
+    )
+
+
 @router.post("/assets/{asset_id}", response_model=SingleImageReverseResult)
 async def reverse_single_image(
     asset_id: int,

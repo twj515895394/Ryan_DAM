@@ -330,6 +330,8 @@ export const api = {
     request<AiReverseTemplate>("/api/v1/ai/reverse/templates", { method: "POST", json: payload }),
   updateReverseTemplate: (id: number, payload: Partial<AiReverseTemplateCreatePayload>) =>
     request<AiReverseTemplate>(`/api/v1/ai/reverse/templates/${id}`, { method: "PUT", json: payload }),
+  resetReverseTemplate: (id: number) =>
+    request<AiReverseTemplate>(`/api/v1/ai/reverse/templates/${id}/reset`, { method: "POST" }),
   deleteReverseTemplate: (id: number) =>
     request<void>(`/api/v1/ai/reverse/templates/${id}`, { method: "DELETE" }),
   reverseSingleImage: (assetId: number, payload: SingleImageReverseRequest) =>
@@ -378,6 +380,8 @@ export const api = {
     request<AiCreationPreset>("/api/v1/ai/presets", { method: "POST", json: payload }),
   updateCreationPreset: (id: number, payload: Partial<AiCreationPreset>) =>
     request<AiCreationPreset>(`/api/v1/ai/presets/${id}`, { method: "PUT", json: payload }),
+  resetCreationPreset: (id: number) =>
+    request<AiCreationPreset>(`/api/v1/ai/presets/${id}/reset`, { method: "POST" }),
   deleteCreationPreset: (id: number) =>
     request<void>(`/api/v1/ai/presets/${id}`, { method: "DELETE" }),
   optimizePrompt: (payload: PromptOptimizeRequest) =>

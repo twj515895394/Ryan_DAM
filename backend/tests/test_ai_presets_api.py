@@ -59,6 +59,21 @@ def test_presets_crud_api(client: TestClient, headers: dict[str, str], app: Fast
     del_custom_resp = client.delete(f"/api/v1/ai/presets/{preset_id}", headers=headers)
     assert del_custom_resp.status_code == 204
 
+    # 7. 内置预设支持修改并支持一键恢复默认 (Reset)
+    orig_name = builtin["name"]
+    put_builtin_resp = client.put(
+        f"/api/v1/ai/presets/{builtin['id']}",
+        json={"name": f"{orig_name} (用户微调版)", "system_rules": "自定义修改后的规则内容"},
+        headers=headers,
+    )
+    assert put_builtin_resp.status_code == 200
+    assert put_builtin_resp.json()["name"] == f"{orig_name} (用户微调版)"
+
+    # 重置恢复默认
+    reset_resp = client.post(f"/api/v1/ai/presets/{builtin['id']}/reset", headers=headers)
+    assert reset_resp.status_code == 200
+    assert reset_resp.json()["name"] == orig_name
+
 
 @pytest.mark.anyio
 async def test_prompt_optimize_endpoint(client: TestClient, headers: dict[str, str], app: FastAPI) -> None:
