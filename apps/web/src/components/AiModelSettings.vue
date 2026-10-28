@@ -10,6 +10,7 @@ import type {
   AiRemoteModelItem
 } from "../api/types";
 import SidebarIcon from "./SidebarIcon.vue";
+import AppleSelect, { type AppleSelectOption } from "./AppleSelect.vue";
 import type { ConfirmRequest } from "../composables/useConfirmDialog";
 import { notify } from "../stores/library";
 
@@ -203,19 +204,79 @@ function autoDetectCapabilities(modelId: string): void {
   }
 }
 
-function onSelectRemoteModel(modelId: string): void {
-  modelForm.value.model_id = modelId;
-  const found = remoteModels.value.find((m) => m.id === modelId);
+const providerOptions = computed<AppleSelectOption[]>(() => {
+  return props.providers.map((p) => ({
+    value: p.id,
+    label: p.name,
+    subLabel: p.base_url,
+    badge: p.enabled ? "已启用" : "已停用",
+    badgeColor: p.enabled ? "emerald" : "zinc"
+  }));
+});
+
+const remoteModelOptions = computed<AppleSelectOption[]>(() => {
+  return remoteModels.value.map((rm) => {
+    const lower = rm.id.toLowerCase();
+    let badge = "文本LLM";
+    let badgeColor: "emerald" | "blue" | "accent" | "zinc" = "zinc";
+    if (lower.includes("image") || lower.includes("dall-e") || lower.includes("flux") || lower.includes("draw")) {
+      badge = "图片生成";
+      badgeColor = "emerald";
+    } else if (
+      lower.includes("vision") ||
+      lower.includes("vl") ||
+      lower.includes("gemini") ||
+      lower.includes("4o") ||
+      lower.includes("minicpm")
+    ) {
+      badge = "多模态视觉";
+      badgeColor = "blue";
+    }
+
+    return {
+      value: rm.id,
+      label: rm.id,
+      subLabel: rm.name && rm.name !== rm.id ? rm.name : undefined,
+      badge,
+      badgeColor
+    };
+  });
+});
+
+const adapterOptions: AppleSelectOption[] = [
+  { value: "openai_standard", label: "OpenAI 标准生图 (/images/generations)", badge: "生图", badgeColor: "emerald" },
+  { value: "openai_chat_markdown", label: "OpenAI Chat 嵌入图 (Gemini/第三方 Markdown)", badge: "Chat图", badgeColor: "blue" },
+  { value: "gemini_standard", label: "Gemini 原生生图协议", badge: "原生", badgeColor: "amber" },
+  { value: "custom", label: "通用自定义适配器", badge: "扩展", badgeColor: "zinc" }
+];
+
+function getDefaultModelOptions(capKey: string): AppleSelectOption[] {
+  return models.value
+    .filter((item) => item.capabilities[capKey]?.supported)
+    .map((m) => ({
+      value: m.id,
+      label: m.name,
+      subLabel: m.model_id,
+      badge: m.adapter_kind,
+      badgeColor: "zinc"
+    }));
+}
+
+function onSelectRemoteModel(modelId: string | number): void {
+  if (!modelId) return;
+  const strId = String(modelId);
+  modelForm.value.model_id = strId;
+  const found = remoteModels.value.find((m) => m.id === strId);
 
   // 1. 自动填充显示名称
-  if (found && found.name && found.name !== modelId) {
+  if (found && found.name && found.name !== strId) {
     modelForm.value.name = found.name;
   } else {
-    modelForm.value.name = formatDisplayName(modelId);
+    modelForm.value.name = formatDisplayName(strId);
   }
 
   // 2. 自动检测并推导适配器与能力
-  autoDetectCapabilities(modelId);
+  autoDetectCapabilities(strId);
 }
 
 function onManualInputModelId(): void {
@@ -356,24 +417,15 @@ onMounted(() => {
             <span class="ml-2 font-mono text-[10px] text-muted">({{ capKey }})</span>
           </div>
 
-          <div class="shrink-0">
-            <select
-              class="rounded-md border border-line bg-canvas/40 px-2 py-1 text-xs text-ink outline-none focus:border-accent"
-              :value="getDefaultModelId(capKey) ?? ''"
-              @change="e => {
-                const val = (e.target as HTMLSelectElement).value;
-                if (val) handleSetDefault(capKey, Number(val));
-              }"
-            >
-              <option value="" disabled>-- 请选择默认模型 --</option>
-              <option
-                v-for="m in models.filter(item => item.capabilities[capKey]?.supported)"
-                :key="m.id"
-                :value="m.id"
-              >
-                {{ m.name }} ({{ m.model_id }})
-              </option>
-            </select>
+          <div class="shrink-0 w-56 sm:w-64">
+            <AppleSelect
+              size="sm"
+              placeholder="-- 请选择默认模型 --"
+              :model-value="getDefaultModelId(capKey) ?? ''"
+              :options="getDefaultModelOptions(capKey)"
+              empty-text="无支持该能力的模型"
+              @change="(val) => { if (val) handleSetDefault(capKey, Number(val)); }"
+            />
           </div>
         </div>
       </div>
@@ -481,15 +533,12 @@ onMounted(() => {
               <span>{{ fetchingRemoteModels ? "正在拉取模型…" : "刷新模型列表" }}</span>
             </button>
           </div>
-          <select
+          <AppleSelect
             v-model="selectedProviderId"
-            class="w-full rounded-md border border-line bg-white px-2.5 py-1.5 text-xs text-ink outline-none focus:border-accent"
+            :options="providerOptions"
+            placeholder="-- 请选择所属 Provider 连接 --"
             @change="() => { if (selectedProviderId) fetchRemoteModels(selectedProviderId); }"
-          >
-            <option v-for="p in providers" :key="p.id" :value="p.id">
-              {{ p.name }} ({{ p.base_url }})
-            </option>
-          </select>
+          />
         </div>
 
         <div class="grid grid-cols-2 gap-2">
@@ -510,23 +559,17 @@ onMounted(() => {
 
             <!-- 下拉选择模式 -->
             <div v-if="!manualInputMode && (remoteModels.length > 0 || fetchingRemoteModels)">
-              <select
-                :value="modelForm.model_id"
+              <AppleSelect
+                :model-value="modelForm.model_id"
+                :options="remoteModelOptions"
                 :disabled="fetchingRemoteModels"
-                class="w-full rounded-md border border-line bg-white px-2.5 py-1.5 font-mono text-xs text-ink outline-none focus:border-accent disabled:bg-canvas disabled:text-muted"
-                @change="(e) => onSelectRemoteModel((e.target as HTMLSelectElement).value)"
-              >
-                <option value="" disabled>
-                  {{ fetchingRemoteModels ? "-- 正在从 Provider 获取模型列表... --" : `-- 请选择远程模型 (已拉取 ${remoteModels.length} 个) --` }}
-                </option>
-                <option
-                  v-for="rm in remoteModels"
-                  :key="rm.id"
-                  :value="rm.id"
-                >
-                  {{ rm.id }}{{ rm.name && rm.name !== rm.id ? ` (${rm.name})` : "" }}
-                </option>
-              </select>
+                mono
+                searchable
+                :placeholder="fetchingRemoteModels ? '-- 正在从 Provider 获取模型列表… --' : `-- 请选择远程模型 (已拉取 ${remoteModels.length} 个) --`"
+                search-placeholder="搜索模型 ID 或关键字…"
+                empty-text="未找到匹配的模型 ID"
+                @change="onSelectRemoteModel"
+              />
             </div>
 
             <!-- 手动输入模式 / 降级模式 -->
@@ -557,15 +600,11 @@ onMounted(() => {
 
         <div>
           <label class="block text-[11px] font-medium text-ink/80 mb-1">适配器协议 (Adapter)</label>
-          <select
+          <AppleSelect
             v-model="modelForm.adapter_kind"
-            class="w-full rounded-md border border-line bg-white px-2.5 py-1.5 text-xs text-ink outline-none focus:border-accent"
-          >
-            <option value="openai_standard">OpenAI 标准生图 (/images/generations)</option>
-            <option value="openai_chat_markdown">OpenAI Chat 嵌入图 (Gemini/第三方 Markdown)</option>
-            <option value="gemini_standard">Gemini 原生生图协议</option>
-            <option value="custom">通用自定义适配器</option>
-          </select>
+            :options="adapterOptions"
+            placeholder="请选择适配器协议"
+          />
         </div>
 
         <!-- 能力勾选 -->

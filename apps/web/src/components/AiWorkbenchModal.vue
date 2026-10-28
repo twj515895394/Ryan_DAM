@@ -10,6 +10,7 @@ import type {
 } from "../api/types";
 import AiReferencePickerModal, { type SelectedReferenceItem } from "./AiReferencePickerModal.vue";
 import SidebarIcon from "./SidebarIcon.vue";
+import AppleSelect from "./AppleSelect.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -66,6 +67,16 @@ const optimizeError = ref("");
 // ── 计算属性 ──────────────────────────────────────────────────────────
 const activeModel = computed(() => {
   return models.value.find((m) => m.id === selectedModelId.value) || null;
+});
+
+const modelOptions = computed(() => {
+  return models.value.map((m) => ({
+    value: m.id,
+    label: m.name,
+    subLabel: m.model_id,
+    badge: m.adapter_kind === "openai_standard" ? "OpenAI" : m.adapter_kind === "gemini_standard" ? "Gemini" : m.adapter_kind,
+    badgeColor: "zinc" as const
+  }));
 });
 
 const activeModelCapabilities = computed(() => {
@@ -392,16 +403,16 @@ async function handleSubmit(): Promise<void> {
             <div class="flex items-center gap-3">
               <div class="flex items-center gap-2">
                 <span class="text-xs font-medium text-muted">生成模型</span>
-                <select
-                  v-model="selectedModelId"
-                  :disabled="loadingModels || models.length === 0"
-                  class="h-8 rounded-lg border border-line bg-canvas/60 px-2.5 text-xs text-ink outline-none transition focus:border-accent"
-                >
-                  <option v-if="models.length === 0" :value="null">暂无可用的生图模型</option>
-                  <option v-for="m in models" :key="m.id" :value="m.id">
-                    {{ m.name }} ({{ m.model_id }})
-                  </option>
-                </select>
+                <div class="w-52 sm:w-60">
+                  <AppleSelect
+                    v-model="selectedModelId"
+                    size="sm"
+                    :options="modelOptions"
+                    :disabled="loadingModels || models.length === 0"
+                    placeholder="暂无可用的生图模型"
+                    search-placeholder="搜索可用模型…"
+                  />
+                </div>
               </div>
 
               <button
