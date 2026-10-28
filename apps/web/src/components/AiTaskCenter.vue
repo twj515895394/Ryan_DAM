@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import SidebarIcon from "./SidebarIcon.vue";
+import AiResultThumb from "./AiResultThumb.vue";
+import AiResultPreviewModal from "./AiResultPreviewModal.vue";
 import { api } from "../api/client";
 import type { AiResult, AiTaskDetail, AiTaskStatus, AiTaskSummary, AiTaskType } from "../api/types";
 
@@ -82,6 +84,20 @@ async function handleRetry(taskId: string): Promise<void> {
 }
 
 const importingResultId = ref<string | null>(null);
+const previewingResult = ref<AiResult | null>(null);
+
+function handlePreviewResult(result: AiResult): void {
+  previewingResult.value = result;
+}
+
+function handleImportedFromPreview(resultId: string, assetId: number): void {
+  if (selectedTaskDetail.value) {
+    const res = selectedTaskDetail.value.results.find((r) => r.id === resultId);
+    if (res) {
+      res.imported_asset_id = assetId;
+    }
+  }
+}
 
 async function handleImportResult(resultId: string): Promise<void> {
   importingResultId.value = resultId;
@@ -413,20 +429,36 @@ onUnmounted(() => {
               </div>
 
               <div v-if="selectedTaskDetail.results.length > 0" class="space-y-1.5 pt-1">
-                <span class="text-[11px] font-medium text-emerald-800">生成结果产物 ({{ selectedTaskDetail.results.length }} 项):</span>
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-medium text-emerald-800">生成结果产物 ({{ selectedTaskDetail.results.length }} 项):</span>
+                  <span class="text-[10px] text-muted">点击缩略图或预览查看大图</span>
+                </div>
                 <div class="grid grid-cols-2 gap-2 pt-1">
                   <div
                     v-for="res in selectedTaskDetail.results"
                     :key="res.id"
-                    class="flex items-center gap-2 rounded-lg border border-line/80 bg-white p-1.5 shadow-2xs"
+                    class="flex items-center gap-2 rounded-lg border border-line/80 bg-white p-1.5 shadow-2xs hover:border-line transition"
                   >
-                    <img
-                      :src="api.getAiResultContentUrl(res.id)"
-                      class="h-12 w-12 rounded object-cover border border-line/40 shrink-0 bg-canvas"
-                      alt=""
+                    <AiResultThumb
+                      :result-id="res.id"
+                      clickable
+                      hover-zoom
+                      class="h-12 w-12 rounded shrink-0 cursor-pointer"
+                      title="点击全屏预览大图"
+                      @click="handlePreviewResult(res)"
                     />
                     <div class="min-w-0 flex-1 flex flex-col justify-between">
-                      <span class="text-[10px] text-muted truncate">#{{ res.id.slice(-6) }} · {{ res.width }}x{{ res.height }}</span>
+                      <div class="flex items-center justify-between">
+                        <span class="text-[10px] text-muted truncate">#{{ res.id.slice(-6) }} · {{ res.width }}x{{ res.height }}</span>
+                        <button
+                          type="button"
+                          class="text-[10px] text-accent hover:underline shrink-0"
+                          title="全屏预览与参数核验"
+                          @click="handlePreviewResult(res)"
+                        >
+                          预览
+                        </button>
+                      </div>
                       <div class="mt-1 flex items-center gap-1 flex-wrap">
                         <span
                           v-if="res.imported_asset_id"
@@ -461,5 +493,18 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- 全屏大图预览弹窗 -->
+    <AiResultPreviewModal
+      :open="previewingResult !== null"
+      :result="previewingResult"
+      :task="selectedTaskDetail"
+      @close="previewingResult = null"
+      @imported="handleImportedFromPreview"
+      @continue-edit="(res, task) => {
+        previewingResult = null;
+        emit('continue-edit', res as AiResult, (task as AiTaskDetail) || selectedTaskDetail!);
+      }"
+    />
   </Teleport>
 </template>

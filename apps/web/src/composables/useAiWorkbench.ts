@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { api } from "../api/client";
 import { notify } from "../stores/library";
+import { loadAiResultObjectUrl } from "./useAiResultCache";
 import type { AiResult, AiResultWithTask, AiTaskDetail, AiTaskSummary, AssetOut } from "../api/types";
 import type { SelectedReferenceItem } from "../components/AiReferencePickerModal.vue";
 
@@ -77,18 +78,23 @@ export function useAiWorkbench() {
       workbenchInitialPresetId.value = detail.preset_id || undefined;
       workbenchInitialParams.value = detail.params || {};
       if (detail.references && detail.references.length > 0) {
-        workbenchInitialReferences.value = detail.references.map((r) => ({
-          source_kind: r.source_kind as any,
-          source_id: r.source_id || "",
-          name: `${r.source_kind === "asset" ? "资产" : r.source_kind === "history_result" ? "历史" : "本地"} #${r.source_id}`,
-          preview_url:
-            r.source_kind === "asset"
-              ? `/api/v1/assets/${r.source_id}/thumbnail`
-              : r.source_kind === "history_result"
-              ? api.getAiResultContentUrl(r.source_id || "")
-              : "",
-          role: r.role || "reference"
-        }));
+        const loadedRefs: SelectedReferenceItem[] = [];
+        for (const r of detail.references) {
+          let previewUrl = "";
+          if (r.source_kind === "asset" && r.source_id) {
+            previewUrl = await api.fetchThumbnailObjectUrl(Number(r.source_id)).catch(() => "");
+          } else if (r.source_kind === "history_result" && r.source_id) {
+            previewUrl = (await loadAiResultObjectUrl(r.source_id)) || "";
+          }
+          loadedRefs.push({
+            source_kind: r.source_kind as any,
+            source_id: r.source_id || "",
+            name: `${r.source_kind === "asset" ? "资产" : r.source_kind === "history_result" ? "历史" : "本地"} #${r.source_id}`,
+            preview_url: previewUrl,
+            role: r.role || "reference"
+          });
+        }
+        workbenchInitialReferences.value = loadedRefs;
       }
     }
 
@@ -96,17 +102,18 @@ export function useAiWorkbench() {
     showAiWorkbench.value = true;
   }
 
-  function openWorkbenchContinueEdit(res: AiResult, task: AiTaskDetail): void {
+  async function openWorkbenchContinueEdit(res: AiResult, task: AiTaskDetail): Promise<void> {
     resetWorkbenchState();
     workbenchInitialMode.value = "image_edit";
     workbenchInitialModelId.value = task.model_profile_id || undefined;
     workbenchInitialRetryOf.value = task.id;
+    const url = await loadAiResultObjectUrl(res.id);
     workbenchInitialReferences.value = [
       {
         source_kind: "history_result",
         source_id: res.id,
         name: `历史产物 #${res.id.slice(-6)}`,
-        preview_url: api.getAiResultContentUrl(res.id),
+        preview_url: url || "",
         role: "reference"
       }
     ];
@@ -122,16 +129,17 @@ export function useAiWorkbench() {
     showAiHistory.value = false;
   }
 
-  function openWorkbenchFromHistory(item: AiResultWithTask): void {
+  async function openWorkbenchFromHistory(item: AiResultWithTask): Promise<void> {
     resetWorkbenchState();
     workbenchInitialPrompt.value = item.task?.prompt_final || "";
     workbenchInitialMode.value = "image_generate";
+    const url = await loadAiResultObjectUrl(item.id);
     workbenchInitialReferences.value = [
       {
         source_kind: "history_result",
         source_id: item.id,
         name: `历史产物 #${item.id.slice(-6)}`,
-        preview_url: api.getAiResultContentUrl(item.id),
+        preview_url: url || "",
         role: "reference"
       }
     ];

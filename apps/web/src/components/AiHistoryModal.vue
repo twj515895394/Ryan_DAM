@@ -7,6 +7,7 @@ import { useFolderOptions } from "../composables/useFolderOptions";
 import SidebarIcon from "./SidebarIcon.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import AppleSelect, { type AppleSelectOption } from "./AppleSelect.vue";
+import AiResultThumb from "./AiResultThumb.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -501,11 +502,11 @@ watch(
 
             <!-- 图片容器 -->
             <div class="relative aspect-square w-full bg-black/5 overflow-hidden">
-              <img
-                :src="api.getAiResultContentUrl(item.id)"
+              <AiResultThumb
+                :result-id="item.id"
                 :alt="item.task?.prompt_final || 'AI Result'"
-                loading="lazy"
-                class="h-full w-full object-cover transition duration-300 group-hover:scale-103"
+                hover-zoom
+                class="h-full w-full border-none rounded-none"
               />
 
               <!-- 悬浮快捷操作蒙层 -->
@@ -601,9 +602,10 @@ watch(
       >
         <!-- 大图展示区 -->
         <div class="flex-1 bg-black/95 flex items-center justify-center p-4 relative min-h-[360px]">
-          <img
-            :src="api.getAiResultContentUrl(activeDetailResult.id)"
-            class="max-h-[80vh] max-w-full object-contain rounded-lg shadow-lg"
+          <AiResultThumb
+            :result-id="activeDetailResult.id"
+            fit="contain"
+            class="max-h-[80vh] max-w-full rounded-lg shadow-lg border-none bg-transparent"
           />
         </div>
 

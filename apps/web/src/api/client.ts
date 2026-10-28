@@ -410,6 +410,14 @@ export const api = {
   deleteAiResult: (id: string, confirm = true) =>
     request<{ id: string; status: string }>(`/api/v1/ai/results/${id}?confirm=${confirm}`, { method: "DELETE" }),
   getAiResultContentUrl: (id: string) => `/api/v1/ai/results/${id}/content`,
+  fetchAiResultContentObjectUrl: async (resultId: string): Promise<string> => {
+    const info = await getBackendInfo();
+    const response = await fetch(`${info.baseUrl}/api/v1/ai/results/${resultId}/content`, {
+      headers: { "X-Ryan-DAM-Token": info.token }
+    });
+    if (!response.ok) throw new Error(`ai result content HTTP ${response.status}`);
+    return URL.createObjectURL(await response.blob());
+  },
   importAiResultToAsset: (id: string, payload?: { target_folder_id?: number; custom_name?: string }) =>
     request<AssetOut>(`/api/v1/ai/results/${id}/import`, { method: "POST", json: payload || {} }),
   batchImportAiResults: (payload: { result_ids: string[]; target_folder_id?: number }) =>

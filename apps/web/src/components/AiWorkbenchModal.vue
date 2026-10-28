@@ -235,10 +235,11 @@ watch(
       if (props.initialReferenceAssetIds?.length) {
         for (const aid of props.initialReferenceAssetIds) {
           if (!references.value.some((r) => r.source_kind === "asset" && r.source_id === String(aid))) {
+            const url = await api.fetchThumbnailObjectUrl(aid).catch(() => "");
             references.value.push({
               source_kind: "asset",
               source_id: String(aid),
-              preview_url: `/api/v1/assets/${aid}/thumbnail`,
+              preview_url: url,
               name: `资产 #${aid}`,
               role: "reference"
             });
@@ -626,8 +627,9 @@ async function handleSubmit(): Promise<void> {
                   :key="`${refItem.source_kind}_${refItem.source_id}`"
                   class="flex items-center gap-2.5 rounded-xl border border-line/80 bg-canvas/30 p-2 transition hover:bg-white"
                 >
-                  <div class="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border border-line/60 bg-canvas">
-                    <img :src="refItem.preview_url" :alt="refItem.name" class="h-full w-full object-cover" />
+                  <div class="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border border-line/60 bg-canvas flex items-center justify-center">
+                    <img v-if="refItem.preview_url" :src="refItem.preview_url" :alt="refItem.name" class="h-full w-full object-cover" />
+                    <SidebarIcon v-else name="image" class="h-5 w-5 text-muted/50" />
                   </div>
 
                   <div class="min-w-0 flex-1">

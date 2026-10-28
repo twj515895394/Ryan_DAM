@@ -2,7 +2,10 @@
 import { ref, watch } from "vue";
 import { api } from "../api/client";
 import type { AiResultWithTask, AssetOut } from "../api/types";
+import { loadAiResultObjectUrl } from "../composables/useAiResultCache";
 import SidebarIcon from "./SidebarIcon.vue";
+import AssetThumb from "./AssetThumb.vue";
+import AiResultThumb from "./AiResultThumb.vue";
 
 export interface SelectedReferenceItem {
   source_kind: "asset" | "history_result" | "local_upload";
@@ -134,11 +137,12 @@ async function loadLibraryAssets(): Promise<void> {
   }
 }
 
-function pickAsset(asset: AssetOut): void {
+async function pickAsset(asset: AssetOut): Promise<void> {
+  const url = await api.fetchThumbnailObjectUrl(asset.id).catch(() => "");
   emit("pick", {
     source_kind: "asset",
     source_id: String(asset.id),
-    preview_url: `/api/v1/assets/${asset.id}/thumbnail`,
+    preview_url: url,
     name: asset.name,
     role: "reference"
   });
@@ -158,11 +162,12 @@ async function loadHistoryResults(): Promise<void> {
   }
 }
 
-function pickHistoryResult(item: AiResultWithTask): void {
+async function pickHistoryResult(item: AiResultWithTask): Promise<void> {
+  const url = await loadAiResultObjectUrl(item.id);
   emit("pick", {
     source_kind: "history_result",
     source_id: item.id,
-    preview_url: api.getAiResultContentUrl(item.id),
+    preview_url: url || "",
     name: item.task?.prompt_final?.slice(0, 20) || `AI_${item.id.slice(0, 8)}`,
     role: "reference"
   });
@@ -300,11 +305,11 @@ function pickHistoryResult(item: AiResultWithTask): void {
                   class="group relative aspect-square cursor-pointer overflow-hidden rounded-xl border border-line/60 bg-canvas/50 transition hover:border-accent hover:shadow-sm"
                   @click="pickAsset(asset)"
                 >
-                  <img
-                    :src="`/api/v1/assets/${asset.id}/thumbnail`"
-                    :alt="asset.name"
-                    class="h-full w-full object-cover transition duration-150 group-hover:scale-105"
-                    loading="lazy"
+                  <AssetThumb
+                    :asset-id="asset.id"
+                    :asset-type="asset.asset_type"
+                    :thumbnail-status="asset.thumbnail_status"
+                    hover-zoom
                   />
                   <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent p-1.5 text-left">
                     <p class="truncate text-[10.5px] font-medium text-white">{{ asset.name }}</p>
@@ -328,11 +333,10 @@ function pickHistoryResult(item: AiResultWithTask): void {
                   class="group relative aspect-square cursor-pointer overflow-hidden rounded-xl border border-line/60 bg-canvas/50 transition hover:border-accent hover:shadow-sm"
                   @click="pickHistoryResult(item)"
                 >
-                  <img
-                    :src="api.getAiResultContentUrl(item.id)"
-                    alt="AI result"
-                    class="h-full w-full object-cover transition duration-150 group-hover:scale-105"
-                    loading="lazy"
+                  <AiResultThumb
+                    :result-id="item.id"
+                    hover-zoom
+                    class="h-full w-full border-none rounded-none"
                   />
                   <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent p-1.5 text-left">
                     <p class="truncate text-[10px] text-white/90">
