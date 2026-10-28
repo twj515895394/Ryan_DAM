@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.errors import ApiError
@@ -51,13 +51,13 @@ def build_query(db: Session, args: AssetQuery):
     # 'missing' external assets stay visible so the UI can flag them explicitly
     query = (
         db.query(Asset)
-        .join(Folder, Asset.folder_id == Folder.id)
+        .outerjoin(Folder, Asset.folder_id == Folder.id)
         .filter(Asset.status.in_(("active", "missing")))
     )
     if args.folder_id is not None:
         query = query.filter(Asset.folder_id == args.folder_id)
     elif args.scope == "general":
-        query = query.filter(Folder.scope_type == "general")
+        query = query.filter(or_(Folder.scope_type == "general", Asset.folder_id.is_(None)))
     elif args.scope == "project":
         if args.project_id is None:
             raise ApiError("validation_error", "按项目查询资产时必须提供 project_id。", 422)

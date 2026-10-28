@@ -267,34 +267,64 @@ async def optimize_prompt(
 
     # 3. 构建 System Prompt
     lang = (request.language or "zh").strip().lower()
+    has_custom = bool(request.custom_instruction and request.custom_instruction.strip())
+
     if lang == "en":
-        system_rules = (
-            "You are an expert AI image prompt engineer. Your job is to refine and expand the user's raw prompt "
-            "into a descriptive, vivid, and aesthetically superior text-to-image prompt.\n"
-            "Requirements:\n"
-            "1. Faithfully preserve the user's core subjects, actions, and intent.\n"
-            "2. Enrich with specific details: subject appearance, environment/background, lighting/mood, camera framing/angle, and visual style.\n"
-            "3. Output ONLY the refined English prompt. Never include any greetings, quotes, markdown wrappers, or conversational explanations."
-        )
-        user_prompt_instruction = f"Please optimize this prompt for text-to-image generation (output in English):\n{raw_prompt}"
+        if has_custom:
+            system_rules = (
+                "You are an expert AI image prompt engineer.\n"
+                "Your task is to refine and modify the user's 【existing base prompt】 by strictly incorporating the user's 【incremental modification requirements】.\n"
+                "Requirements:\n"
+                "1. Faithfully keep the core essence of the base prompt while accurately applying all requested changes (subject traits, style, lighting, environment, additions/removals).\n"
+                "2. Ensure the resulting prompt is coherent, descriptive, and aesthetically superior for text-to-image generation.\n"
+                "3. Output ONLY the refined English prompt. Never include any greetings, quotes, markdown wrappers, or conversational explanations."
+            )
+            user_prompt_instruction = (
+                f"【Existing Base Prompt】:\n{raw_prompt}\n\n"
+                f"【Modification & Refinement Requirements】:\n{request.custom_instruction.strip()}\n\n"
+                "Please generate the refined text-to-image prompt incorporating these modifications (output in English):"
+            )
+        else:
+            system_rules = (
+                "You are an expert AI image prompt engineer. Your job is to refine and expand the user's raw prompt "
+                "into a descriptive, vivid, and aesthetically superior text-to-image prompt.\n"
+                "Requirements:\n"
+                "1. Faithfully preserve the user's core subjects, actions, and intent.\n"
+                "2. Enrich with specific details: subject appearance, environment/background, lighting/mood, camera framing/angle, and visual style.\n"
+                "3. Output ONLY the refined English prompt. Never include any greetings, quotes, markdown wrappers, or conversational explanations."
+            )
+            user_prompt_instruction = f"Please optimize this prompt for text-to-image generation (output in English):\n{raw_prompt}"
     else:
-        system_rules = (
-            "你是一位顶尖的 AI 图像提示词（Prompt）专家与视觉美学导师。你的核心职责是将用户的简短想法或原始提示词，"
-            "扩写润色为画面生动、光影细腻、细节丰富的高品质生图提示词。\n"
-            "核心要求：\n"
-            "1. 忠实还原用户的核心画面主体、动作与意图，严禁擅自偏离主题。\n"
-            "2. 深度扩充视觉细节：主体外观面貌、服饰材质、所处空间与背景环境、光影质感、镜头景深构图与艺术审美倾向。\n"
-            "3. 【绝对语言约束】：必须且仅使用【中文】输出润色后的提示词正文！坚决禁止输出纯英文段落（专业生图参数或特定专业英文词汇如 8k/Fujifilm 可合理保留，但全篇必须以中文自然叙述为主）。\n"
-            "4. 严禁输出任何问候语、说明前缀（如'润色后的提示词：'）、引号、Markdown 标记或解释性文字，直接输出可直接用于生图的提示词正文本体。"
-        )
-        user_prompt_instruction = f"请将以下生图提示词进行专业扩写与美学润色（严格要求使用中文输出）：\n{raw_prompt}"
+        if has_custom:
+            system_rules = (
+                "你是一位顶尖的 AI 图像提示词（Prompt）专家与视觉美学导师。\n"
+                "你的核心任务是在用户【已有的基础提示词】之上，精准结合用户提出的【增量修改与优化要求】，重新编排输出修改重塑后的高品质生图提示词。\n"
+                "核心要求：\n"
+                "1. 严格以已有的基础提示词为画面基底，忠实融入用户的增量修改要求（例如主体服饰变换、增加特定元素、光影重构、艺术风格调整等）。\n"
+                "2. 保持画面元素之间的高度协调统一与画面生动性，光影细腻、细节丰富。\n"
+                "3. 【绝对语言约束】：必须且仅使用【中文】输出修改后的提示词正文！坚决禁止输出纯英文段落（专业生图参数或特定专业英文词汇如 8k/Fujifilm 可合理保留，但全篇必须以中文自然叙述为主）。\n"
+                "4. 严禁输出任何问候语、说明前缀（如'修改后的提示词：'）、引号、Markdown 标记或解释性文字，直接输出可直接用于生图的提示词正文本体。"
+            )
+            user_prompt_instruction = (
+                f"【已有基础提示词】：\n{raw_prompt}\n\n"
+                f"【用户的修改与优化要求】：\n{request.custom_instruction.strip()}\n\n"
+                "请基于上述基础提示词并充分融合用户的修改要求，生成最终的生图提示词（严格要求中文输出）："
+            )
+        else:
+            system_rules = (
+                "你是一位顶尖的 AI 图像提示词（Prompt）专家与视觉美学导师。你的核心职责是将用户的简短想法或原始提示词，"
+                "扩写润色为画面生动、光影细腻、细节丰富的高品质生图提示词。\n"
+                "核心要求：\n"
+                "1. 忠实还原用户的核心画面主体、动作与意图，严禁擅自偏离主题。\n"
+                "2. 深度扩充视觉细节：主体外观面貌、服饰材质、所处空间与背景环境、光影质感、镜头景深构图与艺术审美倾向。\n"
+                "3. 【绝对语言约束】：必须且仅使用【中文】输出润色后的提示词正文！坚决禁止输出纯英文段落（专业生图参数或特定专业英文词汇如 8k/Fujifilm 可合理保留，但全篇必须以中文自然叙述为主）。\n"
+                "4. 严禁输出任何问候语、说明前缀（如'润色后的提示词：'）、引号、Markdown 标记或解释性文字，直接输出可直接用于生图的提示词正文本体。"
+            )
+            user_prompt_instruction = f"请将以下生图提示词进行专业扩写与美学润色（严格要求使用中文输出）：\n{raw_prompt}"
 
     if preset and preset.system_rules:
         prefix = "Style & Rule Guidance:" if lang == "en" else "预设风格与美学指引："
         system_rules += f"\n\n{prefix}\n{preset.system_rules}"
-    if request.custom_instruction:
-        prefix = "User Custom Instruction:" if lang == "en" else "用户自定义要求："
-        system_rules += f"\n\n{prefix}\n{request.custom_instruction}"
 
     messages = [
         {"role": "system", "content": system_rules},

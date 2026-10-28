@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import type { AiResult, AiTaskDetail } from "../api/types";
 import { api } from "../api/client";
 import { useAiResultImageDetails } from "../composables/useAiResultCache";
 import { useFolderOptions } from "../composables/useFolderOptions";
+import { loadAll, refreshCurrentAssetsQuiet } from "../stores/library";
 import AppleSelect, { type AppleSelectOption } from "./AppleSelect.vue";
 import SidebarIcon from "./SidebarIcon.vue";
 import AiResultThumb from "./AiResultThumb.vue";
+import AiPromptRefineModal from "./AiPromptRefineModal.vue";
 
 const props = defineProps<{
   taskDetail: AiTaskDetail;
@@ -14,8 +16,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "back-to-edit"): void;
-  (e: "regenerate"): void;
+  (e: "back-to-edit", newPrompt?: string): void;
+  (e: "regenerate", newPrompt?: string): void;
   (e: "inspect-detail", result: AiResult, task: AiTaskDetail): void;
 }>();
 
@@ -37,23 +39,53 @@ const {
 
 // 文件夹入库
 const { allFolderGroups } = useFolderOptions();
-const selectedFolderId = ref<number | "">("");
+const defaultAiFolderOption = computed(() => {
+  return allFolderGroups.value
+    .flatMap((g) => g.options)
+    .find((opt) => opt.name === "AI 生成");
+});
+
+const selectedFolderId = ref<number | string>("default_ai");
 const importing = ref(false);
 const importSuccessMap = ref<Record<string, number>>({});
 const importErrorMsg = ref("");
 const copyingPrompt = ref(false);
+const showRefineModal = ref(false);
 
-const folderOptions = computed<AppleSelectOption[]>(() => [
-  { value: "", label: "资产库根目录", subLabel: "未归档" },
-  ...allFolderGroups.value.flatMap((g) =>
-    g.options.map((opt) => ({
-      value: opt.id,
-      label: opt.label,
-      badge: g.label,
-      badgeColor: "zinc" as const
-    }))
-  )
-]);
+// 当目录树加载出来并包含「AI 生成」目录时，自动绑定其 ID
+watch(
+  defaultAiFolderOption,
+  (opt) => {
+    if (opt && selectedFolderId.value === "default_ai") {
+      selectedFolderId.value = opt.id;
+    }
+  },
+  { immediate: true }
+);
+
+const folderOptions = computed<AppleSelectOption[]>(() => {
+  const defaultOpt = defaultAiFolderOption.value;
+  return [
+    {
+      value: defaultOpt ? defaultOpt.id : "default_ai",
+      label: defaultOpt ? `AI 生成 (${defaultOpt.label})` : "✨ AI 生成 (系统默认目录)",
+      subLabel: "推荐 · 集中归档",
+      badge: "推荐",
+      badgeColor: "blue" as const
+    },
+    { value: "root", label: "资产库根目录", subLabel: "未归档" },
+    ...allFolderGroups.value.flatMap((g) =>
+      g.options
+        .filter((opt) => !defaultOpt || opt.id !== defaultOpt.id)
+        .map((opt) => ({
+          value: opt.id,
+          label: opt.label,
+          badge: g.label,
+          badgeColor: "zinc" as const
+        }))
+    )
+  ];
+});
 
 const currentImportedAssetId = computed(() => {
   if (!activeResult.value) return null;
@@ -66,13 +98,17 @@ async function handleImport(): Promise<void> {
   importErrorMsg.value = "";
 
   try {
-    const targetFolder = typeof selectedFolderId.value === "number" && selectedFolderId.value > 0
-      ? selectedFolderId.value
-      : undefined;
+    const targetFolder =
+      typeof selectedFolderId.value === "number" && selectedFolderId.value > 0
+        ? selectedFolderId.value
+        : undefined;
     const res = await api.importAiResultToAsset(activeResult.value.id, {
       target_folder_id: targetFolder
     });
     importSuccessMap.value[activeResult.value.id] = res.id;
+
+    // 联动刷新全局资产库和目录树
+    await Promise.all([loadAll(), refreshCurrentAssetsQuiet()]);
   } catch (err: any) {
     importErrorMsg.value = err.message || "入库失败，请重试";
   } finally {
@@ -296,7 +332,7 @@ function handleInspect(): void {
           <button
             type="button"
             class="inline-flex items-center gap-1.5 rounded-xl border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-canvas active:scale-97"
-            @click="emit('back-to-edit')"
+            @click="showRefineModal = true"
           >
             <SidebarIcon name="edit" class="h-3.5 w-3.5 text-muted" />
             <span>调整提示词</span>
@@ -313,6 +349,17 @@ function handleInspect(): void {
         </div>
       </div>
     </div>
+
+    <!-- 基于已有提示词增量调整模态弹窗 -->
+    <AiPromptRefineModal
+      :open="showRefineModal"
+      :base-prompt="taskDetail.prompt_final || ''"
+      :model-name="modelName"
+      @close="showRefineModal = false"
+      @jump-to-form="() => { showRefineModal = false; emit('back-to-edit'); }"
+      @apply-prompt="(p) => { showRefineModal = false; emit('back-to-edit', p); }"
+      @regenerate-with-prompt="(p) => { showRefineModal = false; emit('regenerate', p); }"
+    />
   </div>
 </template>
 

@@ -245,6 +245,30 @@ def stage_upload_file(db: Session, file_content: bytes, filename: str) -> dict[s
     }
 
 
+def get_or_create_default_ai_folder(db: Session) -> Folder:
+    """获取或自动创建通用资产库中的顶层默认『AI 生成』目录。"""
+    folder = (
+        db.query(Folder)
+        .filter(
+            Folder.scope_type == "general",
+            Folder.parent_id.is_(None),
+            Folder.name == "AI 生成",
+        )
+        .first()
+    )
+    if not folder:
+        folder = Folder(
+            name="AI 生成",
+            scope_type="general",
+            project_id=None,
+            parent_id=None,
+            description="AI 图像生成默认存储目录",
+        )
+        db.add(folder)
+        db.flush()
+    return folder
+
+
 def import_result_to_asset(
     db: Session,
     result_id: str,
@@ -270,11 +294,26 @@ def import_result_to_asset(
     if not source_path.exists():
         raise ApiError(code="file_not_found", message="历史图片实体文件在磁盘上丢失", status_code=404)
 
-    # 2. 验证目标目录（如果指定）
+    # 2. 验证目标目录（若未指定则自动定位到默认「AI 生成」目录）
     if target_folder_id is not None:
         folder = db.get(Folder, target_folder_id)
         if not folder:
             raise ApiError(code="folder_not_found", message="目标文件夹不存在", status_code=404)
+    else:
+        default_folder = get_or_create_default_ai_folder(db)
+        target_folder_id = default_folder.id
+
+        # 自愈以往可能存在的 folder_id 为 None 的孤儿 AI 资产
+        orphan_ai_assets = (
+            db.query(Asset)
+            .filter(
+                Asset.asset_origin == "ai_generated",
+                Asset.folder_id.is_(None),
+            )
+            .all()
+        )
+        for orphan in orphan_ai_assets:
+            orphan.folder_id = default_folder.id
 
     # 3. 准备目标路径与资产名称
     managed_root = get_managed_root(db)

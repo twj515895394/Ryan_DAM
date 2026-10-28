@@ -55,6 +55,17 @@ const loadingPresets = ref(false);
 const submitting = ref(false);
 const errorMessage = ref("");
 const lastSubmittedPayload = ref<SubmitImageGeneratePayload | null>(null);
+const currentFormPrompt = ref(props.initialPrompt || "");
+
+watch(
+  () => props.initialPrompt,
+  (val) => {
+    if (val !== undefined) {
+      currentFormPrompt.value = val;
+    }
+  },
+  { immediate: true }
+);
 
 const activeModel = computed(() => {
   return models.value.find((m) => m.id === selectedModelId.value) || null;
@@ -200,12 +211,25 @@ function handleCloseModal(): void {
   emit("close");
 }
 
-function handleBackToEdit(): void {
+function handleBackToEdit(newPrompt?: string | unknown): void {
   stopTaskPolling();
+  if (typeof newPrompt === "string" && newPrompt.trim()) {
+    currentFormPrompt.value = newPrompt.trim();
+  }
   currentPhase.value = "form";
 }
 
-function handleRegenerate(): void {
+function handleRegenerate(newPrompt?: string | unknown): void {
+  if (typeof newPrompt === "string" && newPrompt.trim()) {
+    currentFormPrompt.value = newPrompt.trim();
+    if (lastSubmittedPayload.value) {
+      handleSubmit({
+        ...lastSubmittedPayload.value,
+        prompt: newPrompt.trim()
+      });
+      return;
+    }
+  }
   if (lastSubmittedPayload.value) {
     handleSubmit(lastSubmittedPayload.value);
   } else {
@@ -308,7 +332,7 @@ onUnmounted(() => {
             :models="models"
             :presets="presets"
             :loading-models="loadingModels"
-            :initial-prompt="initialPrompt"
+            :initial-prompt="currentFormPrompt"
             :initial-preset-id="initialPresetId"
             :initial-reference-asset-ids="initialReferenceAssetIds"
             :initial-mode="initialMode"
@@ -357,14 +381,14 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="rounded-xl border border-line bg-white px-4 py-2 text-xs font-medium text-ink transition hover:bg-canvas active:scale-97"
-                @click="handleBackToEdit"
+                @click="() => handleBackToEdit()"
               >
                 返回修改提示词
               </button>
               <button
                 type="button"
                 class="inline-flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-97"
-                @click="handleRegenerate"
+                @click="() => handleRegenerate()"
               >
                 <SidebarIcon name="refresh" class="h-3.5 w-3.5" />
                 <span>重试生成</span>

@@ -414,7 +414,7 @@ export async function deleteTag(id: number): Promise<boolean> {
   }
 }
 
-async function refreshCurrentAssetsQuiet(): Promise<void> {
+export async function refreshCurrentAssetsQuiet(): Promise<void> {
   if (currentAssetScope) {
     await fetchAssets(currentAssetScope);
   }
