@@ -86,6 +86,7 @@ def test_update_and_delete_provider(client, headers) -> None:
     )
     assert updated2.status_code == 200
     assert updated2.json()["masked_api_key"] == "sk-****1234"
+    assert updated2.json()["credential_masked"] == "sk-****1234"
 
     # Verify secret is updated in CredentialManager
     # 4. Delete
@@ -94,6 +95,30 @@ def test_update_and_delete_provider(client, headers) -> None:
 
     # Get after delete returns 404
     assert client.get(f"/api/v1/ai/providers/{pid}", headers=headers).status_code == 404
+
+
+def test_create_without_key_and_then_set_key(client, headers) -> None:
+    payload = {
+        "name": "初始无 Key 连接",
+        "family": "openai_compatible",
+        "base_url": "http://127.0.0.1:8317/v1",
+        "api_key": "",
+    }
+    created = client.post("/api/v1/ai/providers", json=payload, headers=headers).json()
+    pid = created["id"]
+    assert created["has_api_key"] is False
+    assert created["masked_api_key"] == ""
+    assert created["credential_masked"] == ""
+
+    # 后来更新输入了 key
+    updated = client.patch(
+        f"/api/v1/ai/providers/{pid}",
+        json={"api_key": "sk-late-added-key-8888"},
+        headers=headers,
+    ).json()
+    assert updated["has_api_key"] is True
+    assert updated["masked_api_key"] == "sk-****8888"
+    assert updated["credential_masked"] == "sk-****8888"
 
 
 def test_test_provider_endpoint(client, headers, monkeypatch) -> None:

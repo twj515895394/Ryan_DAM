@@ -32,6 +32,9 @@ const emit = defineEmits<{
   (e: "rename-tag", id: number, name: string): void;
   (e: "delete-tag", id: number, name: string): void;
   (e: "open-settings"): void;
+  (e: "open-ai-workbench"): void;
+  (e: "open-ai-tasks"): void;
+  (e: "open-ai-history"): void;
 }>();
 
 // ── 标签折叠与渐进式展开（优化问题 2）────────────────────────────────────
@@ -199,6 +202,52 @@ function toggleTagSelection(tagId: number): void {
             />
           </div>
         </div>
+      </section>
+
+      <!-- AI 创作专属导航分组 -->
+      <section class="mt-2.5 space-y-0.5">
+        <div class="flex items-center justify-between px-2 pb-0.5 pt-0.5">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-muted/70">AI 创作</span>
+        </div>
+
+        <button
+          type="button"
+          class="group flex h-6 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-ink/90 transition-colors duration-100 hover:bg-black/5"
+          title="打开 AI 图像创作工作台"
+          @click="emit('open-ai-workbench')"
+        >
+          <SidebarIcon
+            name="star"
+            class="h-3.5 w-3.5 text-accent group-hover:text-blue-700"
+          />
+          <span class="min-w-0 flex-1 truncate">AI 创作</span>
+        </button>
+
+        <button
+          type="button"
+          class="group flex h-6 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-ink/90 transition-colors duration-100 hover:bg-black/5"
+          title="打开 AI 任务中心"
+          @click="emit('open-ai-tasks')"
+        >
+          <SidebarIcon
+            name="task"
+            class="h-3.5 w-3.5 text-muted group-hover:text-ink/80"
+          />
+          <span class="min-w-0 flex-1 truncate">AI 任务</span>
+        </button>
+
+        <button
+          type="button"
+          class="group flex h-6 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-ink/90 transition-colors duration-100 hover:bg-black/5"
+          title="打开 AI 生成历史与多维检索"
+          @click="emit('open-ai-history')"
+        >
+          <SidebarIcon
+            name="clock"
+            class="h-3.5 w-3.5 text-muted group-hover:text-ink/80"
+          />
+          <span class="min-w-0 flex-1 truncate">AI 历史</span>
+        </button>
       </section>
 
       <!-- 外部目录关联 -->

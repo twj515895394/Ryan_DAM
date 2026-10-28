@@ -565,6 +565,9 @@ onUnmounted(() => {
       @rename-tag="(id, name) => (dialog = { kind: 'tag-rename', tagId: id, initial: name })"
       @delete-tag="(id, name) => askDeleteTag(id, name)"
       @open-settings="showSettingsDialog = true"
+      @open-ai-workbench="showAiWorkbench = true"
+      @open-ai-tasks="showAiTaskCenter = true"
+      @open-ai-history="openAiHistory"
     />
 
     <!-- 侧栏宽度调节把手：指针拖拽 1:1 跟手，键盘 ←/→ 步进、Home 复位、双击复位 -->
@@ -595,9 +598,6 @@ onUnmounted(() => {
         @empty-trash="askEmptyTrash"
         @start-import="startImport"
         @start-folder-import="startFolderImport"
-        @open-ai-tasks="showAiTaskCenter = true"
-        @open-ai-workbench="showAiWorkbench = true"
-        @open-ai-history="openAiHistory"
       />
 
       <!-- 回收站视图子组件（行单击打开沉浸式预览） -->

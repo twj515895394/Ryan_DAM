@@ -40,6 +40,7 @@ def _to_provider_response(instance: AiProviderInstance) -> ProviderResponse:
         enabled=instance.enabled,
         has_api_key=bool(secret),
         masked_api_key=masked,
+        credential_masked=masked,
         settings=settings_dict,
         created_at=instance.created_at,
         updated_at=instance.updated_at,
@@ -134,7 +135,9 @@ def update_provider(db: Session, provider_id: int, payload: ProviderUpdatePayloa
 
     if payload.api_key is not None and payload.api_key.strip():
         # Update encrypted credential
-        CredentialManager.save_credential(payload.api_key.strip(), ref_id=instance.credential_ref)
+        instance.credential_ref = CredentialManager.save_credential(
+            payload.api_key.strip(), ref_id=instance.credential_ref
+        )
 
     db.commit()
     db.refresh(instance)

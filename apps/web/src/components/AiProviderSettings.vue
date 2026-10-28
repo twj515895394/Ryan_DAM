@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { api } from "../api/client";
 import type {
   AiCapabilityType,
@@ -37,6 +37,11 @@ const form = ref<AiProviderCreatePayload>({
 });
 const saving = ref(false);
 const saveError = ref<string | null>(null);
+
+const currentEditingProvider = computed(() => {
+  if (editingId.value === null) return null;
+  return providers.value.find((p) => p.id === editingId.value) || null;
+});
 
 // 测试状态
 const testingId = ref<number | null>(null);
@@ -131,6 +136,7 @@ async function handleSave(): Promise<void> {
     }
     showEditor.value = false;
     await loadProviders();
+    notify("success", editingId.value === null ? "AI 连接已创建" : "AI 连接已更新");
   } catch (err: any) {
     saveError.value = err.message || "保存失败";
   } finally {
@@ -262,7 +268,7 @@ onMounted(() => {
               {{ p.base_url }}
             </p>
             <div class="mt-1 flex items-center gap-2 text-[10.5px] text-muted">
-              <span>密钥：{{ p.credential_masked ? p.credential_masked : "未设置" }}</span>
+              <span>密钥：{{ (p.masked_api_key || p.credential_masked) || (p.has_api_key ? "已配置 (加密存储)" : "未设置") }}</span>
             </div>
           </div>
 
@@ -365,13 +371,21 @@ onMounted(() => {
         </div>
 
         <div>
-          <label class="block text-[11px] font-medium text-ink/80 mb-1">
-            API Key {{ editingId !== null ? "（若不修改请留空）" : "" }}
-          </label>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-[11px] font-medium text-ink/80">
+              API Key {{ editingId !== null ? "（若不修改请留空）" : "" }}
+            </label>
+            <span
+              v-if="editingId !== null && (currentEditingProvider?.masked_api_key || currentEditingProvider?.credential_masked || currentEditingProvider?.has_api_key)"
+              class="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/50"
+            >
+              已加密配置: {{ currentEditingProvider.masked_api_key || currentEditingProvider.credential_masked || "已保存" }}
+            </span>
+          </div>
           <input
             v-model="form.api_key"
             type="password"
-            placeholder="sk-..."
+            :placeholder="editingId !== null && (currentEditingProvider?.has_api_key || currentEditingProvider?.masked_api_key) ? '留空表示保持现有密钥，输入新 Key 则覆盖更新' : 'sk-...'"
             class="w-full rounded-md border border-line bg-white px-2.5 py-1.5 font-mono text-xs text-ink outline-none focus:border-accent"
           />
         </div>

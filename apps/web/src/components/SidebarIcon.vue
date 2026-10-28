@@ -23,7 +23,8 @@ defineProps<{
     | "pin"
     | "star"
     | "clock"
-    | "image";
+    | "image"
+    | "task";
 }>();
 </script>
 
@@ -181,6 +182,12 @@ defineProps<{
       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
       <circle cx="8.5" cy="8.5" r="1.5" />
       <polyline points="21 15 16 10 5 21" />
+    </template>
+
+    <!-- 任务中心 / 列表勾选 -->
+    <template v-else-if="name === 'task'">
+      <path d="m9 11 3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
     </template>
   </svg>
 </template>

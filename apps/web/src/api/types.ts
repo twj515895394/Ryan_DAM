@@ -210,7 +210,9 @@ export interface AiProviderInstance {
   family: "openai_compatible" | "openai_native" | "gemini_native";
   name: string;
   base_url: string;
-  credential_masked: string;
+  has_api_key?: boolean;
+  masked_api_key?: string;
+  credential_masked?: string;
   enabled: boolean;
   settings?: Record<string, any> | null;
   created_at: string;

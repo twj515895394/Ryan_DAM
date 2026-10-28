@@ -11,7 +11,7 @@ class ProviderCreatePayload(BaseModel):
     name: str = Field(min_length=1, max_length=128, description="Provider 实例名称")
     family: ProviderFamily = Field(default="openai_compatible", description="Provider 家族类型")
     base_url: str = Field(min_length=1, max_length=512, description="API 服务端点 Base URL")
-    api_key: str = Field(min_length=1, max_length=1024, description="API Key 访问密钥（存入安全存储，不入库）")
+    api_key: str = Field(default="", max_length=1024, description="API Key 访问密钥（存入安全存储，不入库）")
     enabled: bool = Field(default=True, description="是否启用")
     settings: dict[str, Any] | None = Field(default=None, description="非敏感配置扩展参数")
 
@@ -20,7 +20,7 @@ class ProviderUpdatePayload(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     family: ProviderFamily | None = Field(default=None)
     base_url: str | None = Field(default=None, min_length=1, max_length=512)
-    api_key: str | None = Field(default=None, min_length=1, max_length=1024, description="留空则保持现有 Key")
+    api_key: str | None = Field(default=None, max_length=1024, description="留空则保持现有 Key")
     enabled: bool | None = Field(default=None)
     settings: dict[str, Any] | None = Field(default=None)
 
@@ -35,6 +35,7 @@ class ProviderResponse(BaseModel):
     enabled: bool
     has_api_key: bool
     masked_api_key: str
+    credential_masked: str = Field(default="", description="兼容前端字段命名")
     settings: dict[str, Any] | None = None
     created_at: datetime
     updated_at: datetime
