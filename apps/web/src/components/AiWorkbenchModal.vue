@@ -162,23 +162,15 @@ watch(
         creationMode.value = "image_generate";
       }
 
-      if (props.initialPrompt !== undefined) {
-        prompt.value = props.initialPrompt;
-      }
-      if (props.initialPresetId !== undefined) {
-        selectedPresetId.value = props.initialPresetId;
-      }
-      if (props.initialModelId !== undefined) {
-        selectedModelId.value = props.initialModelId;
-      }
+      if (props.initialPrompt !== undefined) prompt.value = props.initialPrompt;
+      if (props.initialPresetId !== undefined) selectedPresetId.value = props.initialPresetId;
+      if (props.initialModelId !== undefined) selectedModelId.value = props.initialModelId;
       if (props.initialParams) {
         if (props.initialParams.size) selectedSize.value = props.initialParams.size;
         if (props.initialParams.aspect_ratio) selectedAspectRatio.value = props.initialParams.aspect_ratio;
         if (props.initialParams.quality) selectedQuality.value = props.initialParams.quality;
         if (props.initialParams.style) selectedStyle.value = props.initialParams.style;
-        if (props.initialParams.denoising_strength !== undefined) {
-          denoisingStrength.value = props.initialParams.denoising_strength;
-        }
+        if (props.initialParams.denoising_strength !== undefined) denoisingStrength.value = props.initialParams.denoising_strength;
         if (props.initialParams.seed !== undefined) {
           seed.value = props.initialParams.seed;
           showAdvanced.value = true;
@@ -188,10 +180,10 @@ watch(
           showAdvanced.value = true;
         }
       }
-      if (props.initialReferences && props.initialReferences.length > 0) {
+      if (props.initialReferences?.length) {
         references.value = [...props.initialReferences];
       }
-      if (props.initialReferenceAssetIds && props.initialReferenceAssetIds.length > 0) {
+      if (props.initialReferenceAssetIds?.length) {
         for (const aid of props.initialReferenceAssetIds) {
           if (!references.value.some((r) => r.source_kind === "asset" && r.source_id === String(aid))) {
             references.value.push({
@@ -228,11 +220,9 @@ async function loadModels(): Promise<void> {
       try {
         const bindings = await api.listDefaultBindings();
         const genBinding = bindings.find((b) => b.capability === "image_generate");
-        if (genBinding && genModels.some((m) => m.id === genBinding.model_profile_id)) {
-          selectedModelId.value = genBinding.model_profile_id;
-        } else {
-          selectedModelId.value = genModels[0].id;
-        }
+        selectedModelId.value = (genBinding && genModels.some((m) => m.id === genBinding.model_profile_id))
+          ? genBinding.model_profile_id
+          : genModels[0].id;
       } catch {
         selectedModelId.value = genModels[0].id;
       }
@@ -244,10 +234,7 @@ async function loadModels(): Promise<void> {
   }
 }
 
-const showAllPresets = ref(false);
-
 const filteredPresets = computed(() => {
-  if (showAllPresets.value) return presets.value;
   return presets.value.filter(
     (p) => !p.creation_mode || p.creation_mode === creationMode.value
   );
@@ -285,9 +272,7 @@ function selectPreset(id: number | null): void {
     return;
   }
   selectedPresetId.value = id;
-  if (id) {
-    applyPresetDefaults(id);
-  }
+  if (id) applyPresetDefaults(id);
 }
 
 function applyPresetDefaults(presetId: number): void {
