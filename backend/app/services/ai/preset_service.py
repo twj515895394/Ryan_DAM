@@ -268,24 +268,33 @@ async def optimize_prompt(
     # 3. 构建 System Prompt
     lang = (request.language or "zh").strip().lower()
     if lang == "en":
-        lang_rule = "3. Output ONLY the refined English prompt. Never include any greetings, quotes, markdown wrappers, or conversational explanations."
+        system_rules = (
+            "You are an expert AI image prompt engineer. Your job is to refine and expand the user's raw prompt "
+            "into a descriptive, vivid, and aesthetically superior text-to-image prompt.\n"
+            "Requirements:\n"
+            "1. Faithfully preserve the user's core subjects, actions, and intent.\n"
+            "2. Enrich with specific details: subject appearance, environment/background, lighting/mood, camera framing/angle, and visual style.\n"
+            "3. Output ONLY the refined English prompt. Never include any greetings, quotes, markdown wrappers, or conversational explanations."
+        )
         user_prompt_instruction = f"Please optimize this prompt for text-to-image generation (output in English):\n{raw_prompt}"
     else:
-        lang_rule = "3. 严格输出润色后的高质量中文提示词（可适度融合专业生图术语）。严禁输出任何问候语、说明前缀（如'润色后的提示词：'）、引号、Markdown 标记或解释性文字，直接输出提示词正文本体。"
-        user_prompt_instruction = f"请将以下生图提示词进行专业扩写与美学润色（请直接输出中文润色版本）：\n{raw_prompt}"
+        system_rules = (
+            "你是一位顶尖的 AI 图像提示词（Prompt）专家与视觉美学导师。你的核心职责是将用户的简短想法或原始提示词，"
+            "扩写润色为画面生动、光影细腻、细节丰富的高品质生图提示词。\n"
+            "核心要求：\n"
+            "1. 忠实还原用户的核心画面主体、动作与意图，严禁擅自偏离主题。\n"
+            "2. 深度扩充视觉细节：主体外观面貌、服饰材质、所处空间与背景环境、光影质感、镜头景深构图与艺术审美倾向。\n"
+            "3. 【绝对语言约束】：必须且仅使用【中文】输出润色后的提示词正文！坚决禁止输出纯英文段落（专业生图参数或特定专业英文词汇如 8k/Fujifilm 可合理保留，但全篇必须以中文自然叙述为主）。\n"
+            "4. 严禁输出任何问候语、说明前缀（如'润色后的提示词：'）、引号、Markdown 标记或解释性文字，直接输出可直接用于生图的提示词正文本体。"
+        )
+        user_prompt_instruction = f"请将以下生图提示词进行专业扩写与美学润色（严格要求使用中文输出）：\n{raw_prompt}"
 
-    system_rules = (
-        "You are an expert AI image prompt engineer. Your job is to refine and expand the user's raw prompt "
-        "into a descriptive, vivid, and aesthetically superior text-to-image prompt.\n"
-        "Requirements:\n"
-        "1. Faithfully preserve the user's core subjects, actions, and intent.\n"
-        "2. Enrich with specific details: subject appearance, environment/background, lighting/mood, camera framing/angle, and visual style.\n"
-        f"{lang_rule}"
-    )
     if preset and preset.system_rules:
-        system_rules += f"\n\nStyle & Rule Guidance:\n{preset.system_rules}"
+        prefix = "Style & Rule Guidance:" if lang == "en" else "预设风格与美学指引："
+        system_rules += f"\n\n{prefix}\n{preset.system_rules}"
     if request.custom_instruction:
-        system_rules += f"\n\nUser Custom Instruction:\n{request.custom_instruction}"
+        prefix = "User Custom Instruction:" if lang == "en" else "用户自定义要求："
+        system_rules += f"\n\n{prefix}\n{request.custom_instruction}"
 
     messages = [
         {"role": "system", "content": system_rules},
