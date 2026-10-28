@@ -244,10 +244,34 @@ const remoteModelOptions = computed<AppleSelectOption[]>(() => {
 });
 
 const adapterOptions: AppleSelectOption[] = [
-  { value: "openai_standard", label: "OpenAI 标准生图 (/images/generations)", badge: "生图", badgeColor: "emerald" },
-  { value: "openai_chat_markdown", label: "OpenAI Chat 嵌入图 (Gemini/第三方 Markdown)", badge: "Chat图", badgeColor: "blue" },
-  { value: "gemini_standard", label: "Gemini 原生生图协议", badge: "原生", badgeColor: "amber" },
-  { value: "custom", label: "通用自定义适配器", badge: "扩展", badgeColor: "zinc" }
+  {
+    value: "openai_standard",
+    label: "OpenAI 标准协议 (通用对话 + /images/generations)",
+    subLabel: "对话与反推走 /chat/completions，生图走标准 /images/generations",
+    badge: "通用推荐",
+    badgeColor: "emerald"
+  },
+  {
+    value: "openai_chat_markdown",
+    label: "Chat 嵌入图协议 (Markdown 图片链接提取)",
+    subLabel: "适用于通过 /chat/completions 对话并在回复中提取图片链接的模型",
+    badge: "Chat出图",
+    badgeColor: "blue"
+  },
+  {
+    value: "gemini_standard",
+    label: "Gemini 原生协议 (Google 原生 Imagen/Vision)",
+    subLabel: "调用 Google Gemini 原生 REST 端点",
+    badge: "原生",
+    badgeColor: "amber"
+  },
+  {
+    value: "custom",
+    label: "通用自定义适配器",
+    subLabel: "用于扩展其它非标接口",
+    badge: "扩展",
+    badgeColor: "zinc"
+  }
 ];
 
 function getDefaultModelOptions(capKey: string): AppleSelectOption[] {
@@ -599,7 +623,10 @@ onMounted(() => {
         </div>
 
         <div>
-          <label class="block text-[11px] font-medium text-ink/80 mb-1">适配器协议 (Adapter)</label>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-[11px] font-medium text-ink/80">适配器协议 (Adapter)</label>
+            <span class="text-[10.5px] text-muted">对话/反推默认走 /chat/completions</span>
+          </div>
           <AppleSelect
             v-model="modelForm.adapter_kind"
             :options="adapterOptions"
