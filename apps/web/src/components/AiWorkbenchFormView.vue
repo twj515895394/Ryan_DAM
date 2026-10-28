@@ -11,9 +11,11 @@ import SidebarIcon from "./SidebarIcon.vue";
 import AppleSelect, { type AppleSelectOption } from "./AppleSelect.vue";
 import { usePromptOptimize } from "../composables/usePromptOptimize";
 import {
+  DEFAULT_AI_RESOLUTIONS,
   findBestRatioForSize,
   getAspectRatioHint,
   getAspectRatioLabel,
+  getResolutionMeta,
   matchSizeRatio,
   STANDARD_ASPECT_RATIOS
 } from "../utils/aiDimensions";
@@ -101,7 +103,7 @@ const supportedSizes = computed(() => {
   if (caps?.supported_sizes && caps.supported_sizes.length > 0) {
     return caps.supported_sizes as string[];
   }
-  return ["1024x1024", "1024x768", "768x1024", "1280x720", "720x1280"];
+  return [...DEFAULT_AI_RESOLUTIONS];
 });
 
 const supportedAspectRatios = computed(() => {
@@ -122,6 +124,28 @@ const supportedAspectRatios = computed(() => {
   return [...STANDARD_ASPECT_RATIOS];
 });
 
+const aspectRatioOptions = computed<AppleSelectOption[]>(() =>
+  supportedAspectRatios.value.map((ar) => {
+    const badgeColor: "blue" | "rose" | "emerald" | "amber" | "zinc" =
+      ar === "16:9" || ar === "21:9"
+        ? "blue"
+        : ar === "9:16"
+          ? "rose"
+          : ar === "1:1"
+            ? "emerald"
+            : ar === "4:3"
+              ? "amber"
+              : "zinc";
+    return {
+      value: ar,
+      label: `${ar} ${getAspectRatioLabel(ar)}`,
+      subLabel: getAspectRatioHint(ar),
+      badge: ar,
+      badgeColor
+    };
+  })
+);
+
 const filteredSizes = computed(() => {
   const list = supportedSizes.value.filter((sz) =>
     matchSizeRatio(sz, selectedAspectRatio.value)
@@ -131,26 +155,27 @@ const filteredSizes = computed(() => {
 
 const sizeOptions = computed<AppleSelectOption[]>(() =>
   filteredSizes.value.map((sz) => {
-    const r = findBestRatioForSize(sz, supportedAspectRatios.value);
-    const badgeColor: "blue" | "rose" | "emerald" | "amber" | "zinc" =
-      r === "16:9" ? "blue" : r === "9:16" ? "rose" : r === "1:1" ? "emerald" : r === "4:3" ? "amber" : "zinc";
+    const meta = getResolutionMeta(sz);
     return {
       value: sz,
       label: sz,
-      subLabel: r ? `${getAspectRatioLabel(r)} (${r})` : undefined,
-      badge: r || undefined,
-      badgeColor
+      subLabel: meta.subLabel,
+      badge: meta.badge,
+      badgeColor: meta.badgeColor
     };
   })
 );
 
-function selectAspectRatio(ar: string): void {
-  selectedAspectRatio.value = ar;
-  const matched = supportedSizes.value.filter((sz) => matchSizeRatio(sz, ar));
-  if (matched.length > 0 && !matchSizeRatio(selectedSize.value, ar)) {
-    selectedSize.value = matched[0];
+// 比例与尺寸双向联动
+watch(selectedAspectRatio, (newRatio) => {
+  if (!newRatio) return;
+  const matched = supportedSizes.value.filter((sz) => matchSizeRatio(sz, newRatio));
+  if (matched.length > 0 && !matchSizeRatio(selectedSize.value, newRatio)) {
+    // 优先匹配 1080P 或 1K 常用档位，若无则使用首选
+    const preferred = matched.find((s) => s.includes("1080") || s.includes("1024")) || matched[0];
+    selectedSize.value = preferred;
   }
-}
+});
 
 watch(selectedSize, (newSize) => {
   if (!newSize) return;
@@ -529,46 +554,53 @@ function handleFormSubmit(): void {
         </div>
       </div>
 
-      <!-- 5. 画面规格与动态参数配置 -->
-      <div class="border-t border-line/60 pt-3 space-y-3">
-        <!-- 比例胶囊选择器 -->
-        <div>
-          <div class="flex items-center justify-between pb-1.5">
-            <label class="text-xs font-semibold text-ink">画面宽高比例 (Aspect Ratio)</label>
-            <span class="text-[11px] text-muted font-mono">
-              {{ selectedAspectRatio }} · {{ getAspectRatioHint(selectedAspectRatio) }}
-            </span>
-          </div>
-          <div class="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
-            <button
-              v-for="ar in supportedAspectRatios"
-              :key="ar"
-              type="button"
-              class="flex flex-col items-center justify-center rounded-xl border py-1.5 px-1 text-center transition active:scale-95"
-              :class="selectedAspectRatio === ar ? 'border-accent bg-accent/10 font-semibold text-accent ring-1 ring-accent' : 'border-line/70 bg-white text-ink/80 hover:border-line'"
-              @click="selectAspectRatio(ar)"
-            >
-              <span class="font-mono text-xs">{{ ar }}</span>
-              <span class="text-[9.5px] text-muted mt-0.5">{{ getAspectRatioLabel(ar) }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 尺寸规格与画质风格 -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <!-- 5. 画面规格与动态参数配置（并排一行，比例与分辨率双下拉框实时联动） -->
+      <div class="border-t border-line/60 pt-3">
+        <div
+          class="grid grid-cols-1 sm:grid-cols-2 gap-3"
+          :class="[
+            supportedQualities.length > 0 && supportedStyles.length > 0
+              ? 'lg:grid-cols-4'
+              : (supportedQualities.length > 0 || supportedStyles.length > 0)
+                ? 'lg:grid-cols-3'
+                : 'sm:grid-cols-2'
+          ]"
+        >
+          <!-- 1. 画面宽高比例下拉框 -->
           <div>
             <div class="flex items-center justify-between pb-1.5">
-              <label class="text-xs font-semibold text-ink">分辨率规格</label>
-              <span class="text-[11px] text-muted font-mono">联动 {{ selectedAspectRatio }}</span>
+              <label class="text-xs font-semibold text-ink">画面宽高比例 (Aspect Ratio)</label>
+              <span class="text-[11px] text-muted font-mono">{{ selectedAspectRatio }}</span>
             </div>
-            <AppleSelect v-model="selectedSize" size="sm" :options="sizeOptions" />
+            <AppleSelect
+              v-model="selectedAspectRatio"
+              size="sm"
+              :options="aspectRatioOptions"
+              placeholder="选择画幅比例…"
+            />
           </div>
 
+          <!-- 2. 分辨率规格下拉框（随着所选比例联动） -->
+          <div>
+            <div class="flex items-center justify-between pb-1.5">
+              <label class="text-xs font-semibold text-ink">分辨率规格 (Resolution)</label>
+              <span class="text-[11px] text-accent font-mono font-medium">联动 {{ selectedAspectRatio }}</span>
+            </div>
+            <AppleSelect
+              v-model="selectedSize"
+              size="sm"
+              :options="sizeOptions"
+              placeholder="选择分辨率…"
+            />
+          </div>
+
+          <!-- 3. 画质选择（若模型支持） -->
           <div v-if="supportedQualities.length > 0">
             <label class="block text-xs font-semibold text-ink pb-1.5">生成画质</label>
             <AppleSelect v-model="selectedQuality" size="sm" :options="qualityOptions" />
           </div>
 
+          <!-- 4. 风格偏好（若模型支持） -->
           <div v-if="supportedStyles.length > 0">
             <label class="block text-xs font-semibold text-ink pb-1.5">风格偏好</label>
             <AppleSelect v-model="selectedStyle" size="sm" :options="styleOptions" />
