@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { api } from "../api/client";
 import type { AiModelProfile, AiReverseTemplate, SingleImageReverseResult } from "../api/types";
 import ConfirmDialog from "./ConfirmDialog.vue";
+import AppleSelect, { type AppleSelectOption } from "./AppleSelect.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -24,6 +25,27 @@ const templates = ref<AiReverseTemplate[]>([]);
 const visionModels = ref<AiModelProfile[]>([]);
 const selectedTemplateId = ref<number | null>(null);
 const selectedModelProfileId = ref<number | null>(null);
+
+const templateOptions = computed<AppleSelectOption[]>(() =>
+  templates.value.map((tpl) => ({
+    value: tpl.id,
+    label: tpl.name,
+    subLabel: tpl.description || undefined,
+    badge: tpl.is_builtin ? "内置" : "自定义",
+    badgeColor: tpl.is_builtin ? "zinc" : "accent"
+  }))
+);
+
+const visionModelOptions = computed<AppleSelectOption[]>(() => [
+  { value: "", label: "默认路由模型", subLabel: "使用全局默认视觉理解模型", badge: "默认", badgeColor: "emerald" },
+  ...visionModels.value.map((m) => ({
+    value: m.id,
+    label: m.name,
+    subLabel: m.model_id,
+    badge: m.adapter_kind,
+    badgeColor: "blue" as const
+  }))
+]);
 
 // 执行反推状态
 const reversing = ref(false);
@@ -148,32 +170,26 @@ async function executeSave(forceOverwrite: boolean): Promise<void> {
           {{ error }}
         </p>
 
-        <!-- 表单参数选择 -->
-        <div class="mt-4 grid grid-cols-2 gap-3 text-xs">
+        <!-- 表单参数选择 (Apple HIG 统一下拉选择器) -->
+        <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           <div>
-            <label class="block font-medium text-ink mb-1">反推模板模式</label>
-            <select
+            <label class="block font-medium text-ink mb-1.5">反推模板模式</label>
+            <AppleSelect
               v-model="selectedTemplateId"
-              class="w-full rounded-xl border border-line bg-white px-3 py-2 text-xs text-ink outline-none focus:border-accent"
-              :disabled="reversing"
-            >
-              <option v-for="tpl in templates" :key="tpl.id" :value="tpl.id">
-                {{ tpl.name }} {{ tpl.is_builtin ? '(内置)' : '' }}
-              </option>
-            </select>
+              :options="templateOptions"
+              :disabled="reversing || loading"
+              placeholder="请选择反推模板"
+            />
           </div>
           <div>
-            <label class="block font-medium text-ink mb-1">视觉理解模型 (Vision)</label>
-            <select
-              v-model="selectedModelProfileId"
-              class="w-full rounded-xl border border-line bg-white px-3 py-2 text-xs text-ink outline-none focus:border-accent"
-              :disabled="reversing"
-            >
-              <option :value="null">默认路由模型</option>
-              <option v-for="m in visionModels" :key="m.id" :value="m.id">
-                {{ m.name }} ({{ m.model_id }})
-              </option>
-            </select>
+            <label class="block font-medium text-ink mb-1.5">视觉理解模型 (Vision)</label>
+            <AppleSelect
+              :model-value="selectedModelProfileId ?? ''"
+              :options="visionModelOptions"
+              :disabled="reversing || loading"
+              placeholder="默认路由模型"
+              @change="(val) => { selectedModelProfileId = val ? Number(val) : null; }"
+            />
           </div>
         </div>
 

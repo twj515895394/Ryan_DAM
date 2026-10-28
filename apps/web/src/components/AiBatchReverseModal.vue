@@ -10,6 +10,7 @@ import type {
 } from "../api/types";
 import SidebarIcon from "./SidebarIcon.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
+import AppleSelect, { type AppleSelectOption } from "./AppleSelect.vue";
 import { notify } from "../stores/library";
 
 const props = defineProps<{
@@ -37,6 +38,16 @@ const visionModels = ref<AiModelProfile[]>([]);
 const selectedTemplateId = ref<number | null>(null);
 const selectedModelProfileId = ref<number | null>(null);
 const customInstruction = ref("");
+
+const visionModelOptions = computed<AppleSelectOption[]>(() =>
+  visionModels.value.map((m) => ({
+    value: m.id,
+    label: m.name,
+    subLabel: m.model_id,
+    badge: m.adapter_kind,
+    badgeColor: "blue" as const
+  }))
+);
 
 // 批量任务轮询与审查数据
 const currentTaskId = ref<string | null>(null);
@@ -309,15 +320,12 @@ async function executeCommit(allowOverwrite: boolean): Promise<void> {
         </div>
 
         <div>
-          <label class="block text-xs font-semibold uppercase tracking-wider text-muted">视觉理解模型</label>
-          <select
+          <label class="block text-xs font-semibold uppercase tracking-wider text-muted mb-2">视觉理解模型</label>
+          <AppleSelect
             v-model="selectedModelProfileId"
-            class="mt-2 w-full rounded-xl border border-line bg-canvas/40 px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-accent focus:bg-white focus:ring-1 focus:ring-accent"
-          >
-            <option v-for="m in visionModels" :key="m.id" :value="m.id">
-              {{ m.name }} ({{ m.adapter_kind }})
-            </option>
-          </select>
+            :options="visionModelOptions"
+            placeholder="请选择视觉理解模型"
+          />
         </div>
 
         <div>

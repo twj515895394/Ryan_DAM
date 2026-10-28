@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import SidebarIcon from "./SidebarIcon.vue";
 import AiProviderSettings from "./AiProviderSettings.vue";
 import AiModelSettings from "./AiModelSettings.vue";
+import AiTemplateSettings from "./AiTemplateSettings.vue";
 import { library } from "../stores/library";
 import type { AiProviderInstance } from "../api/types";
 
@@ -19,7 +20,7 @@ const emit = defineEmits<{
   (e: "open-stage0"): void;
 }>();
 
-const activeTab = ref<"general" | "providers" | "models">("general");
+const activeTab = ref<"general" | "providers" | "models" | "templates">("general");
 const cachedProviders = ref<AiProviderInstance[]>([]);
 
 function onProvidersLoaded(list: AiProviderInstance[]): void {
@@ -85,6 +86,14 @@ const rootStateLabel = computed(() => {
             >
               模型与默认路由 (Models)
             </button>
+            <button
+              type="button"
+              class="flex-1 rounded-md py-1 text-xs font-medium transition-all"
+              :class="activeTab === 'templates' ? 'bg-white text-ink shadow-2xs' : 'text-muted hover:text-ink'"
+              @click="activeTab = 'templates'"
+            >
+              模板与预设 (Templates)
+            </button>
           </div>
         </div>
 
@@ -148,6 +157,13 @@ const rootStateLabel = computed(() => {
           <div v-else-if="activeTab === 'models'">
             <AiModelSettings
               :providers="cachedProviders"
+              :on-ask-confirm="onAskConfirm"
+            />
+          </div>
+
+          <!-- Tab 4: 提示词模板与创作风格预设 -->
+          <div v-else-if="activeTab === 'templates'">
+            <AiTemplateSettings
               :on-ask-confirm="onAskConfirm"
             />
           </div>

@@ -10,7 +10,7 @@ import type {
 } from "../api/types";
 import AiReferencePickerModal, { type SelectedReferenceItem } from "./AiReferencePickerModal.vue";
 import SidebarIcon from "./SidebarIcon.vue";
-import AppleSelect from "./AppleSelect.vue";
+import AppleSelect, { type AppleSelectOption } from "./AppleSelect.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -29,7 +29,7 @@ const emit = defineEmits<{
   (e: "task-created", task: AiTaskSummary): void;
 }>();
 
-// ── 基础状态 ──────────────────────────────────────────────────────────
+// 基础状态
 const creationMode = ref<"image_generate" | "image_edit">("image_generate");
 const loadingModels = ref(false);
 const loadingPresets = ref(false);
@@ -38,7 +38,6 @@ const errorMessage = ref("");
 
 const models = ref<AiModelProfile[]>([]);
 const selectedModelId = ref<number | null>(null);
-
 const presets = ref<AiCreationPreset[]>([]);
 const selectedPresetId = ref<number | null>(null);
 
@@ -54,11 +53,9 @@ const generateCount = ref(1);
 const seed = ref<number | null>(null);
 const showAdvanced = ref(false);
 
-// 参考图（V2-12 多源参考图管理）
+// 参考图与智能润色
 const showRefPicker = ref(false);
 const references = ref<SelectedReferenceItem[]>([]);
-
-// 提示词智能润色状态 (V2-11)
 const optimizing = ref(false);
 const lastOptimizedResult = ref<PromptOptimizeResult | null>(null);
 const originalPromptBeforeOpt = ref<string | null>(null);
@@ -118,9 +115,34 @@ const supportedSizes = computed(() => {
   return ["1024x1024", "1024x768", "768x1024", "1280x720", "720x1280"];
 });
 
-const activePreset = computed(() => {
-  return presets.value.find((p) => p.id === selectedPresetId.value) || null;
-});
+const sizeOptions = computed<AppleSelectOption[]>(() =>
+  supportedSizes.value.map((sz) => ({ value: sz, label: sz }))
+);
+const qualityOptions = computed<AppleSelectOption[]>(() =>
+  supportedQualities.value.map((q) => ({
+    value: q,
+    label: q === "hd" ? "超清 (HD)" : q === "standard" ? "标准 (Standard)" : q,
+    badge: q === "hd" ? "高质量" : "标准",
+    badgeColor: q === "hd" ? "accent" : "zinc"
+  }))
+);
+const styleOptions = computed<AppleSelectOption[]>(() => [
+  { value: "", label: "默认风格", badge: "默认", badgeColor: "zinc" },
+  ...supportedStyles.value.map((st) => ({
+    value: st,
+    label: st === "vivid" ? "生动鲜明 (Vivid)" : st === "natural" ? "自然写实 (Natural)" : st,
+    badge: st === "vivid" ? "色彩浓郁" : "自然真实",
+    badgeColor: (st === "vivid" ? "amber" : "emerald") as "amber" | "emerald"
+  }))
+]);
+
+const refRoleOptions: AppleSelectOption[] = [
+  { value: "reference", label: "综合参考", badge: "综合", badgeColor: "zinc" },
+  { value: "style", label: "风格参考", badge: "风格", badgeColor: "accent" },
+  { value: "character", label: "角色主体", badge: "主体", badgeColor: "blue" },
+  { value: "composition", label: "构图布局", badge: "构图", badgeColor: "amber" }
+];
+const activePreset = computed(() => presets.value.find((p) => p.id === selectedPresetId.value) || null);
 
 // ── 生命周期与初始化 ──────────────────────────────────────────────────
 watch(
@@ -585,15 +607,13 @@ async function handleSubmit(): Promise<void> {
                         {{ refItem.source_kind === 'asset' ? '主库' : refItem.source_kind === 'history_result' ? '历史' : '本地' }}
                       </span>
 
-                      <select
-                        v-model="refItem.role"
-                        class="h-6 rounded border border-line bg-white px-1.5 text-[11px] text-ink outline-none transition focus:border-accent"
-                      >
-                        <option value="reference">综合参考</option>
-                        <option value="style">风格参考</option>
-                        <option value="character">角色主体</option>
-                        <option value="composition">构图布局</option>
-                      </select>
+                      <div class="w-28">
+                        <AppleSelect
+                          v-model="refItem.role"
+                          size="sm"
+                          :options="refRoleOptions"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -633,41 +653,31 @@ async function handleSubmit(): Promise<void> {
 
               <div>
                 <label class="block text-xs font-semibold text-ink pb-1.5">分辨率规格</label>
-                <select
+                <AppleSelect
                   v-model="selectedSize"
-                  class="h-9 w-full rounded-xl border border-line bg-white px-3 text-xs text-ink outline-none transition focus:border-accent"
-                >
-                  <option v-for="sz in supportedSizes" :key="sz" :value="sz">
-                    {{ sz }}
-                  </option>
-                </select>
+                  size="sm"
+                  :options="sizeOptions"
+                />
               </div>
 
               <!-- 动态参数：画质选项（如 DALL-E 3 standard/hd） -->
               <div v-if="supportedQualities.length > 0">
                 <label class="block text-xs font-semibold text-ink pb-1.5">生成画质</label>
-                <select
+                <AppleSelect
                   v-model="selectedQuality"
-                  class="h-9 w-full rounded-xl border border-line bg-white px-3 text-xs text-ink outline-none transition focus:border-accent"
-                >
-                  <option v-for="q in supportedQualities" :key="q" :value="q">
-                    {{ q === 'hd' ? '超清 (HD)' : q === 'standard' ? '标准 (Standard)' : q }}
-                  </option>
-                </select>
+                  size="sm"
+                  :options="qualityOptions"
+                />
               </div>
 
               <!-- 动态参数：风格倾向（如 DALL-E 3 vivid/natural） -->
               <div v-if="supportedStyles.length > 0">
                 <label class="block text-xs font-semibold text-ink pb-1.5">风格偏好</label>
-                <select
+                <AppleSelect
                   v-model="selectedStyle"
-                  class="h-9 w-full rounded-xl border border-line bg-white px-3 text-xs text-ink outline-none transition focus:border-accent"
-                >
-                  <option value="">默认风格</option>
-                  <option v-for="st in supportedStyles" :key="st" :value="st">
-                    {{ st === 'vivid' ? '生动鲜明 (Vivid)' : st === 'natural' ? '自然写实 (Natural)' : st }}
-                  </option>
-                </select>
+                  size="sm"
+                  :options="styleOptions"
+                />
               </div>
             </div>
 

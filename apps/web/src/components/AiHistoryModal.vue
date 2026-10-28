@@ -6,6 +6,7 @@ import { library, notify } from "../stores/library";
 import { useFolderOptions } from "../composables/useFolderOptions";
 import SidebarIcon from "./SidebarIcon.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
+import AppleSelect, { type AppleSelectOption } from "./AppleSelect.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -27,6 +28,33 @@ const queryText = ref("");
 const selectedTaskType = ref<string>("");
 const selectedModelId = ref<number | "">("");
 const filterImported = ref<"all" | "imported" | "unimported">("all");
+
+const taskTypeOptions: AppleSelectOption[] = [
+  { value: "", label: "全部任务类型" },
+  { value: "txt2img", label: "文生图 (txt2img)", badge: "生图", badgeColor: "emerald" },
+  { value: "img2img", label: "图生图 (img2img)", badge: "参考", badgeColor: "blue" },
+  { value: "image_edit", label: "图像扩展/编辑", badge: "编辑", badgeColor: "amber" }
+];
+
+const modelFilterOptions = computed<AppleSelectOption[]>(() => [
+  { value: "", label: "全部模型 Profile" },
+  ...models.value.map((m) => ({
+    value: m.id,
+    label: m.name,
+    subLabel: m.model_id
+  }))
+]);
+
+const folderSelectOptions = computed<AppleSelectOption[]>(() =>
+  allFolderGroups.value.flatMap((g) =>
+    g.options.map((opt) => ({
+      value: opt.id,
+      label: opt.label,
+      badge: g.label,
+      badgeColor: "zinc" as const
+    }))
+  )
+);
 
 const models = ref<AiModelProfile[]>([]);
 const results = ref<AiResultWithTask[]>([]);
@@ -353,27 +381,25 @@ watch(
             </button>
           </div>
 
-          <!-- 任务类型 -->
-          <select
-            v-model="selectedTaskType"
-            class="h-8 rounded-lg border border-line/80 bg-white px-2.5 text-xs text-ink focus:border-accent focus:outline-none"
-          >
-            <option value="">全部任务类型</option>
-            <option value="txt2img">文生图 (txt2img)</option>
-            <option value="img2img">图生图 (img2img)</option>
-            <option value="image_edit">图像扩展/编辑</option>
-          </select>
+          <!-- 任务类型 (AppleSelect) -->
+          <div class="w-36 shrink-0">
+            <AppleSelect
+              v-model="selectedTaskType"
+              size="sm"
+              :options="taskTypeOptions"
+              placeholder="全部任务类型"
+            />
+          </div>
 
-          <!-- 模型筛选 -->
-          <select
-            v-model="selectedModelId"
-            class="h-8 rounded-lg border border-line/80 bg-white px-2.5 text-xs text-ink focus:border-accent focus:outline-none"
-          >
-            <option value="">全部模型 Profile</option>
-            <option v-for="m in models" :key="m.id" :value="m.id">
-              {{ m.name }}
-            </option>
-          </select>
+          <!-- 模型筛选 (AppleSelect) -->
+          <div class="w-44 shrink-0">
+            <AppleSelect
+              v-model="selectedModelId"
+              size="sm"
+              :options="modelFilterOptions"
+              placeholder="全部模型 Profile"
+            />
+          </div>
 
           <!-- 入库状态 -->
           <div class="flex rounded-lg border border-line/80 bg-canvas/60 p-0.5 text-xs">
@@ -646,16 +672,14 @@ watch(
             <!-- 入库目标目录选择 -->
             <div v-if="!activeDetailResult.imported_asset_id" class="space-y-1.5">
               <label class="text-xs font-semibold text-ink">入库目标目录</label>
-              <select
+              <AppleSelect
                 v-model="singleImportFolderId"
-                class="w-full h-8 rounded-lg border border-line/80 bg-white px-2 text-xs text-ink focus:border-accent focus:outline-none"
-              >
-                <optgroup v-for="g in allFolderGroups" :key="g.id" :label="g.label">
-                  <option v-for="opt in g.options" :key="opt.id" :value="opt.id">
-                    {{ opt.label }}
-                  </option>
-                </optgroup>
-              </select>
+                size="sm"
+                searchable
+                :options="folderSelectOptions"
+                placeholder="-- 请选择入库目标目录 --"
+                search-placeholder="搜索目录名称…"
+              />
             </div>
           </div>
 
@@ -708,16 +732,13 @@ watch(
 
         <div>
           <label class="block text-xs font-medium text-ink mb-1.5">选择目录</label>
-          <select
+          <AppleSelect
             v-model="targetFolderId"
-            class="w-full h-9 rounded-xl border border-line/80 bg-white px-3 text-xs text-ink focus:border-accent focus:outline-none"
-          >
-            <optgroup v-for="g in allFolderGroups" :key="g.id" :label="g.label">
-              <option v-for="opt in g.options" :key="opt.id" :value="opt.id">
-                {{ opt.label }}
-              </option>
-            </optgroup>
-          </select>
+            searchable
+            :options="folderSelectOptions"
+            placeholder="-- 请选择目标目录 --"
+            search-placeholder="搜索目录名称…"
+          />
         </div>
 
         <div class="flex items-center justify-end gap-2 pt-2">

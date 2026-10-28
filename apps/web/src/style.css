@@ -17,3 +17,27 @@ html, body, #app { min-width: 960px; min-height: 100%; margin: 0; }
 body { min-height: 100vh; }
 button { font: inherit; }
 ::selection { background: rgba(37, 99, 235, 0.16); }
+
+/* Apple HIG 规范无侵入轻量悬浮滚动条 (Anti-Slop) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+}
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.32);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
