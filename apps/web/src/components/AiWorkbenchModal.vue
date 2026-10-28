@@ -9,8 +9,17 @@ import type {
   SubmitImageGeneratePayload
 } from "../api/types";
 import AiReferencePickerModal, { type SelectedReferenceItem } from "./AiReferencePickerModal.vue";
+import AiWorkbenchAdvancedDrawer from "./AiWorkbenchAdvancedDrawer.vue";
 import SidebarIcon from "./SidebarIcon.vue";
 import AppleSelect, { type AppleSelectOption } from "./AppleSelect.vue";
+import { usePromptOptimize } from "../composables/usePromptOptimize";
+import {
+  findBestRatioForSize,
+  getAspectRatioHint,
+  getAspectRatioLabel,
+  matchSizeRatio,
+  STANDARD_ASPECT_RATIOS
+} from "../utils/aiDimensions";
 
 const props = defineProps<{
   open: boolean;
@@ -51,15 +60,19 @@ const selectedStyle = ref("");
 const denoisingStrength = ref<number | null>(0.7);
 const generateCount = ref(1);
 const seed = ref<number | null>(null);
-const showAdvanced = ref(false);
 
 // 参考图与智能润色
 const showRefPicker = ref(false);
 const references = ref<SelectedReferenceItem[]>([]);
-const optimizing = ref(false);
-const lastOptimizedResult = ref<PromptOptimizeResult | null>(null);
-const originalPromptBeforeOpt = ref<string | null>(null);
-const optimizeError = ref("");
+const {
+  optimizing,
+  optimizeError,
+  lastOptimizedResult,
+  originalPromptBeforeOpt,
+  optimizePrompt: doOptimizePrompt,
+  revertOptimization: doRevertOptimization,
+  resetOptimizeState
+} = usePromptOptimize();
 
 // ── 计算属性 ──────────────────────────────────────────────────────────
 const activeModel = computed(() => {
@@ -99,14 +112,6 @@ const supportedStyles = computed(() => {
   return [];
 });
 
-const supportedAspectRatios = computed(() => {
-  const caps = activeModelCapabilities.value;
-  if (caps?.supported_aspect_ratios && caps.supported_aspect_ratios.length > 0) {
-    return caps.supported_aspect_ratios as string[];
-  }
-  return ["1:1", "16:9", "9:16", "4:3", "3:4"];
-});
-
 const supportedSizes = computed(() => {
   const caps = activeModelCapabilities.value;
   if (caps?.supported_sizes && caps.supported_sizes.length > 0) {
@@ -115,9 +120,61 @@ const supportedSizes = computed(() => {
   return ["1024x1024", "1024x768", "768x1024", "1280x720", "720x1280"];
 });
 
+const supportedAspectRatios = computed(() => {
+  const caps = activeModelCapabilities.value;
+  if (caps?.supported_aspect_ratios && caps.supported_aspect_ratios.length > 0) {
+    return caps.supported_aspect_ratios as string[];
+  }
+  if (supportedSizes.value.length > 0) {
+    const derived = new Set<string>();
+    for (const sz of supportedSizes.value) {
+      const r = findBestRatioForSize(sz, [...STANDARD_ASPECT_RATIOS]);
+      if (r) derived.add(r);
+    }
+    if (derived.size > 0) {
+      return STANDARD_ASPECT_RATIOS.filter((c) => derived.has(c));
+    }
+  }
+  return [...STANDARD_ASPECT_RATIOS];
+});
+
+const filteredSizes = computed(() => {
+  const list = supportedSizes.value.filter((sz) =>
+    matchSizeRatio(sz, selectedAspectRatio.value)
+  );
+  return list.length > 0 ? list : supportedSizes.value;
+});
+
 const sizeOptions = computed<AppleSelectOption[]>(() =>
-  supportedSizes.value.map((sz) => ({ value: sz, label: sz }))
+  filteredSizes.value.map((sz) => {
+    const r = findBestRatioForSize(sz, supportedAspectRatios.value);
+    const badgeColor: "blue" | "rose" | "emerald" | "amber" | "zinc" =
+      r === "16:9" ? "blue" : r === "9:16" ? "rose" : r === "1:1" ? "emerald" : r === "4:3" ? "amber" : "zinc";
+    return {
+      value: sz,
+      label: sz,
+      subLabel: r ? `${getAspectRatioLabel(r)} (${r})` : undefined,
+      badge: r || undefined,
+      badgeColor
+    };
+  })
 );
+
+function selectAspectRatio(ar: string): void {
+  selectedAspectRatio.value = ar;
+  const matched = supportedSizes.value.filter((sz) => matchSizeRatio(sz, ar));
+  if (matched.length > 0 && !matchSizeRatio(selectedSize.value, ar)) {
+    selectedSize.value = matched[0];
+  }
+}
+
+watch(selectedSize, (newSize) => {
+  if (!newSize) return;
+  const best = findBestRatioForSize(newSize, supportedAspectRatios.value);
+  if (best && best !== selectedAspectRatio.value) {
+    selectedAspectRatio.value = best;
+  }
+});
 const qualityOptions = computed<AppleSelectOption[]>(() =>
   supportedQualities.value.map((q) => ({
     value: q,
@@ -150,9 +207,7 @@ watch(
   async (isOpen) => {
     if (isOpen) {
       errorMessage.value = "";
-      optimizeError.value = "";
-      lastOptimizedResult.value = null;
-      originalPromptBeforeOpt.value = null;
+      resetOptimizeState();
 
       if (props.initialMode) {
         creationMode.value = props.initialMode;
@@ -171,14 +226,8 @@ watch(
         if (props.initialParams.quality) selectedQuality.value = props.initialParams.quality;
         if (props.initialParams.style) selectedStyle.value = props.initialParams.style;
         if (props.initialParams.denoising_strength !== undefined) denoisingStrength.value = props.initialParams.denoising_strength;
-        if (props.initialParams.seed !== undefined) {
-          seed.value = props.initialParams.seed;
-          showAdvanced.value = true;
-        }
-        if (props.initialParams.negative_prompt) {
-          negativePrompt.value = props.initialParams.negative_prompt;
-          showAdvanced.value = true;
-        }
+        if (props.initialParams.seed !== undefined) seed.value = props.initialParams.seed;
+        if (props.initialParams.negative_prompt) negativePrompt.value = props.initialParams.negative_prompt;
       }
       if (props.initialReferences?.length) {
         references.value = [...props.initialReferences];
@@ -290,31 +339,16 @@ function applyPresetDefaults(presetId: number): void {
 
 // ── 提示词智能润色 (V2-11) ──────────────────────────────────────────────
 async function handleOptimizePrompt(): Promise<void> {
-  if (!prompt.value.trim() || optimizing.value) return;
-  optimizing.value = true;
-  optimizeError.value = "";
-  originalPromptBeforeOpt.value = prompt.value;
-
-  try {
-    const res = await api.optimizePrompt({
-      prompt: prompt.value,
-      preset_id: selectedPresetId.value,
-      model_profile_id: undefined // 让后端自动解析 text_optimize 默认绑定
-    });
-    lastOptimizedResult.value = res;
-    prompt.value = res.optimized_prompt;
-  } catch (err: any) {
-    optimizeError.value = err.message || "提示词润色失败，请确认已配置 text_optimize 默认模型";
-  } finally {
-    optimizing.value = false;
+  const optimized = await doOptimizePrompt(prompt.value, selectedPresetId.value);
+  if (optimized) {
+    prompt.value = optimized;
   }
 }
 
 function revertOptimization(): void {
-  if (originalPromptBeforeOpt.value !== null) {
-    prompt.value = originalPromptBeforeOpt.value;
-    lastOptimizedResult.value = null;
-    originalPromptBeforeOpt.value = null;
+  const orig = doRevertOptimization();
+  if (orig !== null) {
+    prompt.value = orig;
   }
 }
 
@@ -635,7 +669,10 @@ async function handleSubmit(): Promise<void> {
             <!-- 4. 画幅比例与生成规格 (V2-13 动态参数适配) -->
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label class="block text-xs font-semibold text-ink pb-1.5">画面画幅比例</label>
+                <div class="flex items-center justify-between pb-1.5">
+                  <label class="text-xs font-semibold text-ink">画面画幅比例</label>
+                  <span class="text-[11px] text-muted">{{ getAspectRatioHint(selectedAspectRatio) }}</span>
+                </div>
                 <div class="flex flex-wrap gap-1.5">
                   <button
                     v-for="ar in supportedAspectRatios"
@@ -644,10 +681,10 @@ async function handleSubmit(): Promise<void> {
                     class="rounded-lg border px-3 py-1.5 text-xs font-medium transition active:scale-95"
                     :class="
                       selectedAspectRatio === ar
-                        ? 'border-accent bg-accent/10 text-accent font-semibold'
+                        ? 'border-accent bg-accent/10 text-accent font-semibold shadow-2xs'
                         : 'border-line bg-white hover:bg-canvas/50 text-ink'
                     "
-                    @click="selectedAspectRatio = ar"
+                    @click="selectAspectRatio(ar)"
                   >
                     {{ ar }}
                   </button>
@@ -655,7 +692,10 @@ async function handleSubmit(): Promise<void> {
               </div>
 
               <div>
-                <label class="block text-xs font-semibold text-ink pb-1.5">分辨率规格</label>
+                <div class="flex items-center justify-between pb-1.5">
+                  <label class="text-xs font-semibold text-ink">分辨率规格</label>
+                  <span class="text-[11px] text-muted font-mono">联动 {{ selectedAspectRatio }}</span>
+                </div>
                 <AppleSelect
                   v-model="selectedSize"
                   size="sm"
@@ -685,78 +725,13 @@ async function handleSubmit(): Promise<void> {
             </div>
 
             <!-- 5. 高级参数抽屉（负向词、生成批次、重绘强度、随机种子） -->
-            <div class="border-t border-line/60 pt-3">
-              <button
-                type="button"
-                class="flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink transition"
-                @click="showAdvanced = !showAdvanced"
-              >
-                <SidebarIcon
-                  name="chevron-right"
-                  class="h-3.5 w-3.5 transition-transform"
-                  :class="showAdvanced ? 'rotate-90' : ''"
-                />
-                <span>高级生成选项 (负向词、数量、重绘强度、种子)</span>
-              </button>
-
-              <div v-show="showAdvanced" class="mt-3 space-y-3 pl-4">
-                <div v-if="creationMode === 'image_edit'">
-                  <label class="block text-xs font-medium text-muted pb-1">
-                    重绘/参考强度 (Denoising Strength): {{ denoisingStrength }}
-                  </label>
-                  <input
-                    v-model.number="denoisingStrength"
-                    type="range"
-                    min="0.1"
-                    max="1.0"
-                    step="0.05"
-                    class="h-2 w-full cursor-pointer accent-accent"
-                  />
-                  <div class="flex justify-between text-[10px] text-muted">
-                    <span>0.1 (微弱重绘，严格保留原图)</span>
-                    <span>1.0 (大幅重绘，仅参考构图)</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label class="block text-xs font-medium text-muted pb-1">负向提示词 (Negative Prompt)</label>
-                  <input
-                    v-model="negativePrompt"
-                    type="text"
-                    placeholder="不希望出现在画面中的元素，如：blurry, low quality, bad anatomy, distorted…"
-                    class="w-full rounded-xl border border-line bg-canvas/20 px-3 py-2 text-xs text-ink outline-none transition placeholder:text-muted/50 focus:border-accent focus:bg-white"
-                  />
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
-                  <div>
-                    <label class="block text-xs font-medium text-muted pb-1">生成张数</label>
-                    <div class="flex gap-1.5">
-                      <button
-                        v-for="n in [1, 2, 4]"
-                        :key="n"
-                        type="button"
-                        class="flex-1 rounded-lg border py-1 text-xs font-medium transition"
-                        :class="generateCount === n ? 'border-accent bg-accent/10 text-accent' : 'border-line bg-white text-ink'"
-                        @click="generateCount = n"
-                      >
-                        {{ n }} 张
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label class="block text-xs font-medium text-muted pb-1">随机种子 (可选)</label>
-                    <input
-                      v-model.number="seed"
-                      type="number"
-                      placeholder="默认留空随机"
-                      class="h-8 w-full rounded-lg border border-line bg-canvas/20 px-2.5 text-xs text-ink outline-none transition focus:border-accent focus:bg-white"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
+            <AiWorkbenchAdvancedDrawer
+              :creation-mode="creationMode"
+              v-model:denoising-strength="denoisingStrength"
+              v-model:negative-prompt="negativePrompt"
+              v-model:generate-count="generateCount"
+              v-model:seed="seed"
+            />
           </div>
 
           <!-- 底部提交操作栏 -->
