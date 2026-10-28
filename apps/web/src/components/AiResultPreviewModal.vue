@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import type { AiResult, AiResultWithTask, AiTaskDetail, AiTaskSummary } from "../api/types";
 import { api } from "../api/client";
-import { useAiResultObjectUrl } from "../composables/useAiResultCache";
+import { useAiResultImageDetails } from "../composables/useAiResultCache";
 import { useFolderOptions } from "../composables/useFolderOptions";
 import SidebarIcon from "./SidebarIcon.vue";
 import AppleSelect, { type AppleSelectOption } from "./AppleSelect.vue";
@@ -19,7 +19,12 @@ const emit = defineEmits<{
   (e: "continue-edit", result: AiResult | AiResultWithTask, task?: AiTaskDetail | AiTaskSummary | null): void;
 }>();
 
-const objectUrl = useAiResultObjectUrl(() => props.result?.id);
+const {
+  objectUrl,
+  loading: loadingImage,
+  error: imageError,
+  reload: reloadImage
+} = useAiResultImageDetails(() => props.result?.id);
 
 // 缩放模式：'contain' (自适应窗口) 或 'actual' (1:1 原画比例)
 const zoomMode = ref<"contain" | "actual">("contain");
@@ -201,7 +206,9 @@ onUnmounted(() => {
           class="flex flex-col md:flex-row w-full max-w-5xl h-[88vh] max-h-[88vh] rounded-2xl md:rounded-3xl bg-white shadow-2xl border border-white/20 overflow-hidden"
         >
           <!-- 左侧：图像主展示与交互视口 -->
-          <div class="relative flex-1 bg-zinc-950 flex flex-col items-center justify-center overflow-hidden min-h-[300px]">
+          <div
+            class="relative flex-1 min-w-0 min-h-0 bg-zinc-950 flex flex-col items-center justify-center overflow-hidden h-[46vh] shrink-0 md:h-full md:shrink"
+          >
             <!-- 顶部悬浮控制栏 -->
             <div class="absolute top-3 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
               <!-- 规格指示徽标 -->
@@ -259,6 +266,17 @@ onUnmounted(() => {
                     : 'max-none cursor-grab'
                 ]"
               />
+              <div v-else-if="imageError" class="flex flex-col items-center gap-3 text-white/70 p-6 text-center">
+                <SidebarIcon name="close" class="h-8 w-8 text-rose-400" />
+                <span class="text-xs text-rose-300">{{ imageError }}</span>
+                <button
+                  type="button"
+                  class="mt-1 rounded-full border border-white/20 bg-white/10 px-3.5 py-1 text-xs text-white hover:bg-white/20 transition active:scale-95"
+                  @click="reloadImage"
+                >
+                  重新加载图像
+                </button>
+              </div>
               <div v-else class="flex flex-col items-center gap-3 text-white/50">
                 <SidebarIcon name="star" class="h-8 w-8 animate-spin opacity-40 text-accent" />
                 <span class="text-xs">正在从本地安全缓存加载高清大图…</span>
@@ -267,7 +285,9 @@ onUnmounted(() => {
           </div>
 
           <!-- 右侧：结构化元数据与入库操作面板 -->
-          <div class="w-full md:w-88 flex flex-col border-t md:border-t-0 md:border-l border-line/60 bg-white shrink-0 overflow-hidden">
+          <div
+            class="w-full md:w-[360px] lg:w-[380px] shrink-0 flex flex-col border-t md:border-t-0 md:border-l border-line/60 bg-white overflow-hidden min-h-0 flex-1 md:flex-initial"
+          >
             <!-- 头部：产物身份与关闭按钮 -->
             <div class="flex items-center justify-between border-b border-line/60 px-5 py-4 shrink-0 bg-canvas/30">
               <div class="flex items-center gap-2 min-w-0">

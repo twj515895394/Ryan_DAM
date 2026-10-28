@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { useAiResultObjectUrl } from "../composables/useAiResultCache";
+import { computed, ref } from "vue";
+import { useAiResultImageDetails } from "../composables/useAiResultCache";
 import SidebarIcon from "./SidebarIcon.vue";
 
 const props = withDefaults(
@@ -27,7 +27,8 @@ const emit = defineEmits<{
   (e: "click", event: MouseEvent): void;
 }>();
 
-const objectUrl = useAiResultObjectUrl(() => props.resultId);
+const { objectUrl, loading, error } = useAiResultImageDetails(() => props.resultId);
+const imgDecodeFailed = ref(false);
 
 const fitClass = computed(() => {
   return props.fit === "contain" ? "object-contain" : "object-cover";
@@ -46,7 +47,7 @@ const fitClass = computed(() => {
   >
     <!-- 图片呈现 -->
     <img
-      v-if="objectUrl"
+      v-if="objectUrl && !imgDecodeFailed"
       :src="objectUrl"
       :alt="alt"
       loading="lazy"
@@ -55,20 +56,22 @@ const fitClass = computed(() => {
         fitClass,
         hoverZoom ? 'group-hover:scale-104' : ''
       ]"
+      @error="imgDecodeFailed = true"
     />
 
     <!-- 加载骨架态 -->
     <div
-      v-else-if="resultId"
+      v-else-if="loading"
       class="flex h-full w-full items-center justify-center bg-canvas/40 animate-pulse text-muted"
     >
-      <SidebarIcon name="star" class="h-4 w-4 animate-spin opacity-40" />
+      <SidebarIcon name="star" class="h-4 w-4 animate-spin opacity-40 text-accent" />
     </div>
 
-    <!-- 空白或加载失败降级 -->
+    <!-- 空白、加载失败或解码异常降级 -->
     <div
       v-else
       class="flex h-full w-full items-center justify-center bg-canvas/30 text-muted/60"
+      :title="error || '无预览缩略图'"
     >
       <SidebarIcon name="image" class="h-4 w-4 opacity-40" />
     </div>

@@ -43,14 +43,37 @@ export function putCachedAiResultUrl(resultId: string, url: string): void {
   }
 }
 
+export function clearAiResultCache(resultId?: string): void {
+  if (resultId) {
+    failedIds.delete(resultId);
+    inFlight.delete(resultId);
+    const stale = urls.get(resultId);
+    if (stale) {
+      URL.revokeObjectURL(stale);
+      urls.delete(resultId);
+    }
+  } else {
+    failedIds.clear();
+    inFlight.clear();
+    for (const url of urls.values()) {
+      URL.revokeObjectURL(url);
+    }
+    urls.clear();
+  }
+}
+
 /**
  * 预加载或获取 AI 结果的 Object URL
  */
-export async function loadAiResultObjectUrl(resultId: string): Promise<string | null> {
+export async function loadAiResultObjectUrl(resultId: string, force = false): Promise<string | null> {
   if (!resultId) return null;
-  const cached = getCachedAiResultUrl(resultId);
-  if (cached) return cached;
-  if (failedIds.has(resultId)) return null;
+  if (force) {
+    clearAiResultCache(resultId);
+  } else {
+    const cached = getCachedAiResultUrl(resultId);
+    if (cached) return cached;
+    if (failedIds.has(resultId)) return null;
+  }
 
   const existingPromise = inFlight.get(resultId);
   if (existingPromise) return existingPromise;
@@ -72,6 +95,91 @@ export async function loadAiResultObjectUrl(resultId: string): Promise<string | 
 
   inFlight.set(resultId, p as Promise<string>);
   return p;
+}
+
+/**
+ * 加载单个 AI 产物大图或缩略图，返回包含详细加载状态、错误以及重试能力的响应式对象。
+ */
+export function useAiResultImageDetails(
+  resultIdGetter: () => string | null | undefined
+): {
+  objectUrl: ShallowRef<string | null>;
+  loading: ShallowRef<boolean>;
+  error: ShallowRef<string | null>;
+  reload: () => Promise<void>;
+} {
+  const objectUrl = shallowRef<string | null>(null);
+  const loading = shallowRef(false);
+  const error = shallowRef<string | null>(null);
+  let loadToken = 0;
+
+  async function load(force = false): Promise<void> {
+    const currentToken = ++loadToken;
+    const id = resultIdGetter();
+
+    if (!id) {
+      objectUrl.value = null;
+      loading.value = false;
+      error.value = null;
+      return;
+    }
+
+    if (!force) {
+      const cached = getCachedAiResultUrl(id);
+      if (cached) {
+        objectUrl.value = cached;
+        loading.value = false;
+        error.value = null;
+        return;
+      }
+      if (failedIds.has(id)) {
+        objectUrl.value = null;
+        loading.value = false;
+        error.value = "图像加载失败（已在缓存中标记）";
+        return;
+      }
+    }
+
+    loading.value = true;
+    error.value = null;
+
+    try {
+      const loaded = await loadAiResultObjectUrl(id, force);
+      if (currentToken === loadToken) {
+        objectUrl.value = loaded;
+        if (!loaded) {
+          error.value = "图像未能成功载入";
+        }
+      }
+    } catch (err: any) {
+      if (currentToken === loadToken) {
+        error.value = err?.message || "网络或本地服务异常，未能载入图像";
+      }
+    } finally {
+      if (currentToken === loadToken) {
+        loading.value = false;
+      }
+    }
+  }
+
+  watch(
+    resultIdGetter,
+    () => {
+      void load(false);
+    },
+    { immediate: true }
+  );
+
+  onScopeDispose(() => {
+    loadToken++;
+  });
+
+  return {
+    objectUrl,
+    loading,
+    error,
+    reload: () => load(true)
+  };
 }
 
 /**

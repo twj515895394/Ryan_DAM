@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import type { AiResult, AiTaskDetail } from "../api/types";
 import { api } from "../api/client";
-import { useAiResultObjectUrl } from "../composables/useAiResultCache";
+import { useAiResultImageDetails } from "../composables/useAiResultCache";
 import { useFolderOptions } from "../composables/useFolderOptions";
 import AppleSelect, { type AppleSelectOption } from "./AppleSelect.vue";
 import SidebarIcon from "./SidebarIcon.vue";
@@ -28,7 +28,12 @@ const activeResult = computed<AiResult | null>(() => {
   return results.value[idx] || null;
 });
 
-const activeObjectUrl = useAiResultObjectUrl(() => activeResult.value?.id);
+const {
+  objectUrl: activeObjectUrl,
+  loading: loadingImage,
+  error: imageError,
+  reload: reloadActiveImage
+} = useAiResultImageDetails(() => activeResult.value?.id);
 
 // 文件夹入库
 const { allFolderGroups } = useFolderOptions();
@@ -152,6 +157,17 @@ function handleInspect(): void {
           alt="AI 生成结果"
           class="max-h-[48vh] w-auto max-w-full rounded-xl object-contain transition duration-200 group-hover:scale-[1.01]"
         />
+
+        <div v-else-if="imageError" class="flex h-64 w-80 flex-col items-center justify-center gap-2 text-xs text-rose-400 p-4 text-center">
+          <span>{{ imageError }}</span>
+          <button
+            type="button"
+            class="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/20 transition active:scale-95"
+            @click="reloadActiveImage"
+          >
+            重新加载图像
+          </button>
+        </div>
 
         <div v-else class="flex h-64 w-80 items-center justify-center text-xs text-muted">
           正在载入高清图像…
