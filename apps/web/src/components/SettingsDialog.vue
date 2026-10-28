@@ -40,10 +40,10 @@ const rootStateLabel = computed(() => {
   <Teleport to="body">
     <div
       v-if="open"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/35 backdrop-blur-sm"
       @click.self="emit('close')"
     >
-      <div class="w-[580px] max-h-[85vh] flex flex-col rounded-2xl border border-line bg-white shadow-soft overflow-hidden">
+      <div class="w-[840px] max-w-[94vw] max-h-[88vh] flex flex-col rounded-2xl border border-line bg-white/95 backdrop-blur-xl shadow-2xl overflow-hidden">
         <!-- 弹窗顶栏与 Tab 切换 -->
         <div class="px-6 pt-5 pb-3 border-b border-line">
           <div class="flex items-center justify-between">

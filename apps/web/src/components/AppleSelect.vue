@@ -229,9 +229,10 @@ onUnmounted(() => {
         isOpen ? 'border-accent ring-2 ring-accent/15' : 'border-line/80 hover:border-line',
         mono ? 'font-mono' : ''
       ]"
+      :title="selectedOption ? (selectedOption.subLabel && selectedOption.subLabel !== selectedOption.label ? `${selectedOption.label} (${selectedOption.subLabel})` : selectedOption.label) : placeholder"
       @click="toggleDropdown"
     >
-      <div class="min-w-0 flex-1 flex items-center gap-1.5 truncate">
+      <div class="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden">
         <!-- 占位符或已选内容 -->
         <span
           v-if="!selectedOption"
@@ -240,10 +241,11 @@ onUnmounted(() => {
           {{ placeholder }}
         </span>
         <template v-else>
-          <span class="truncate font-medium text-ink">{{ selectedOption.label }}</span>
+          <span class="truncate font-medium text-ink" :title="selectedOption.label">{{ selectedOption.label }}</span>
           <span
             v-if="selectedOption.subLabel && selectedOption.subLabel !== selectedOption.label"
-            class="hidden sm:inline font-mono text-[10.5px] text-muted truncate"
+            class="hidden sm:inline font-mono text-[10.5px] text-muted truncate shrink-0 max-w-[48%]"
+            :title="selectedOption.subLabel"
           >
             ({{ selectedOption.subLabel }})
           </span>
@@ -360,7 +362,7 @@ onUnmounted(() => {
           >
             <div class="min-w-0 flex-1 pr-2">
               <div class="flex items-center gap-1.5">
-                <span :class="mono ? 'font-mono' : ''" class="truncate">{{ opt.label }}</span>
+                <span :class="mono ? 'font-mono' : ''" class="truncate font-medium" :title="opt.label">{{ opt.label }}</span>
                 <span
                   v-if="opt.badge"
                   class="shrink-0 rounded px-1.5 py-0.2 text-[9.5px] font-medium"
@@ -379,6 +381,7 @@ onUnmounted(() => {
               <p
                 v-if="opt.subLabel && opt.subLabel !== opt.label"
                 class="font-mono text-[10.5px] text-muted truncate mt-0.5"
+                :title="opt.subLabel"
               >
                 {{ opt.subLabel }}
               </p>

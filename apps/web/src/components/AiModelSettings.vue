@@ -441,7 +441,7 @@ onMounted(() => {
             <span class="ml-2 font-mono text-[10px] text-muted">({{ capKey }})</span>
           </div>
 
-          <div class="shrink-0 w-56 sm:w-64">
+          <div class="shrink-0 w-80 sm:w-96 md:w-[460px] max-w-[65%]">
             <AppleSelect
               size="sm"
               placeholder="-- 请选择默认模型 --"
@@ -491,12 +491,15 @@ onMounted(() => {
         >
           <div class="flex items-start justify-between">
             <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <span class="font-medium text-xs text-ink truncate">{{ m.name }}</span>
-                <span class="rounded bg-canvas px-1.5 py-0.5 font-mono text-[10px] text-muted">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-semibold text-xs text-ink" :title="m.name">{{ m.name }}</span>
+                <span
+                  class="rounded bg-canvas px-2 py-0.5 font-mono text-[10.5px] text-muted border border-line/60 select-all"
+                  :title="m.model_id"
+                >
                   {{ m.model_id }}
                 </span>
-                <span class="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600">
+                <span class="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600 border border-zinc-200/50">
                   {{ m.adapter_kind }}
                 </span>
               </div>
@@ -565,52 +568,54 @@ onMounted(() => {
           />
         </div>
 
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="block text-[11px] font-medium text-ink/80">Model ID (API 标识)</label>
-              <div class="flex items-center gap-1.5">
-                <button
-                  v-if="remoteModels.length > 0"
-                  type="button"
-                  class="text-[10px] text-accent hover:underline cursor-pointer"
-                  @click="manualInputMode = !manualInputMode"
-                >
-                  {{ manualInputMode ? "从模型列表选择" : "手动输入标识" }}
-                </button>
-              </div>
-            </div>
-
-            <!-- 下拉选择模式 -->
-            <div v-if="!manualInputMode && (remoteModels.length > 0 || fetchingRemoteModels)">
-              <AppleSelect
-                :model-value="modelForm.model_id"
-                :options="remoteModelOptions"
-                :disabled="fetchingRemoteModels"
-                mono
-                searchable
-                :placeholder="fetchingRemoteModels ? '-- 正在从 Provider 获取模型列表… --' : `-- 请选择远程模型 (已拉取 ${remoteModels.length} 个) --`"
-                search-placeholder="搜索模型 ID 或关键字…"
-                empty-text="未找到匹配的模型 ID"
-                @change="onSelectRemoteModel"
-              />
-            </div>
-
-            <!-- 手动输入模式 / 降级模式 -->
-            <div v-else class="space-y-1">
-              <input
-                v-model="modelForm.model_id"
-                type="text"
-                placeholder="例如：dall-e-3 / gpt-4o-mini"
-                class="w-full rounded-md border border-line bg-white px-2.5 py-1.5 font-mono text-xs text-ink outline-none focus:border-accent"
-                @input="onManualInputModelId"
-              />
-              <p v-if="remoteModelsError" class="text-[10px] text-amber-600">
-                {{ remoteModelsError }}，已切换为手动输入
-              </p>
+        <!-- Model ID 标识（占满通栏，确保超长模型名完整显示） -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-[11px] font-medium text-ink/80">Model ID (API 标识)</label>
+            <div class="flex items-center gap-1.5">
+              <button
+                v-if="remoteModels.length > 0"
+                type="button"
+                class="text-[10px] text-accent hover:underline cursor-pointer"
+                @click="manualInputMode = !manualInputMode"
+              >
+                {{ manualInputMode ? "从模型列表选择" : "手动输入标识" }}
+              </button>
             </div>
           </div>
 
+          <!-- 下拉选择模式 -->
+          <div v-if="!manualInputMode && (remoteModels.length > 0 || fetchingRemoteModels)">
+            <AppleSelect
+              :model-value="modelForm.model_id"
+              :options="remoteModelOptions"
+              :disabled="fetchingRemoteModels"
+              mono
+              searchable
+              :placeholder="fetchingRemoteModels ? '-- 正在从 Provider 获取模型列表… --' : `-- 请选择远程模型 (已拉取 ${remoteModels.length} 个) --`"
+              search-placeholder="搜索模型 ID 或关键字…"
+              empty-text="未找到匹配的模型 ID"
+              @change="onSelectRemoteModel"
+            />
+          </div>
+
+          <!-- 手动输入模式 / 降级模式 -->
+          <div v-else class="space-y-1">
+            <input
+              v-model="modelForm.model_id"
+              type="text"
+              placeholder="例如：dall-e-3 / gpt-4o-mini"
+              class="w-full rounded-md border border-line bg-white px-2.5 py-1.5 font-mono text-xs text-ink outline-none focus:border-accent"
+              @input="onManualInputModelId"
+            />
+            <p v-if="remoteModelsError" class="text-[10px] text-amber-600">
+              {{ remoteModelsError }}，已切换为手动输入
+            </p>
+          </div>
+        </div>
+
+        <!-- 显示名称与适配器协议并排两列 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block text-[11px] font-medium text-ink/80 mb-1">显示名称</label>
             <input
@@ -620,28 +625,28 @@ onMounted(() => {
               class="w-full rounded-md border border-line bg-white px-2.5 py-1.5 text-xs text-ink outline-none focus:border-accent"
             />
           </div>
-        </div>
 
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <label class="block text-[11px] font-medium text-ink/80">适配器协议 (Adapter)</label>
-            <span class="text-[10.5px] text-muted">对话/反推默认走 /chat/completions</span>
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-[11px] font-medium text-ink/80">适配器协议 (Adapter)</label>
+              <span class="text-[10.5px] text-muted">对话/反推默认走 /chat/completions</span>
+            </div>
+            <AppleSelect
+              v-model="modelForm.adapter_kind"
+              :options="adapterOptions"
+              placeholder="请选择适配器协议"
+            />
           </div>
-          <AppleSelect
-            v-model="modelForm.adapter_kind"
-            :options="adapterOptions"
-            placeholder="请选择适配器协议"
-          />
         </div>
 
-        <!-- 能力勾选 -->
+        <!-- 能力勾选 (响应式 4 列平铺) -->
         <div>
           <label class="block text-[11px] font-medium text-ink/80 mb-1.5">支持的能力声明</label>
-          <div class="grid grid-cols-2 gap-2">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <label
               v-for="(lbl, key) in capabilityLabels"
               :key="key"
-              class="flex items-center gap-2 rounded-md bg-white p-2 border border-line/60 cursor-pointer select-none"
+              class="flex items-center gap-2 rounded-md bg-white p-2 border border-line/60 cursor-pointer select-none transition hover:border-line"
             >
               <input
                 v-model="modelForm.capabilities![key].supported"

@@ -403,7 +403,7 @@ async function handleSubmit(): Promise<void> {
             <div class="flex items-center gap-3">
               <div class="flex items-center gap-2">
                 <span class="text-xs font-medium text-muted">生成模型</span>
-                <div class="w-52 sm:w-60">
+                <div class="w-56 sm:w-72">
                   <AppleSelect
                     v-model="selectedModelId"
                     size="sm"
