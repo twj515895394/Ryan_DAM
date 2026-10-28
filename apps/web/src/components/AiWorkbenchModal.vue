@@ -1,25 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { api } from "../api/client";
 import type {
   AiCreationPreset,
   AiModelProfile,
+  AiResult,
+  AiTaskDetail,
   AiTaskSummary,
-  PromptOptimizeResult,
   SubmitImageGeneratePayload
 } from "../api/types";
-import AiReferencePickerModal, { type SelectedReferenceItem } from "./AiReferencePickerModal.vue";
-import AiWorkbenchAdvancedDrawer from "./AiWorkbenchAdvancedDrawer.vue";
+import type { SelectedReferenceItem } from "./AiReferencePickerModal.vue";
+import AiWorkbenchFormView from "./AiWorkbenchFormView.vue";
+import AiWorkbenchProgressView from "./AiWorkbenchProgressView.vue";
+import AiWorkbenchResultView from "./AiWorkbenchResultView.vue";
+import AiResultPreviewModal from "./AiResultPreviewModal.vue";
 import SidebarIcon from "./SidebarIcon.vue";
-import AppleSelect, { type AppleSelectOption } from "./AppleSelect.vue";
-import { usePromptOptimize } from "../composables/usePromptOptimize";
-import {
-  findBestRatioForSize,
-  getAspectRatioHint,
-  getAspectRatioLabel,
-  matchSizeRatio,
-  STANDARD_ASPECT_RATIOS
-} from "../utils/aiDimensions";
+import AppleSelect from "./AppleSelect.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -38,44 +34,28 @@ const emit = defineEmits<{
   (e: "task-created", task: AiTaskSummary): void;
 }>();
 
-// 基础状态
-const creationMode = ref<"image_generate" | "image_edit">("image_generate");
+// 阶段状态机：'form' 编辑态 | 'generating' 生成中过渡态 | 'result' 结果展示态 | 'failed' 失败态
+type WorkbenchPhase = "form" | "generating" | "result" | "failed";
+const currentPhase = ref<WorkbenchPhase>("form");
+const activeTaskId = ref<string | null>(null);
+const activeTaskDetail = ref<AiTaskDetail | null>(null);
+const cancellingTask = ref(false);
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+// 1:1 微距原画检视弹窗
+const inspectingResult = ref<AiResult | null>(null);
+const showInspectModal = ref(false);
+
+// 模型与预设数据
+const models = ref<AiModelProfile[]>([]);
+const selectedModelId = ref<number | null>(null);
+const presets = ref<AiCreationPreset[]>([]);
 const loadingModels = ref(false);
 const loadingPresets = ref(false);
 const submitting = ref(false);
 const errorMessage = ref("");
+const lastSubmittedPayload = ref<SubmitImageGeneratePayload | null>(null);
 
-const models = ref<AiModelProfile[]>([]);
-const selectedModelId = ref<number | null>(null);
-const presets = ref<AiCreationPreset[]>([]);
-const selectedPresetId = ref<number | null>(null);
-
-// 表单字段
-const prompt = ref("");
-const negativePrompt = ref("");
-const selectedAspectRatio = ref("1:1");
-const selectedSize = ref("1024x1024");
-const selectedQuality = ref("standard");
-const selectedStyle = ref("");
-const denoisingStrength = ref<number | null>(0.7);
-const generateCount = ref(1);
-const seed = ref<number | null>(null);
-
-// 参考图与智能润色
-const showRefPicker = ref(false);
-const references = ref<SelectedReferenceItem[]>([]);
-const optimizeLanguage = ref<"zh" | "en">("zh");
-const {
-  optimizing,
-  optimizeError,
-  lastOptimizedResult,
-  originalPromptBeforeOpt,
-  optimizePrompt: doOptimizePrompt,
-  revertOptimization: doRevertOptimization,
-  resetOptimizeState
-} = usePromptOptimize();
-
-// ── 计算属性 ──────────────────────────────────────────────────────────
 const activeModel = computed(() => {
   return models.value.find((m) => m.id === selectedModelId.value) || null;
 });
@@ -90,165 +70,23 @@ const modelOptions = computed(() => {
   }));
 });
 
-const activeModelCapabilities = computed(() => {
-  if (!activeModel.value) return null;
-  const caps = activeModel.value.capabilities as Record<string, any> | undefined;
-  if (!caps) return null;
-  return caps[creationMode.value] || caps.image_generate || caps.image_edit || null;
-});
-
-const supportedQualities = computed(() => {
-  const caps = activeModelCapabilities.value;
-  if (caps?.supported_qualities && Array.isArray(caps.supported_qualities)) {
-    return caps.supported_qualities as string[];
-  }
-  return [];
-});
-
-const supportedStyles = computed(() => {
-  const caps = activeModelCapabilities.value;
-  if (caps?.supported_styles && Array.isArray(caps.supported_styles)) {
-    return caps.supported_styles as string[];
-  }
-  return [];
-});
-
-const supportedSizes = computed(() => {
-  const caps = activeModelCapabilities.value;
-  if (caps?.supported_sizes && caps.supported_sizes.length > 0) {
-    return caps.supported_sizes as string[];
-  }
-  return ["1024x1024", "1024x768", "768x1024", "1280x720", "720x1280"];
-});
-
-const supportedAspectRatios = computed(() => {
-  const caps = activeModelCapabilities.value;
-  if (caps?.supported_aspect_ratios && caps.supported_aspect_ratios.length > 0) {
-    return caps.supported_aspect_ratios as string[];
-  }
-  if (supportedSizes.value.length > 0) {
-    const derived = new Set<string>();
-    for (const sz of supportedSizes.value) {
-      const r = findBestRatioForSize(sz, [...STANDARD_ASPECT_RATIOS]);
-      if (r) derived.add(r);
-    }
-    if (derived.size > 0) {
-      return STANDARD_ASPECT_RATIOS.filter((c) => derived.has(c));
-    }
-  }
-  return [...STANDARD_ASPECT_RATIOS];
-});
-
-const filteredSizes = computed(() => {
-  const list = supportedSizes.value.filter((sz) =>
-    matchSizeRatio(sz, selectedAspectRatio.value)
-  );
-  return list.length > 0 ? list : supportedSizes.value;
-});
-
-const sizeOptions = computed<AppleSelectOption[]>(() =>
-  filteredSizes.value.map((sz) => {
-    const r = findBestRatioForSize(sz, supportedAspectRatios.value);
-    const badgeColor: "blue" | "rose" | "emerald" | "amber" | "zinc" =
-      r === "16:9" ? "blue" : r === "9:16" ? "rose" : r === "1:1" ? "emerald" : r === "4:3" ? "amber" : "zinc";
-    return {
-      value: sz,
-      label: sz,
-      subLabel: r ? `${getAspectRatioLabel(r)} (${r})` : undefined,
-      badge: r || undefined,
-      badgeColor
-    };
-  })
-);
-
-function selectAspectRatio(ar: string): void {
-  selectedAspectRatio.value = ar;
-  const matched = supportedSizes.value.filter((sz) => matchSizeRatio(sz, ar));
-  if (matched.length > 0 && !matchSizeRatio(selectedSize.value, ar)) {
-    selectedSize.value = matched[0];
-  }
-}
-
-watch(selectedSize, (newSize) => {
-  if (!newSize) return;
-  const best = findBestRatioForSize(newSize, supportedAspectRatios.value);
-  if (best && best !== selectedAspectRatio.value) {
-    selectedAspectRatio.value = best;
-  }
-});
-const qualityOptions = computed<AppleSelectOption[]>(() =>
-  supportedQualities.value.map((q) => ({
-    value: q,
-    label: q === "hd" ? "超清 (HD)" : q === "standard" ? "标准 (Standard)" : q,
-    badge: q === "hd" ? "高质量" : "标准",
-    badgeColor: q === "hd" ? "accent" : "zinc"
-  }))
-);
-const styleOptions = computed<AppleSelectOption[]>(() => [
-  { value: "", label: "默认风格", badge: "默认", badgeColor: "zinc" },
-  ...supportedStyles.value.map((st) => ({
-    value: st,
-    label: st === "vivid" ? "生动鲜明 (Vivid)" : st === "natural" ? "自然写实 (Natural)" : st,
-    badge: st === "vivid" ? "色彩浓郁" : "自然真实",
-    badgeColor: (st === "vivid" ? "amber" : "emerald") as "amber" | "emerald"
-  }))
-]);
-
-const refRoleOptions: AppleSelectOption[] = [
-  { value: "reference", label: "综合参考", badge: "综合", badgeColor: "zinc" },
-  { value: "style", label: "风格参考", badge: "风格", badgeColor: "accent" },
-  { value: "character", label: "角色主体", badge: "主体", badgeColor: "blue" },
-  { value: "composition", label: "构图布局", badge: "构图", badgeColor: "amber" }
-];
-const activePreset = computed(() => presets.value.find((p) => p.id === selectedPresetId.value) || null);
-
 // ── 生命周期与初始化 ──────────────────────────────────────────────────
 watch(
   () => props.open,
   async (isOpen) => {
     if (isOpen) {
       errorMessage.value = "";
-      resetOptimizeState();
-
-      if (props.initialMode) {
-        creationMode.value = props.initialMode;
-      } else if (props.initialReferenceAssetIds && props.initialReferenceAssetIds.length > 0) {
-        creationMode.value = "image_edit";
-      } else {
-        creationMode.value = "image_generate";
+      if (currentPhase.value !== "generating") {
+        currentPhase.value = "form";
+        activeTaskId.value = null;
+        activeTaskDetail.value = null;
       }
-
-      if (props.initialPrompt !== undefined) prompt.value = props.initialPrompt;
-      if (props.initialPresetId !== undefined) selectedPresetId.value = props.initialPresetId;
-      if (props.initialModelId !== undefined) selectedModelId.value = props.initialModelId;
-      if (props.initialParams) {
-        if (props.initialParams.size) selectedSize.value = props.initialParams.size;
-        if (props.initialParams.aspect_ratio) selectedAspectRatio.value = props.initialParams.aspect_ratio;
-        if (props.initialParams.quality) selectedQuality.value = props.initialParams.quality;
-        if (props.initialParams.style) selectedStyle.value = props.initialParams.style;
-        if (props.initialParams.denoising_strength !== undefined) denoisingStrength.value = props.initialParams.denoising_strength;
-        if (props.initialParams.seed !== undefined) seed.value = props.initialParams.seed;
-        if (props.initialParams.negative_prompt) negativePrompt.value = props.initialParams.negative_prompt;
+      if (props.initialModelId !== undefined) {
+        selectedModelId.value = props.initialModelId;
       }
-      if (props.initialReferences?.length) {
-        references.value = [...props.initialReferences];
-      }
-      if (props.initialReferenceAssetIds?.length) {
-        for (const aid of props.initialReferenceAssetIds) {
-          if (!references.value.some((r) => r.source_kind === "asset" && r.source_id === String(aid))) {
-            const url = await api.fetchThumbnailObjectUrl(aid).catch(() => "");
-            references.value.push({
-              source_kind: "asset",
-              source_id: String(aid),
-              preview_url: url,
-              name: `资产 #${aid}`,
-              role: "reference"
-            });
-          }
-        }
-      }
-
       await Promise.all([loadModels(), loadPresets()]);
+    } else {
+      stopTaskPolling();
     }
   },
   { immediate: true }
@@ -258,7 +96,6 @@ async function loadModels(): Promise<void> {
   loadingModels.value = true;
   try {
     const list = await api.listAllModels();
-    // 过滤支持 image_generate 或 image_edit 且已启用的模型
     const genModels = list.filter(
       (m) =>
         m.enabled &&
@@ -267,7 +104,6 @@ async function loadModels(): Promise<void> {
     models.value = genModels;
 
     if (!selectedModelId.value && genModels.length > 0) {
-      // 检查是否有全局默认 image_generate 绑定
       try {
         const bindings = await api.listDefaultBindings();
         const genBinding = bindings.find((b) => b.capability === "image_generate");
@@ -285,149 +121,130 @@ async function loadModels(): Promise<void> {
   }
 }
 
-const filteredPresets = computed(() => {
-  return presets.value.filter(
-    (p) => !p.creation_mode || p.creation_mode === creationMode.value
-  );
-});
-
-watch(creationMode, () => {
-  if (selectedPresetId.value) {
-    const cur = presets.value.find((p) => p.id === selectedPresetId.value);
-    if (cur && cur.creation_mode && cur.creation_mode !== creationMode.value) {
-      selectedPresetId.value = null;
-    }
-  }
-});
-
 async function loadPresets(): Promise<void> {
   loadingPresets.value = true;
   try {
-    const list = await api.listCreationPresets(undefined as any, true);
-    presets.value = list;
-
-    // 如果未选预设且存在写实预设，默认推荐或保持 null
-    if (selectedPresetId.value) {
-      applyPresetDefaults(selectedPresetId.value);
-    }
+    const list = await api.listCreationPresets();
+    presets.value = list.filter((p) => p.enabled);
   } catch (err: any) {
-    console.error("加载创作预设失败", err);
+    console.error("加载创作预设失败:", err);
   } finally {
     loadingPresets.value = false;
   }
 }
 
-function selectPreset(id: number | null): void {
-  if (selectedPresetId.value === id) {
-    selectedPresetId.value = null;
-    return;
-  }
-  selectedPresetId.value = id;
-  if (id) applyPresetDefaults(id);
-}
-
-function applyPresetDefaults(presetId: number): void {
-  const p = presets.value.find((item) => item.id === presetId);
-  if (!p) return;
-  // 若预设包含 negative_prompt 且当前为空，则自动补齐
-  if (p.default_params?.negative_prompt && !negativePrompt.value) {
-    negativePrompt.value = p.default_params.negative_prompt;
-  }
-  // 若预设指定了专属模型且当前模型可用
-  if (p.default_model_profile_id && models.value.some((m) => m.id === p.default_model_profile_id)) {
-    selectedModelId.value = p.default_model_profile_id;
-  }
-}
-
-// ── 提示词智能润色 (V2-11) ──────────────────────────────────────────────
-async function handleOptimizePrompt(): Promise<void> {
-  const optimized = await doOptimizePrompt(prompt.value, selectedPresetId.value, optimizeLanguage.value);
-  if (optimized) {
-    prompt.value = optimized;
-  }
-}
-
-function revertOptimization(): void {
-  const orig = doRevertOptimization();
-  if (orig !== null) {
-    prompt.value = orig;
-  }
-}
-
-// ── 多源参考图管理 (V2-12) ──────────────────────────────────────────────
-function handleAddReference(item: SelectedReferenceItem): void {
-  if (!references.value.some((r) => r.source_kind === item.source_kind && r.source_id === item.source_id)) {
-    references.value.push(item);
-  }
-  showRefPicker.value = false;
-}
-
-function removeReference(index: number): void {
-  references.value.splice(index, 1);
-}
-
-// ── 任务提交 ──────────────────────────────────────────────────────────
-async function handleSubmit(): Promise<void> {
-  const trimmed = prompt.value.trim();
-  if (!trimmed) {
-    errorMessage.value = "请输入创作提示词";
-    return;
-  }
-  if (!selectedModelId.value) {
-    errorMessage.value = "请先选择生图 AI 模型";
-    return;
-  }
-  if (creationMode.value === "image_edit" && references.value.length === 0) {
-    errorMessage.value = "图像编辑模式下请至少添加一张参考图像";
-    return;
-  }
-
+// ── 任务提交与轮询管理 ────────────────────────────────────────────────
+async function handleSubmit(payload: SubmitImageGeneratePayload): Promise<void> {
   submitting.value = true;
   errorMessage.value = "";
-
-  const payload: SubmitImageGeneratePayload = {
-    task_type: creationMode.value,
-    prompt: trimmed,
-    model_profile_id: selectedModelId.value,
-    preset_id: selectedPresetId.value,
-    params: {
-      size: selectedSize.value,
-      aspect_ratio: selectedAspectRatio.value,
-      n: generateCount.value,
-      ...(selectedQuality.value ? { quality: selectedQuality.value } : {}),
-      ...(selectedStyle.value ? { style: selectedStyle.value } : {}),
-      ...(creationMode.value === "image_edit" && denoisingStrength.value !== null
-        ? { denoising_strength: denoisingStrength.value }
-        : {}),
-      ...(negativePrompt.value.trim() ? { negative_prompt: negativePrompt.value.trim() } : {}),
-      ...(seed.value !== null ? { seed: seed.value } : {})
-    },
-    reference_asset_ids: references.value.filter((r) => r.source_kind === "asset").map((r) => Number(r.source_id)),
-    references: references.value.map((r) => ({
-      source_kind: r.source_kind,
-      source_id: r.source_id,
-      role: r.role || "reference"
-    })),
-    raw_user_request: originalPromptBeforeOpt.value || trimmed,
-    retry_of: props.initialRetryOf || null
-  };
+  lastSubmittedPayload.value = payload;
 
   try {
     const taskSummary = await api.submitImageGenerate(payload);
     emit("task-created", taskSummary);
-    emit("close");
+    // 切换至生成中过渡态并开始平滑轮询，不自动关闭工作台
+    currentPhase.value = "generating";
+    activeTaskId.value = taskSummary.id;
+    startTaskPolling(taskSummary.id);
   } catch (err: any) {
     errorMessage.value = err.message || "提交生图任务失败";
   } finally {
     submitting.value = false;
   }
 }
+
+function startTaskPolling(taskId: string): void {
+  stopTaskPolling();
+  activeTaskId.value = taskId;
+  pollTimer = setInterval(async () => {
+    try {
+      const detail = await api.getAiTask(taskId);
+      activeTaskDetail.value = detail;
+      if (detail.status === "succeeded") {
+        stopTaskPolling();
+        currentPhase.value = "result";
+      } else if (detail.status === "failed" || detail.status === "canceled") {
+        stopTaskPolling();
+        currentPhase.value = "failed";
+        errorMessage.value = detail.error_message || "任务生成未成功";
+      }
+    } catch (err: any) {
+      console.error("轮询 AI 任务状态失败:", err);
+    }
+  }, 1500);
+}
+
+function stopTaskPolling(): void {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+async function handleCancelCurrentTask(): Promise<void> {
+  if (!activeTaskId.value || cancellingTask.value) return;
+  cancellingTask.value = true;
+  try {
+    await api.cancelAiTask(activeTaskId.value);
+    stopTaskPolling();
+    currentPhase.value = "form";
+  } catch (err: any) {
+    errorMessage.value = err.message || "取消任务失败";
+  } finally {
+    cancellingTask.value = false;
+  }
+}
+
+function handleCloseModal(): void {
+  stopTaskPolling();
+  emit("close");
+}
+
+function handleBackToEdit(): void {
+  stopTaskPolling();
+  currentPhase.value = "form";
+}
+
+function handleRegenerate(): void {
+  if (lastSubmittedPayload.value) {
+    handleSubmit(lastSubmittedPayload.value);
+  } else {
+    currentPhase.value = "form";
+  }
+}
+
+function handleInspectDetail(res: AiResult): void {
+  inspectingResult.value = res;
+  showInspectModal.value = true;
+}
+
+function onKeydown(e: KeyboardEvent): void {
+  if (!props.open) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    e.stopPropagation();
+    if (showInspectModal.value) {
+      showInspectModal.value = false;
+      return;
+    }
+    handleCloseModal();
+  }
+}
+
+onMounted(() => {
+  window.addEventListener("keydown", onKeydown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", onKeydown);
+  stopTaskPolling();
+});
 </script>
 
 <template>
   <Teleport to="body">
     <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0" leave-active-class="transition duration-150 ease-in" leave-to-class="opacity-0">
-      <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-md" @click.self="emit('close')">
+      <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-md" @click.self="handleCloseModal">
         <div class="relative flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl border border-line/80 bg-white/95 shadow-2xl backdrop-blur-xl transition-all">
           <!-- 顶部标题栏 -->
           <div class="flex items-center justify-between border-b border-line/60 px-6 py-4">
@@ -437,21 +254,25 @@ async function handleSubmit(): Promise<void> {
               </div>
               <div>
                 <div class="flex items-center gap-2">
-                  <h2 class="text-base font-semibold tracking-tight text-ink">AI 图像创作工作台</h2>
+                  <h2 class="text-base font-semibold tracking-tight text-ink">
+                    {{ currentPhase === "generating" ? "AI 正在创作视觉作品" : (currentPhase === "result" ? "AI 创作成果就绪" : (currentPhase === "failed" ? "AI 创作未能完成" : "AI 图像创作工作台")) }}
+                  </h2>
                   <span
-                    v-if="initialRetryOf"
+                    v-if="initialRetryOf && currentPhase === 'form'"
                     class="rounded-full bg-amber-100/80 px-2 py-0.5 text-[10.5px] font-medium text-amber-800 border border-amber-200/50"
                   >
                     衍生变体自 #{{ initialRetryOf.slice(-6) }}
                   </span>
                 </div>
-                <p class="text-[11px] text-muted">基于大语言模型润色与高精度生成模型创作视觉作品</p>
+                <p class="text-[11px] text-muted">
+                  {{ currentPhase === "generating" ? "高精推理渲染中，可留守等待或按 Esc 放入后台运行" : (currentPhase === "result" ? "作品已渲染完成，可一键入库、微距检视或调整迭代" : (currentPhase === "failed" ? "任务执行异常，请查看详情并调整参数重试" : "基于大语言模型润色与高精度生成模型创作视觉作品")) }}
+                </p>
               </div>
             </div>
 
             <!-- 右侧模型选择器与关闭 -->
             <div class="flex items-center gap-3">
-              <div class="flex items-center gap-2">
+              <div v-if="currentPhase === 'form'" class="flex items-center gap-2">
                 <span class="text-xs font-medium text-muted">生成模型</span>
                 <div class="w-56 sm:w-72">
                   <AppleSelect
@@ -465,304 +286,88 @@ async function handleSubmit(): Promise<void> {
                 </div>
               </div>
 
+              <div v-else-if="activeModel" class="rounded-lg border border-line bg-canvas/80 px-2.5 py-1 text-xs font-medium text-ink/80">
+                {{ activeModel.name }}
+              </div>
+
               <button
                 type="button"
                 class="flex h-7 w-7 items-center justify-center rounded-lg text-muted transition hover:bg-black/5 hover:text-ink"
-                @click="emit('close')"
+                :title="currentPhase === 'generating' ? '放入后台运行 (Esc)' : '关闭 (Esc)'"
+                @click="handleCloseModal"
               >
                 <SidebarIcon name="close" class="h-4 w-4" />
               </button>
             </div>
           </div>
 
-          <!-- 主体滚动表单内容 -->
-          <div class="flex-1 space-y-5 overflow-y-auto px-6 py-5">
-            <!-- 错误通知条 -->
-            <div
-              v-if="errorMessage"
-              class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-700"
-            >
-              {{ errorMessage }}
-            </div>
+          <!-- 1. 表单编辑态 (currentPhase === 'form') -->
+          <AiWorkbenchFormView
+            v-if="currentPhase === 'form'"
+            v-model:selected-model-id="selectedModelId"
+            :models="models"
+            :presets="presets"
+            :loading-models="loadingModels"
+            :initial-prompt="initialPrompt"
+            :initial-preset-id="initialPresetId"
+            :initial-reference-asset-ids="initialReferenceAssetIds"
+            :initial-mode="initialMode"
+            :initial-params="initialParams"
+            :initial-references="initialReferences"
+            :initial-retry-of="initialRetryOf"
+            :submitting="submitting"
+            @submit="handleSubmit"
+            @cancel="handleCloseModal"
+          />
 
-            <!-- 模式切换：文生图 / 图生图与编辑 (V2-13) -->
-            <div class="flex items-center gap-1.5 rounded-xl bg-canvas/60 p-1 border border-line/60">
-              <button
-                type="button"
-                class="flex-1 flex items-center justify-center gap-2 rounded-lg py-1.5 text-xs font-medium transition"
-                :class="creationMode === 'image_generate' ? 'bg-white text-ink shadow-sm font-semibold' : 'text-muted hover:text-ink'"
-                @click="creationMode = 'image_generate'"
-              >
-                <span>🎨 文生图 (Text to Image)</span>
-              </button>
-              <button
-                type="button"
-                class="flex-1 flex items-center justify-center gap-2 rounded-lg py-1.5 text-xs font-medium transition"
-                :class="creationMode === 'image_edit' ? 'bg-white text-ink shadow-sm font-semibold' : 'text-muted hover:text-ink'"
-                @click="creationMode = 'image_edit'"
-              >
-                <span>🖼️ 图生图与编辑 (Image Edit)</span>
-              </button>
-            </div>
-
-            <!-- 1. 创作风格预设选择器 (V2-11) -->
-            <div>
-              <div class="flex items-center justify-between pb-2">
-                <label class="text-xs font-semibold text-ink">创作预设与风格</label>
-                <span class="text-[11px] text-muted">
-                  {{ activePreset ? activePreset.description : "选择预设将自动注入专业提示词与负向词" }}
-                </span>
-              </div>
-
-              <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <button
-                  type="button"
-                  class="flex flex-col items-start gap-1 rounded-xl border p-2.5 text-left transition active:scale-98"
-                  :class="
-                    selectedPresetId === null
-                      ? 'border-accent bg-accent/5 ring-1 ring-accent'
-                      : 'border-line/80 bg-canvas/30 hover:bg-canvas/80 text-ink'
-                  "
-                  @click="selectPreset(null)"
-                >
-                  <span class="text-xs font-semibold">自由创作</span>
-                  <span class="text-[10px] text-muted line-clamp-1">完全遵循原始输入</span>
-                </button>
-
-                <button
-                  v-for="p in filteredPresets"
-                  :key="p.id"
-                  type="button"
-                  class="flex flex-col items-start gap-1 rounded-xl border p-2.5 text-left transition active:scale-98"
-                  :class="
-                    selectedPresetId === p.id
-                      ? 'border-accent bg-accent/5 ring-1 ring-accent'
-                      : 'border-line/80 bg-canvas/30 hover:bg-canvas/80 text-ink'
-                  "
-                  @click="selectPreset(p.id)"
-                >
-                  <span class="text-xs font-semibold truncate w-full">{{ p.name }}</span>
-                  <span class="text-[10px] text-muted line-clamp-1">{{ p.description || "专业调优预设" }}</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- 2. 提示词输入区与一键润色 (V2-11) -->
-            <div class="space-y-2">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                  <label class="text-xs font-semibold text-ink">创作提示词 (Prompt)</label>
-                  <span v-if="lastOptimizedResult" class="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
-                    已由 {{ lastOptimizedResult.model_name }} 润色
-                  </span>
-                </div>
-
-                <!-- 润色与撤销按钮 -->
-                <div class="flex items-center gap-2">
-                  <button
-                    v-if="originalPromptBeforeOpt"
-                    type="button"
-                    class="text-[11px] text-muted hover:text-ink transition"
-                    @click="revertOptimization"
-                  >
-                    撤销润色
-                  </button>
-
-                  <!-- 润色语言版本切换 (中文默认 / 英文) -->
-                  <div class="inline-flex items-center rounded-lg border border-line bg-canvas/60 p-0.5 text-[11px]">
-                    <button
-                      type="button"
-                      class="rounded-md px-1.5 py-0.5 font-medium transition"
-                      :class="optimizeLanguage === 'zh' ? 'bg-white text-ink shadow-xs' : 'text-muted hover:text-ink'"
-                      :disabled="optimizing"
-                      title="输出专业中文提示词"
-                      @click="optimizeLanguage = 'zh'"
-                    >
-                      中文
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded-md px-1.5 py-0.5 font-medium transition"
-                      :class="optimizeLanguage === 'en' ? 'bg-white text-ink shadow-xs' : 'text-muted hover:text-ink'"
-                      :disabled="optimizing"
-                      title="输出英文生图提示词"
-                      @click="optimizeLanguage = 'en'"
-                    >
-                      EN
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent transition hover:bg-accent/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-                    :disabled="optimizing || !prompt.trim()"
-                    @click="handleOptimizePrompt"
-                  >
-                    <SidebarIcon name="star" class="h-3 w-3" :class="optimizing ? 'animate-spin' : ''" />
-                    <span>{{ optimizing ? "AI 润色中…" : "✨ 智能润色" }}</span>
-                  </button>
-                </div>
-              </div>
-
-              <div class="relative">
-                <textarea
-                  v-model="prompt"
-                  rows="4"
-                  placeholder="用中文或英文描述画面主体、光影氛围、镜头角度、细节质感等，例如：清晨云雾缭绕的高山茶园，露珠在阳光下闪烁，微距特写…"
-                  class="w-full rounded-xl border border-line bg-canvas/20 p-3 text-xs leading-relaxed text-ink outline-none transition placeholder:text-muted/60 focus:border-accent focus:bg-white focus:ring-2 focus:ring-accent/10"
-                />
-              </div>
-
-              <div v-if="optimizeError" class="text-[11px] text-rose-600">
-                {{ optimizeError }}
-              </div>
-            </div>
-
-            <!-- 3. 参考图与角色标注 (V2-12) -->
-            <div class="border-t border-line/60 pt-3">
-              <div class="flex items-center justify-between pb-2">
-                <div class="flex items-center gap-1.5">
-                  <label class="text-xs font-semibold text-ink">参考图与角色标注</label>
-                  <span class="text-[11px] text-muted">({{ references.length }} 张)</span>
-                </div>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink transition hover:border-accent hover:text-accent active:scale-95"
-                  @click="showRefPicker = true"
-                >
-                  <SidebarIcon name="plus" class="h-3 w-3" />
-                  <span>添加参考图</span>
-                </button>
-              </div>
-
-              <!-- 参考图列表 -->
-              <div v-if="references.length > 0" class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div
-                  v-for="(refItem, idx) in references"
-                  :key="`${refItem.source_kind}_${refItem.source_id}`"
-                  class="flex items-center gap-2.5 rounded-xl border border-line/80 bg-canvas/30 p-2 transition hover:bg-white"
-                >
-                  <div class="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border border-line/60 bg-canvas flex items-center justify-center">
-                    <img v-if="refItem.preview_url" :src="refItem.preview_url" :alt="refItem.name" class="h-full w-full object-cover" />
-                    <SidebarIcon v-else name="image" class="h-5 w-5 text-muted/50" />
-                  </div>
-
-                  <div class="min-w-0 flex-1">
-                    <div class="truncate text-xs font-medium text-ink" :title="refItem.name">{{ refItem.name }}</div>
-                    <div class="mt-1 flex items-center gap-1.5">
-                      <span
-                        class="rounded px-1.5 py-0.5 text-[10px] font-medium"
-                        :class="{
-                          'bg-blue-50 text-blue-600': refItem.source_kind === 'asset',
-                          'bg-purple-50 text-purple-600': refItem.source_kind === 'history_result',
-                          'bg-emerald-50 text-emerald-600': refItem.source_kind === 'local_upload'
-                        }"
-                      >
-                        {{ refItem.source_kind === 'asset' ? '主库' : refItem.source_kind === 'history_result' ? '历史' : '本地' }}
-                      </span>
-
-                      <div class="w-28">
-                        <AppleSelect
-                          v-model="refItem.role"
-                          size="sm"
-                          :options="refRoleOptions"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    class="rounded p-1 text-muted transition hover:bg-rose-50 hover:text-rose-600 active:scale-90"
-                    title="移除参考图"
-                    @click="removeReference(idx)"
-                  >
-                    <SidebarIcon name="close" class="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- 4. 画幅比例与生成规格 (V2-13 动态参数适配) -->
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <div class="flex items-center justify-between pb-1.5">
-                  <label class="text-xs font-semibold text-ink">画面画幅比例</label>
-                  <span class="text-[11px] text-muted">{{ getAspectRatioHint(selectedAspectRatio) }}</span>
-                </div>
-                <div class="flex flex-wrap gap-1.5">
-                  <button
-                    v-for="ar in supportedAspectRatios"
-                    :key="ar"
-                    type="button"
-                    class="rounded-lg border px-3 py-1.5 text-xs font-medium transition active:scale-95"
-                    :class="
-                      selectedAspectRatio === ar
-                        ? 'border-accent bg-accent/10 text-accent font-semibold shadow-2xs'
-                        : 'border-line bg-white hover:bg-canvas/50 text-ink'
-                    "
-                    @click="selectAspectRatio(ar)"
-                  >
-                    {{ ar }}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <div class="flex items-center justify-between pb-1.5">
-                  <label class="text-xs font-semibold text-ink">分辨率规格</label>
-                  <span class="text-[11px] text-muted font-mono">联动 {{ selectedAspectRatio }}</span>
-                </div>
-                <AppleSelect v-model="selectedSize" size="sm" :options="sizeOptions" />
-              </div>
-
-              <!-- 动态参数：画质选项（如 DALL-E 3 standard/hd） -->
-              <div v-if="supportedQualities.length > 0">
-                <label class="block text-xs font-semibold text-ink pb-1.5">生成画质</label>
-                <AppleSelect v-model="selectedQuality" size="sm" :options="qualityOptions" />
-              </div>
-
-              <!-- 动态参数：风格倾向（如 DALL-E 3 vivid/natural） -->
-              <div v-if="supportedStyles.length > 0">
-                <label class="block text-xs font-semibold text-ink pb-1.5">风格偏好</label>
-                <AppleSelect v-model="selectedStyle" size="sm" :options="styleOptions" />
-              </div>
-            </div>
-
-            <!-- 5. 高级参数抽屉（负向词、生成批次、重绘强度、随机种子） -->
-            <AiWorkbenchAdvancedDrawer
-              :creation-mode="creationMode"
-              v-model:denoising-strength="denoisingStrength"
-              v-model:negative-prompt="negativePrompt"
-              v-model:generate-count="generateCount"
-              v-model:seed="seed"
+          <!-- 2. 生成中过渡态 (currentPhase === 'generating') -->
+          <div v-else-if="currentPhase === 'generating'" class="flex-1 overflow-y-auto">
+            <AiWorkbenchProgressView
+              :prompt="lastSubmittedPayload?.prompt || ''"
+              :model-name="activeModel?.name"
+              :aspect-ratio="lastSubmittedPayload?.params?.aspect_ratio"
+              :size="lastSubmittedPayload?.params?.size"
+              :cancelling="cancellingTask"
+              @cancel="handleCancelCurrentTask"
+              @background-run="handleCloseModal"
             />
           </div>
 
-          <!-- 底部提交操作栏 -->
-          <div class="flex items-center justify-between border-t border-line/60 bg-canvas/30 px-6 py-4">
-            <div class="text-[11px] text-muted">
-              <span v-if="activeModel">将由 <span class="font-medium text-ink">{{ activeModel.name }}</span> 执行</span>
-              <span v-else class="text-amber-600">未选择可用生图模型</span>
-            </div>
+          <!-- 3. 结果成果展示态 (currentPhase === 'result' && activeTaskDetail) -->
+          <div v-else-if="currentPhase === 'result' && activeTaskDetail" class="flex-1 overflow-y-auto">
+            <AiWorkbenchResultView
+              :task-detail="activeTaskDetail"
+              :model-name="activeModel?.name"
+              @back-to-edit="handleBackToEdit"
+              @regenerate="handleRegenerate"
+              @inspect-detail="handleInspectDetail"
+            />
+          </div>
 
-            <div class="flex items-center gap-2.5">
+          <!-- 4. 任务执行失败态 (currentPhase === 'failed') -->
+          <div v-else-if="currentPhase === 'failed'" class="flex flex-1 flex-col items-center justify-center p-8 text-center">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-600 shadow-sm">
+              <SidebarIcon name="close" class="h-6 w-6" />
+            </div>
+            <h3 class="mt-3 text-sm font-semibold text-ink">生成未成功</h3>
+            <p class="mt-1.5 max-w-md text-xs text-rose-600/90 leading-relaxed">
+              {{ errorMessage || "任务未能顺利完成，请检查生图模型连接或 API 配额配置。" }}
+            </p>
+            <div class="mt-6 flex items-center gap-3">
               <button
                 type="button"
                 class="rounded-xl border border-line bg-white px-4 py-2 text-xs font-medium text-ink transition hover:bg-canvas active:scale-97"
-                @click="emit('close')"
+                @click="handleBackToEdit"
               >
-                取消
+                返回修改提示词
               </button>
-
               <button
                 type="button"
-                class="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700 active:scale-97 disabled:cursor-not-allowed disabled:opacity-40"
-                :disabled="submitting || !prompt.trim() || !selectedModelId"
-                @click="handleSubmit"
+                class="inline-flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-97"
+                @click="handleRegenerate"
               >
-                <SidebarIcon name="star" class="h-3.5 w-3.5" :class="submitting ? 'animate-spin' : ''" />
-                <span>{{ submitting ? "提交任务中…" : "开始生成" }}</span>
+                <SidebarIcon name="refresh" class="h-3.5 w-3.5" />
+                <span>重试生成</span>
               </button>
             </div>
           </div>
@@ -770,10 +375,12 @@ async function handleSubmit(): Promise<void> {
       </div>
     </Transition>
 
-    <AiReferencePickerModal
-      :open="showRefPicker"
-      @close="showRefPicker = false"
-      @pick="handleAddReference"
+    <!-- 1:1 显微级原画微距检视弹窗 -->
+    <AiResultPreviewModal
+      :open="showInspectModal"
+      :result="inspectingResult"
+      :task="activeTaskDetail"
+      @close="showInspectModal = false"
     />
   </Teleport>
 </template>

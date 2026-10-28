@@ -149,7 +149,7 @@ export function useAiWorkbench() {
 
   function onAiTaskCreated(task: AiTaskSummary): void {
     notify("success", `AI 任务 #${task.id.slice(0, 8)} 已提交执行队列`);
-    showAiTaskCenter.value = true;
+    // 工作台就地展示流体生成过渡与结果，避免抽屉弹出遮挡主创空间
   }
 
   return {
