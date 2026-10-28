@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import httpx
 from backend.app.services.ai.credentials import CredentialManager
 
@@ -311,4 +312,74 @@ def test_fetch_remote_models_error_cases(client, headers, monkeypatch) -> None:
     err_res = client.get(f"/api/v1/ai/providers/{pid}/remote-models", headers=headers)
     assert err_res.status_code == 400
     assert err_res.json()["error"]["code"] == "remote_models_failed"
+
+
+def test_fetch_remote_models_auto_heal_v1_and_dynamic_test(client, headers, monkeypatch) -> None:
+    # 测试未加 /v1 的 base_url 能够自动发现 /v1/models 并在能力测试时动态探测模型
+    payload = {
+        "name": "未加 v1 的网关 Provider",
+        "family": "openai_compatible",
+        "base_url": "http://127.0.0.1:8317",
+        "api_key": "twj123456",
+    }
+    pid = client.post("/api/v1/ai/providers", json=payload, headers=headers).json()["id"]
+
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        url_str = str(request.url)
+        # 模拟没有 /v1 的 /models 返回 404，而 /v1/models 返回 200
+        if url_str == "http://127.0.0.1:8317/models":
+            return httpx.Response(404, text="Not Found")
+        if url_str == "http://127.0.0.1:8317/v1/models":
+            return httpx.Response(200, json={
+                "data": [
+                    {"id": "gemini-3.8-flash-low"},
+                    {"id": "gpt-image-2.5"}
+                ]
+            })
+        if "/chat/completions" in url_str:
+            # 仅当使用 gemini-3.8-flash-low 时通过，硬编码 gpt-4o-mini 则返回 400
+            req_data = json.loads(request.read())
+            if req_data.get("model") == "gemini-3.8-flash-low":
+                return httpx.Response(200, json={"choices": [{"message": {"content": "pong"}}]})
+            return httpx.Response(400, json={"error": {"message": "model_not_found"}})
+        if "/images/generations" in url_str:
+            return httpx.Response(200, json={"data": [{"b64_json": "fake_b64"}]})
+        return httpx.Response(404, text="Not Found")
+
+    mock_client = httpx.Client(transport=httpx.MockTransport(mock_handler))
+
+    from backend.app.services.ai import provider_service
+    original_fetch = provider_service.fetch_remote_models
+    original_test = provider_service.test_provider_connection
+
+    def wrapped_fetch(*args, **kwargs):
+        kwargs["client"] = mock_client
+        return original_fetch(*args, **kwargs)
+
+    def wrapped_test(*args, **kwargs):
+        kwargs["client"] = mock_client
+        return original_test(*args, **kwargs)
+
+    monkeypatch.setattr(provider_service, "fetch_remote_models", wrapped_fetch)
+    monkeypatch.setattr(provider_service, "test_provider_connection", wrapped_test)
+
+    # 1. 验证获取远程模型时自愈补齐 /v1
+    models_res = client.get(f"/api/v1/ai/providers/{pid}/remote-models", headers=headers)
+    assert models_res.status_code == 200
+    models_data = models_res.json()
+    assert len(models_data) == 2
+
+    # 验证 base_url 已自愈为 /v1
+    provider_info = client.get(f"/api/v1/ai/providers/{pid}", headers=headers).json()
+    assert provider_info["base_url"] == "http://127.0.0.1:8317/v1"
+
+    # 2. 验证空 payload 测试时，动态选取 gemini-3.8-flash-low 与 gpt-image-2.5 成功通过测试
+    test_res = client.post(f"/api/v1/ai/providers/{pid}/test", json={}, headers=headers)
+    assert test_res.status_code == 200
+    test_data = test_res.json()
+    assert test_data["success"] is True
+    assert test_data["results"]["text_optimize"]["supported"] is True
+    assert test_data["results"]["text_optimize"]["model_id"] == "gemini-3.8-flash-low"
+    assert test_data["results"]["image_generate"]["supported"] is True
+    assert test_data["results"]["image_generate"]["model_id"] == "gpt-image-2.5"
 

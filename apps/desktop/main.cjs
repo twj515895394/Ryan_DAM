@@ -98,8 +98,12 @@ function getBackendCommand() {
     }
     return { command: executable, args: [], cwd: userDataPath };
   }
+  const venvPython = process.platform === "win32"
+    ? path.join(app.getAppPath(), ".venv", "Scripts", "python.exe")
+    : path.join(app.getAppPath(), ".venv", "bin", "python");
+  const pythonCmd = process.env.RYAN_DAM_PYTHON || (fs.existsSync(venvPython) ? venvPython : (process.platform === "win32" ? "python" : "python3"));
   return {
-    command: process.env.RYAN_DAM_PYTHON || (process.platform === "win32" ? "python" : "python3"),
+    command: pythonCmd,
     args: ["-m", "backend.app.main"],
     cwd: app.getAppPath()
   };

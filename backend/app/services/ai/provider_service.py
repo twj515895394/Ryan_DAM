@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.core.errors import ApiError
+from backend.app.models.ai.model_config import AiModelProfile
 from backend.app.models.ai.provider import AiProviderInstance
 from backend.app.schemas.ai.provider import (
     ProviderCreatePayload,
@@ -179,14 +180,52 @@ def test_provider_connection(
         cap = payload.capability or CAPABILITY_TEXT_OPTIMIZE
         mapping[cap] = payload.model_id
 
-    # Fallback default probe if no model mapping given
-    if not mapping:
-        mapping[CAPABILITY_TEXT_OPTIMIZE] = "gpt-4o-mini"
-
-    caps_to_test = payload.capabilities or list(mapping.keys())
-
     managed_client = client or httpx.Client()
     try:
+        # Fallback default probe if no model mapping given
+        if not mapping:
+            # 1. 优先使用数据库中该 Provider 已经配置的模型
+            configured_models = db.scalars(
+                select(AiModelProfile).where(
+                    AiModelProfile.provider_id == provider_id,
+                    AiModelProfile.enabled.is_(True),
+                )
+            ).all()
+            for cm in configured_models:
+                caps_dict = json.loads(cm.capabilities_json) if cm.capabilities_json else {}
+                for cap_name, cap_meta in caps_dict.items():
+                    if isinstance(cap_meta, dict) and cap_meta.get("supported"):
+                        if cap_name not in mapping:
+                            mapping[cap_name] = cm.model_id
+
+        if not mapping:
+            # 2. 动态探测 Provider 远端实际支持的模型，避免硬编码模型 ID 导致第三方网关报错
+            try:
+                remote_models = fetch_remote_models(db, provider_id, client=managed_client)
+            except Exception:
+                remote_models = []
+
+            if remote_models:
+                text_candidate: str | None = None
+                image_candidate: str | None = None
+                for rm in remote_models:
+                    rid = rm.id.lower()
+                    if any(kw in rid for kw in ("image", "imagine", "dall-e", "flux", "draw")) and not image_candidate:
+                        image_candidate = rm.id
+                    elif not any(kw in rid for kw in ("image", "imagine", "video", "tts", "voice", "audio")) and not text_candidate:
+                        text_candidate = rm.id
+
+                if text_candidate:
+                    mapping[CAPABILITY_TEXT_OPTIMIZE] = text_candidate
+                if image_candidate:
+                    mapping[CAPABILITY_IMAGE_GENERATE] = image_candidate
+
+        if not mapping:
+            # 3. 终极保底
+            mapping[CAPABILITY_TEXT_OPTIMIZE] = "gpt-4o-mini"
+
+        caps_to_test = payload.capabilities or list(mapping.keys())
+
         raw_results = probe_all_capabilities(
             managed_client,
             instance.base_url,
@@ -219,7 +258,13 @@ def fetch_remote_models(
     secret = CredentialManager.get_credential(instance.credential_ref) or ""
 
     base_url = instance.base_url.rstrip("/")
-    url = f"{base_url}/models"
+    # 构建候选路径以优雅兼容带 /v1 与不带 /v1 的网关配置
+    candidate_urls: list[str] = [f"{base_url}/models"]
+    if not base_url.endswith("/v1"):
+        candidate_urls.append(f"{base_url}/v1/models")
+    elif base_url.endswith("/v1"):
+        candidate_urls.append(f"{base_url[:-3]}/models")
+
     headers: dict[str, str] = {"Accept": "application/json"}
     params: dict[str, str] = {}
 
@@ -233,18 +278,38 @@ def fetch_remote_models(
 
     managed_client = client or httpx.Client()
     try:
-        try:
-            res = managed_client.get(url, headers=headers, params=params, timeout=15.0)
-        except Exception as exc:
-            raise ApiError("remote_models_failed", f"连接 Provider 服务失败: {exc}", 400) from exc
+        last_res: httpx.Response | None = None
+        last_exc: Exception | None = None
+        working_url: str | None = None
 
-        if res.status_code != 200:
-            preview = res.text[:200] if res.text else ""
-            raise ApiError(
-                "remote_models_failed",
-                f"获取模型列表失败 (HTTP {res.status_code}): {preview}",
-                400,
-            )
+        for target_url in candidate_urls:
+            try:
+                res = managed_client.get(target_url, headers=headers, params=params, timeout=15.0)
+                last_res = res
+                if res.status_code == 200:
+                    working_url = target_url
+                    break
+            except Exception as exc:
+                last_exc = exc
+                continue
+
+        if working_url is None:
+            if last_res is not None:
+                preview = last_res.text[:200] if last_res.text else ""
+                raise ApiError(
+                    "remote_models_failed",
+                    f"获取模型列表失败 (HTTP {last_res.status_code}): {preview}",
+                    400,
+                )
+            raise ApiError("remote_models_failed", f"连接 Provider 服务失败: {last_exc}", 400) from last_exc
+
+        # 若发现缺少 /v1 导致必须走 /v1/models 才能连通，自动为 Provider 自愈补全 /v1
+        if working_url.endswith("/v1/models") and not instance.base_url.rstrip("/").endswith("/v1"):
+            instance.base_url = f"{instance.base_url.rstrip('/')}/v1"
+            db.commit()
+            db.refresh(instance)
+
+        res = last_res
 
         try:
             data = res.json()
