@@ -112,14 +112,19 @@ function handleBatchMove(folderId: number): void {
 </script>
 
 <template>
-  <div class="fixed bottom-5 left-1/2 z-40 -translate-x-1/2">
-    <div class="flex items-center gap-2 rounded-2xl border border-line bg-white px-4 py-2.5 shadow-soft">
-      <div class="mr-1 flex items-center gap-1.5">
-        <span class="text-sm font-medium">已选 {{ library.selectedAssetIds.length }} 项</span>
+  <div class="fixed bottom-5 left-1/2 z-40 -translate-x-1/2 max-w-[calc(100vw-2.5rem)]">
+    <div
+      class="flex items-center gap-1.5 overflow-x-auto scrollbar-none rounded-2xl border border-line/80 bg-white/95 px-3 py-2 shadow-2xl backdrop-blur-xl"
+    >
+      <!-- 选择数量与全选控制组 -->
+      <div class="flex shrink-0 items-center gap-1.5 pr-1">
+        <span class="whitespace-nowrap text-xs font-semibold text-ink">
+          已选 {{ library.selectedAssetIds.length }} 项
+        </span>
         <button
           v-if="library.selectedAssetIds.length < props.totalCurrentAssets"
           type="button"
-          class="rounded-md px-1.5 py-0.5 text-xs font-medium text-accent transition hover:bg-accent/10"
+          class="shrink-0 whitespace-nowrap rounded-md bg-canvas/80 px-2 py-1 text-xs font-medium text-accent transition hover:bg-accent/10"
           title="全选当前列表所有资产 (Ctrl+A)"
           @click="emit('select-all')"
         >
@@ -128,7 +133,7 @@ function handleBatchMove(folderId: number): void {
         <button
           v-else
           type="button"
-          class="rounded-md px-1.5 py-0.5 text-xs font-medium text-muted transition hover:bg-canvas"
+          class="shrink-0 whitespace-nowrap rounded-md bg-canvas/80 px-2 py-1 text-xs font-medium text-muted transition hover:bg-canvas hover:text-ink"
           title="清空当前所有选中 (Esc)"
           @click="clearAssetSelection"
         >
@@ -136,19 +141,24 @@ function handleBatchMove(folderId: number): void {
         </button>
       </div>
 
+      <!-- 分隔线 -->
+      <div class="mx-0.5 h-4 w-px shrink-0 bg-line/80" />
+
       <!-- 加标签面板 -->
-      <div class="relative">
+      <div class="relative shrink-0">
         <button
-          class="rounded-lg px-3 py-1.5 text-sm transition"
-          :class="batchPanel === 'add-tag' ? 'bg-accent/10 font-medium text-accent' : 'text-ink hover:bg-canvas'"
+          type="button"
+          class="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2.5 text-xs font-medium transition"
+          :class="batchPanel === 'add-tag' ? 'bg-accent/15 text-accent' : 'text-ink hover:bg-canvas'"
           @click="batchPanel = batchPanel === 'add-tag' ? 'none' : 'add-tag'"
         >
-          加标签
+          <SidebarIcon name="plus" class="h-3 w-3 text-muted" />
+          <span>加标签</span>
         </button>
 
         <div
           v-if="batchPanel === 'add-tag'"
-          class="absolute bottom-11 left-0 z-50 w-64 rounded-xl border border-line bg-white p-2 shadow-soft"
+          class="absolute bottom-11 left-0 z-50 w-64 rounded-xl border border-line bg-white/95 p-2 shadow-xl backdrop-blur-xl"
         >
           <div class="relative">
             <input
@@ -220,22 +230,25 @@ function handleBatchMove(folderId: number): void {
       </div>
 
       <!-- 移除标签面板 -->
-      <div class="relative">
+      <div class="relative shrink-0">
         <button
-          class="rounded-lg px-3 py-1.5 text-sm text-ink transition hover:bg-canvas"
+          type="button"
+          class="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2.5 text-xs font-medium transition"
+          :class="batchPanel === 'remove-tag' ? 'bg-accent/15 text-accent' : 'text-ink hover:bg-canvas'"
           @click="batchPanel = batchPanel === 'remove-tag' ? 'none' : 'remove-tag'"
         >
-          移除标签
+          <span>移除标签</span>
         </button>
         <div
           v-if="batchPanel === 'remove-tag'"
-          class="absolute bottom-11 left-0 z-50 w-52 rounded-xl border border-line bg-white p-2 shadow-soft"
+          class="absolute bottom-11 left-0 z-50 w-52 rounded-xl border border-line bg-white/95 p-2 shadow-xl backdrop-blur-xl"
         >
           <p v-if="library.tags.length === 0" class="px-2 py-1 text-xs text-muted">暂无标签</p>
           <button
             v-for="tag in library.tags"
             :key="tag.id"
-            class="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-canvas"
+            type="button"
+            class="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-xs text-ink transition hover:bg-canvas hover:text-rose-600"
             @click="handleBatchRemoveTag(tag.id)"
           >
             {{ tag.name }}
@@ -244,16 +257,18 @@ function handleBatchMove(folderId: number): void {
       </div>
 
       <!-- 跨项目/跨库移动面板（结构化分组展示） -->
-      <div class="relative">
+      <div class="relative shrink-0">
         <button
-          class="rounded-lg px-3 py-1.5 text-sm text-ink transition hover:bg-canvas"
+          type="button"
+          class="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-2.5 text-xs font-medium transition"
+          :class="batchPanel === 'move' ? 'bg-accent/15 text-accent' : 'text-ink hover:bg-canvas'"
           @click="batchPanel = batchPanel === 'move' ? 'none' : 'move'"
         >
-          移动到…
+          <span>移动到…</span>
         </button>
         <div
           v-if="batchPanel === 'move'"
-          class="absolute bottom-11 left-0 z-50 max-h-72 w-72 overflow-y-auto rounded-xl border border-line bg-white p-1.5 shadow-soft"
+          class="absolute bottom-11 left-0 z-50 max-h-72 w-72 overflow-y-auto rounded-xl border border-line bg-white/95 p-1.5 shadow-xl backdrop-blur-xl"
         >
           <p v-if="allFolderGroups.length === 0" class="px-2 py-2 text-xs text-muted">暂无可移动到的目录</p>
           <div
@@ -280,11 +295,17 @@ function handleBatchMove(folderId: number): void {
         </div>
       </div>
 
+      <!-- 分隔线 -->
+      <div
+        v-if="selectedImageAssets.length > 0 || hasExternalSelected"
+        class="mx-0.5 h-4 w-px shrink-0 bg-line/80"
+      />
+
       <!-- 批量 AI 提示词反推 -->
       <button
         v-if="selectedImageAssets.length > 0"
         type="button"
-        class="flex items-center gap-1.5 rounded-lg bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/20"
+        class="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/20 bg-accent/10 px-2.5 text-xs font-medium text-accent transition hover:bg-accent/20"
         :title="`对选中的 ${selectedImageAssets.length} 张图片批量反推视觉提示词`"
         @click="batchPanel = 'none'; emit('ask-batch-reverse')"
       >
@@ -296,21 +317,29 @@ function handleBatchMove(folderId: number): void {
       <button
         v-if="hasExternalSelected"
         type="button"
-        class="rounded-lg px-3 py-1.5 text-sm text-ink transition hover:bg-canvas"
+        class="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-line bg-canvas/60 px-2.5 text-xs font-medium text-ink transition hover:bg-canvas"
         title="将选中的外部链接素材复制为系统托管存储"
         @click="batchPanel = 'none'; emit('ask-convert')"
       >
-        转为系统托管
+        <span>转为系统托管</span>
       </button>
 
+      <!-- 分隔线 -->
+      <div class="mx-0.5 h-4 w-px shrink-0 bg-line/80" />
+
+      <!-- 删除操作 -->
       <button
-        class="rounded-lg px-3 py-1.5 text-sm text-rose-600 transition hover:bg-rose-50"
+        type="button"
+        class="flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg px-2.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
         @click="emit('ask-trash')"
       >
         删除
       </button>
+
+      <!-- 取消选中操作 -->
       <button
-        class="rounded-lg px-3 py-1.5 text-sm text-muted transition hover:bg-canvas"
+        type="button"
+        class="flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg px-2.5 text-xs font-medium text-muted transition hover:bg-canvas hover:text-ink"
         @click="clearAssetSelection(); batchPanel = 'none'"
       >
         取消

@@ -15,6 +15,11 @@ from backend.app.models.ai.task import AiTask, AiTaskReference
 from backend.app.models.asset import Asset
 from backend.app.services.ai.adapters.openai_compatible import OpenAICompatibleAdapter
 from backend.app.services.ai.credentials import CredentialManager
+from backend.app.services.ai.image_canvas import (
+    adapt_reference_canvas_for_aspect_ratio,
+    align_output_dimensions,
+    parse_aspect_ratio,
+)
 from backend.app.services.ai.storage_service import (
     check_storage_space,
     commit_generated_result,
@@ -229,6 +234,19 @@ def _make_generation_runner(session_factory: sessionmaker):
                     raise ApiError(code="missing_reference_file", message="未找到用于编辑的参考图快照文件", status_code=404)
                 img_bytes_in = primary_image_path.read_bytes()
                 mask_bytes_in = mask_image_path.read_bytes() if mask_image_path and mask_image_path.exists() else None
+
+                # 自适应目标画幅比例（防止上游编辑接口因参考图原始比例固化输出画幅）
+                target_ratio = parse_aspect_ratio(
+                    aspect_ratio_str=params.get("aspect_ratio"),
+                    size_str=size,
+                )
+                if target_ratio:
+                    img_bytes_in, mask_bytes_in = adapt_reference_canvas_for_aspect_ratio(
+                        image_bytes=img_bytes_in,
+                        mask_bytes=mask_bytes_in,
+                        target_ratio=target_ratio,
+                    )
+
                 image_bytes_list = await adapter.edit_image(
                     image_bytes=img_bytes_in,
                     prompt=prompt,
@@ -252,6 +270,13 @@ def _make_generation_runner(session_factory: sessionmaker):
             if cancel_event.is_set():
                 scheduler.update_task_status(task_id, "canceled")
                 return
+
+            # 对输出图像进行尺寸规格对齐（例如 1672x941 与 1920x1080 相同比例下的精细对齐）
+            aligned_bytes_list: list[bytes] = []
+            for raw_bytes in image_bytes_list:
+                aligned = align_output_dimensions(raw_bytes, target_size_str=size)
+                aligned_bytes_list.append(aligned)
+            image_bytes_list = aligned_bytes_list
 
             # 落盘并记录生成结果
             with session_factory() as db:
