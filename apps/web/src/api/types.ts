@@ -257,6 +257,12 @@ export interface AiProviderTestResponse {
   results: Record<string, AiProviderTestResultItem>;
 }
 
+export interface AiRemoteModelItem {
+  id: string;
+  name?: string | null;
+  description?: string | null;
+}
+
 export interface AiModelProfile {
   id: number;
   provider_id: number;

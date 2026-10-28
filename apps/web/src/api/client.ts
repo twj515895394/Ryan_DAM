@@ -9,6 +9,7 @@ import type {
   AiProviderTestPayload,
   AiProviderTestResponse,
   AiProviderUpdatePayload,
+  AiRemoteModelItem,
   AiReverseTemplate,
   AiReverseTemplateCreatePayload,
   SingleImageReverseRequest,
@@ -304,6 +305,8 @@ export const api = {
     request<void>(`/api/v1/ai/providers/${id}`, { method: "DELETE" }),
   testAiProvider: (id: number, payload: AiProviderTestPayload) =>
     request<AiProviderTestResponse>(`/api/v1/ai/providers/${id}/test`, { method: "POST", json: payload }),
+  getProviderRemoteModels: (providerId: number) =>
+    request<AiRemoteModelItem[]>(`/api/v1/ai/providers/${providerId}/remote-models`),
 
   // V2 AI Model Profiles & Defaults
   listAllModels: () => request<AiModelProfile[]>("/api/v1/ai/models"),

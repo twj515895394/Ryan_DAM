@@ -6,7 +6,8 @@ import type {
   AiDefaultBinding,
   AiModelProfile,
   AiModelProfileCreatePayload,
-  AiProviderInstance
+  AiProviderInstance,
+  AiRemoteModelItem
 } from "../api/types";
 import SidebarIcon from "./SidebarIcon.vue";
 import type { ConfirmRequest } from "../composables/useConfirmDialog";
@@ -25,6 +26,11 @@ const error = ref<string | null>(null);
 // 添加模型弹层
 const showAddModel = ref(false);
 const selectedProviderId = ref<number | null>(null);
+const remoteModels = ref<AiRemoteModelItem[]>([]);
+const fetchingRemoteModels = ref(false);
+const remoteModelsError = ref<string | null>(null);
+const manualInputMode = ref(false);
+
 const modelForm = ref<AiModelProfileCreatePayload>({
   model_id: "",
   name: "",
@@ -57,9 +63,173 @@ async function loadData(): Promise<void> {
   }
 }
 
+async function fetchRemoteModels(providerId: number | null): Promise<void> {
+  if (!providerId) {
+    remoteModels.value = [];
+    return;
+  }
+  fetchingRemoteModels.value = true;
+  remoteModelsError.value = null;
+  try {
+    const list = await api.getProviderRemoteModels(providerId);
+    remoteModels.value = list;
+    if (list.length === 0) {
+      manualInputMode.value = true;
+    } else {
+      manualInputMode.value = false;
+    }
+  } catch (err: any) {
+    remoteModels.value = [];
+    remoteModelsError.value = err.message || "无法自动获取远程模型列表";
+    manualInputMode.value = true;
+  } finally {
+    fetchingRemoteModels.value = false;
+  }
+}
+
+function formatDisplayName(modelId: string): string {
+  const clean = modelId.trim();
+  const lower = clean.toLowerCase();
+
+  if (lower === "dall-e-3") return "DALL-E 3 高清生图";
+  if (lower === "dall-e-2") return "DALL-E 2 生图/编辑";
+  if (lower === "gpt-4o") return "GPT-4o 旗舰多模态";
+  if (lower === "gpt-4o-mini") return "GPT-4o mini 智能优化";
+  if (lower === "gpt-4-turbo") return "GPT-4 Turbo";
+  if (lower.startsWith("gemini-1.5-pro")) return "Gemini 1.5 Pro 多模态";
+  if (lower.startsWith("gemini-1.5-flash")) return "Gemini 1.5 Flash 极速推理";
+  if (lower.startsWith("imagen-3")) return "Google Imagen 3 原生生图";
+  if (lower.includes("flux-schnell")) return "FLUX Schnell 极速生图";
+  if (lower.includes("flux-dev")) return "FLUX.1 Dev 高质量生图";
+  if (lower.includes("claude-3-5-sonnet")) return "Claude 3.5 Sonnet";
+  if (lower.includes("deepseek-chat") || lower.includes("deepseek-v3")) return "DeepSeek V3 智能思考";
+  if (lower.includes("deepseek-reasoner") || lower.includes("deepseek-r1")) return "DeepSeek R1 深度推理";
+
+  // 默认美化分词
+  const parts = clean.split(/[-_]/);
+  if (parts.length > 1) {
+    return parts.map((seg) => (seg ? seg.charAt(0).toUpperCase() + seg.slice(1) : "")).join(" ");
+  }
+  return clean;
+}
+
+function autoDetectCapabilities(modelId: string): void {
+  const lower = modelId.toLowerCase();
+  const provider = props.providers.find((p) => p.id === selectedProviderId.value);
+
+  // 1. 适配器协议推断
+  if (provider?.family === "gemini_native") {
+    modelForm.value.adapter_kind = "gemini_standard";
+  } else if (
+    lower.includes("dall-e") ||
+    lower.includes("flux") ||
+    lower.includes("imagen") ||
+    lower.includes("stable-diffusion") ||
+    lower.includes("midjourney")
+  ) {
+    modelForm.value.adapter_kind = "openai_standard";
+  } else if (lower.includes("gemini") && provider?.family === "openai_compatible") {
+    if (lower.includes("image") || lower.includes("draw")) {
+      modelForm.value.adapter_kind = "openai_chat_markdown";
+    }
+  }
+
+  // 2. 能力声明推断
+  const caps = modelForm.value.capabilities!;
+  caps.text_optimize.supported = false;
+  caps.image_understand.supported = false;
+  caps.image_generate.supported = false;
+  caps.image_edit.supported = false;
+
+  const isImageGen =
+    lower.includes("dall-e") ||
+    lower.includes("imagen") ||
+    lower.includes("flux") ||
+    lower.includes("stable-diffusion") ||
+    lower.includes("midjourney") ||
+    lower.includes("sdxl") ||
+    lower.includes("cogview") ||
+    lower.includes("recraft") ||
+    lower.includes("kolors") ||
+    lower.includes("image") ||
+    lower.includes("draw");
+
+  if (isImageGen) {
+    caps.image_generate.supported = true;
+    if (lower === "dall-e-2" || lower.includes("edit") || lower.includes("inpaint")) {
+      caps.image_edit.supported = true;
+    }
+  }
+
+  const isVision =
+    lower.includes("gpt-4o") ||
+    lower.includes("vision") ||
+    lower.includes("vl") ||
+    lower.includes("gemini-1.5") ||
+    lower.includes("gemini-2") ||
+    lower.includes("claude-3") ||
+    lower.includes("qwen-vl") ||
+    lower.includes("minicpm") ||
+    lower.includes("omni");
+
+  if (isVision) {
+    caps.image_understand.supported = true;
+  }
+
+  const isChatLlm =
+    lower.includes("gpt") ||
+    lower.includes("claude") ||
+    lower.includes("gemini") ||
+    lower.includes("deepseek") ||
+    lower.includes("qwen") ||
+    lower.includes("glm") ||
+    lower.includes("chat") ||
+    lower.includes("instruct") ||
+    lower.includes("llama") ||
+    lower.includes("mistral");
+
+  if (isChatLlm) {
+    caps.text_optimize.supported = true;
+  }
+
+  // 兜底保障
+  if (
+    !caps.text_optimize.supported &&
+    !caps.image_understand.supported &&
+    !caps.image_generate.supported &&
+    !caps.image_edit.supported
+  ) {
+    caps.image_generate.supported = true;
+  }
+}
+
+function onSelectRemoteModel(modelId: string): void {
+  modelForm.value.model_id = modelId;
+  const found = remoteModels.value.find((m) => m.id === modelId);
+
+  // 1. 自动填充显示名称
+  if (found && found.name && found.name !== modelId) {
+    modelForm.value.name = found.name;
+  } else {
+    modelForm.value.name = formatDisplayName(modelId);
+  }
+
+  // 2. 自动检测并推导适配器与能力
+  autoDetectCapabilities(modelId);
+}
+
+function onManualInputModelId(): void {
+  if (!modelForm.value.name.trim() && modelForm.value.model_id.trim()) {
+    modelForm.value.name = formatDisplayName(modelForm.value.model_id);
+    autoDetectCapabilities(modelForm.value.model_id);
+  }
+}
+
 function openAddModel(providerId?: number): void {
   saveError.value = null;
-  selectedProviderId.value = providerId || props.providers[0]?.id || null;
+  const pId = providerId || props.providers[0]?.id || null;
+  selectedProviderId.value = pId;
+  manualInputMode.value = false;
   modelForm.value = {
     model_id: "",
     name: "",
@@ -73,6 +243,9 @@ function openAddModel(providerId?: number): void {
     }
   };
   showAddModel.value = true;
+  if (pId) {
+    void fetchRemoteModels(pId);
+  }
 }
 
 async function handleSaveModel(): Promise<void> {
@@ -294,10 +467,24 @@ onMounted(() => {
 
       <div class="space-y-2.5 text-xs">
         <div>
-          <label class="block text-[11px] font-medium text-ink/80 mb-1">所属 Provider 连接</label>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-[11px] font-medium text-ink/80">所属 Provider 连接</label>
+            <button
+              v-if="selectedProviderId"
+              type="button"
+              :disabled="fetchingRemoteModels"
+              class="flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 transition disabled:opacity-50 cursor-pointer"
+              title="重新获取远程模型列表"
+              @click="fetchRemoteModels(selectedProviderId)"
+            >
+              <SidebarIcon name="refresh" class="h-3 w-3" :class="{ 'animate-spin': fetchingRemoteModels }" />
+              <span>{{ fetchingRemoteModels ? "正在拉取模型…" : "刷新模型列表" }}</span>
+            </button>
+          </div>
           <select
             v-model="selectedProviderId"
             class="w-full rounded-md border border-line bg-white px-2.5 py-1.5 text-xs text-ink outline-none focus:border-accent"
+            @change="() => { if (selectedProviderId) fetchRemoteModels(selectedProviderId); }"
           >
             <option v-for="p in providers" :key="p.id" :value="p.id">
               {{ p.name }} ({{ p.base_url }})
@@ -307,14 +494,56 @@ onMounted(() => {
 
         <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="block text-[11px] font-medium text-ink/80 mb-1">Model ID (API 标识)</label>
-            <input
-              v-model="modelForm.model_id"
-              type="text"
-              placeholder="例如：dall-e-3 / gpt-4o-mini"
-              class="w-full rounded-md border border-line bg-white px-2.5 py-1.5 font-mono text-xs text-ink outline-none focus:border-accent"
-            />
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-[11px] font-medium text-ink/80">Model ID (API 标识)</label>
+              <div class="flex items-center gap-1.5">
+                <button
+                  v-if="remoteModels.length > 0"
+                  type="button"
+                  class="text-[10px] text-accent hover:underline cursor-pointer"
+                  @click="manualInputMode = !manualInputMode"
+                >
+                  {{ manualInputMode ? "从模型列表选择" : "手动输入标识" }}
+                </button>
+              </div>
+            </div>
+
+            <!-- 下拉选择模式 -->
+            <div v-if="!manualInputMode && (remoteModels.length > 0 || fetchingRemoteModels)">
+              <select
+                :value="modelForm.model_id"
+                :disabled="fetchingRemoteModels"
+                class="w-full rounded-md border border-line bg-white px-2.5 py-1.5 font-mono text-xs text-ink outline-none focus:border-accent disabled:bg-canvas disabled:text-muted"
+                @change="(e) => onSelectRemoteModel((e.target as HTMLSelectElement).value)"
+              >
+                <option value="" disabled>
+                  {{ fetchingRemoteModels ? "-- 正在从 Provider 获取模型列表... --" : `-- 请选择远程模型 (已拉取 ${remoteModels.length} 个) --` }}
+                </option>
+                <option
+                  v-for="rm in remoteModels"
+                  :key="rm.id"
+                  :value="rm.id"
+                >
+                  {{ rm.id }}{{ rm.name && rm.name !== rm.id ? ` (${rm.name})` : "" }}
+                </option>
+              </select>
+            </div>
+
+            <!-- 手动输入模式 / 降级模式 -->
+            <div v-else class="space-y-1">
+              <input
+                v-model="modelForm.model_id"
+                type="text"
+                placeholder="例如：dall-e-3 / gpt-4o-mini"
+                class="w-full rounded-md border border-line bg-white px-2.5 py-1.5 font-mono text-xs text-ink outline-none focus:border-accent"
+                @input="onManualInputModelId"
+              />
+              <p v-if="remoteModelsError" class="text-[10px] text-amber-600">
+                {{ remoteModelsError }}，已切换为手动输入
+              </p>
+            </div>
           </div>
+
           <div>
             <label class="block text-[11px] font-medium text-ink/80 mb-1">显示名称</label>
             <input

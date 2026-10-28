@@ -14,6 +14,7 @@ from backend.app.schemas.ai.provider import (
     ProviderTestPayload,
     ProviderTestResponse,
     ProviderUpdatePayload,
+    RemoteModelItem,
 )
 from backend.app.services.ai.credentials import CredentialManager
 from backend.app.services.ai.protocol_poc import (
@@ -201,3 +202,90 @@ def test_provider_connection(
     finally:
         if client is None:
             managed_client.close()
+
+
+def fetch_remote_models(
+    db: Session,
+    provider_id: int,
+    client: httpx.Client | None = None,
+) -> list[RemoteModelItem]:
+    instance = db.get(AiProviderInstance, provider_id)
+    if instance is None:
+        raise ApiError("not_found", f"AI Provider 实例不存在 (id={provider_id})", 404)
+
+    secret = CredentialManager.get_credential(instance.credential_ref) or ""
+
+    base_url = instance.base_url.rstrip("/")
+    url = f"{base_url}/models"
+    headers: dict[str, str] = {"Accept": "application/json"}
+    params: dict[str, str] = {}
+
+    if instance.family == "gemini_native":
+        if secret:
+            headers["x-goog-api-key"] = secret
+            params["key"] = secret
+    else:
+        if secret:
+            headers["Authorization"] = f"Bearer {secret}"
+
+    managed_client = client or httpx.Client()
+    try:
+        try:
+            res = managed_client.get(url, headers=headers, params=params, timeout=15.0)
+        except Exception as exc:
+            raise ApiError("remote_models_failed", f"连接 Provider 服务失败: {exc}", 400) from exc
+
+        if res.status_code != 200:
+            preview = res.text[:200] if res.text else ""
+            raise ApiError(
+                "remote_models_failed",
+                f"获取模型列表失败 (HTTP {res.status_code}): {preview}",
+                400,
+            )
+
+        try:
+            data = res.json()
+        except Exception as exc:
+            raise ApiError("remote_models_failed", "Provider 返回内容非有效 JSON", 400) from exc
+
+        raw_items: list[dict[str, Any] | str] = []
+        if isinstance(data, dict):
+            if "data" in data and isinstance(data["data"], list):
+                raw_items = data["data"]
+            elif "models" in data and isinstance(data["models"], list):
+                raw_items = data["models"]
+        elif isinstance(data, list):
+            raw_items = data
+
+        parsed_models: dict[str, RemoteModelItem] = {}
+        for item in raw_items:
+            if isinstance(item, dict):
+                # 兼容 Gemini 格式 "models/gemini-1.5-flash" 与 OpenAI 格式 "gpt-4o"
+                raw_id = item.get("id") or item.get("name") or ""
+                if not raw_id:
+                    continue
+                model_id = str(raw_id).strip()
+                if model_id.startswith("models/"):
+                    model_id = model_id[len("models/") :]
+
+                display_name = item.get("displayName") or item.get("name") or model_id
+                desc = item.get("description") or item.get("owned_by")
+
+                if model_id and model_id not in parsed_models:
+                    parsed_models[model_id] = RemoteModelItem(
+                        id=model_id,
+                        name=str(display_name),
+                        description=str(desc) if desc else None,
+                    )
+            elif isinstance(item, str):
+                model_id = item.strip()
+                if model_id and model_id not in parsed_models:
+                    parsed_models[model_id] = RemoteModelItem(id=model_id, name=model_id)
+
+        # 排序：字母序
+        result = sorted(parsed_models.values(), key=lambda x: x.id.lower())
+        return result
+    finally:
+        if client is None:
+            managed_client.close()
+

@@ -51,3 +51,9 @@ class ProviderTestResponse(BaseModel):
     success: bool
     message: str
     results: dict[str, Any]
+
+
+class RemoteModelItem(BaseModel):
+    id: str = Field(description="模型 API 标识")
+    name: str | None = Field(default=None, description="模型展示名称")
+    description: str | None = Field(default=None, description="模型描述或归属说明")

@@ -10,6 +10,7 @@ from backend.app.schemas.ai.provider import (
     ProviderTestPayload,
     ProviderTestResponse,
     ProviderUpdatePayload,
+    RemoteModelItem,
 )
 from backend.app.services.ai import provider_service
 
@@ -64,3 +65,11 @@ def test_provider(
     db: Session = Depends(get_db),
 ) -> ProviderTestResponse:
     return provider_service.test_provider_connection(db, provider_id, payload)
+
+
+@router.get("/{provider_id}/remote-models", response_model=list[RemoteModelItem])
+def get_provider_remote_models(
+    provider_id: int,
+    db: Session = Depends(get_db),
+) -> list[RemoteModelItem]:
+    return provider_service.fetch_remote_models(db, provider_id)

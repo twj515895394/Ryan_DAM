@@ -143,3 +143,147 @@ def test_test_provider_endpoint(client, headers, monkeypatch) -> None:
     assert "text_optimize" in data["results"]
     assert data["results"]["text_optimize"]["supported"] is True
     assert data["results"]["image_generate"]["supported"] is True
+
+
+def test_fetch_remote_models_openai_format(client, headers, monkeypatch) -> None:
+    # 1. 创建 OpenAI Compatible Provider
+    payload = {
+        "name": "OpenAI 远程模型测试 Provider",
+        "family": "openai_compatible",
+        "base_url": "http://127.0.0.1:8317/v1",
+        "api_key": "sk-mock-key-openai",
+    }
+    created = client.post("/api/v1/ai/providers", json=payload, headers=headers).json()
+    pid = created["id"]
+
+    # 2. Mock GET /v1/models
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        assert "/models" in request.url.path
+        assert request.headers.get("authorization") == "Bearer sk-mock-key-openai"
+        return httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "data": [
+                    {"id": "gpt-4o", "name": "GPT-4o 旗舰模型", "owned_by": "openai"},
+                    {"id": "dall-e-3", "name": "DALL-E 3 高清生图", "owned_by": "system"},
+                    {"id": "gpt-4o-mini", "owned_by": "openai"},
+                ],
+            },
+        )
+
+    mock_client = httpx.Client(transport=httpx.MockTransport(mock_handler))
+
+    from backend.app.services.ai import provider_service
+
+    original_fetch = provider_service.fetch_remote_models
+
+    def wrapped_fetch(*args, **kwargs):
+        kwargs["client"] = mock_client
+        return original_fetch(*args, **kwargs)
+
+    monkeypatch.setattr(provider_service, "fetch_remote_models", wrapped_fetch)
+
+    # 3. 发送请求测试
+    res = client.get(f"/api/v1/ai/providers/{pid}/remote-models", headers=headers)
+    assert res.status_code == 200
+    models = res.json()
+    assert len(models) == 3
+    # 验证按 id 排序与字段映射
+    ids = [m["id"] for m in models]
+    assert ids == ["dall-e-3", "gpt-4o", "gpt-4o-mini"]
+    dalle = next(m for m in models if m["id"] == "dall-e-3")
+    assert dalle["name"] == "DALL-E 3 高清生图"
+    assert dalle["description"] == "system"
+
+
+def test_fetch_remote_models_gemini_format(client, headers, monkeypatch) -> None:
+    # 1. 创建 Gemini Native Provider
+    payload = {
+        "name": "Gemini 远程模型测试 Provider",
+        "family": "gemini_native",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+        "api_key": "ai-gemini-key-xyz",
+    }
+    created = client.post("/api/v1/ai/providers", json=payload, headers=headers).json()
+    pid = created["id"]
+
+    # 2. Mock GET /v1beta/models?key=...
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        assert "/models" in request.url.path
+        assert request.headers.get("x-goog-api-key") == "ai-gemini-key-xyz"
+        return httpx.Response(
+            200,
+            json={
+                "models": [
+                    {
+                        "name": "models/gemini-1.5-pro",
+                        "displayName": "Gemini 1.5 Pro",
+                        "description": "General multimodal reasoning model",
+                    },
+                    {
+                        "name": "models/imagen-3.0-generate-002",
+                        "displayName": "Imagen 3 图像生成",
+                        "description": "Google native image generation",
+                    },
+                ]
+            },
+        )
+
+    mock_client = httpx.Client(transport=httpx.MockTransport(mock_handler))
+
+    from backend.app.services.ai import provider_service
+
+    original_fetch = provider_service.fetch_remote_models
+
+    def wrapped_fetch(*args, **kwargs):
+        kwargs["client"] = mock_client
+        return original_fetch(*args, **kwargs)
+
+    monkeypatch.setattr(provider_service, "fetch_remote_models", wrapped_fetch)
+
+    # 3. 发送请求测试
+    res = client.get(f"/api/v1/ai/providers/{pid}/remote-models", headers=headers)
+    assert res.status_code == 200
+    models = res.json()
+    assert len(models) == 2
+    # 验证 "models/" 前缀已被剥离
+    assert models[0]["id"] == "gemini-1.5-pro"
+    assert models[0]["name"] == "Gemini 1.5 Pro"
+    assert models[1]["id"] == "imagen-3.0-generate-002"
+    assert models[1]["name"] == "Imagen 3 图像生成"
+
+
+def test_fetch_remote_models_error_cases(client, headers, monkeypatch) -> None:
+    # 1. 不存在的 provider_id 返回 404
+    not_found = client.get("/api/v1/ai/providers/99999/remote-models", headers=headers)
+    assert not_found.status_code == 404
+
+    # 2. Provider 请求远端报错 502/401 等
+    payload = {
+        "name": "错误测试 Provider",
+        "family": "openai_compatible",
+        "base_url": "http://127.0.0.1:8317/v1",
+        "api_key": "sk-err-key",
+    }
+    pid = client.post("/api/v1/ai/providers", json=payload, headers=headers).json()["id"]
+
+    def mock_err_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"error": {"message": "Invalid API Key"}})
+
+    mock_client = httpx.Client(transport=httpx.MockTransport(mock_err_handler))
+
+    from backend.app.services.ai import provider_service
+
+    original_fetch = provider_service.fetch_remote_models
+
+    def wrapped_fetch(*args, **kwargs):
+        kwargs["client"] = mock_client
+        return original_fetch(*args, **kwargs)
+
+    monkeypatch.setattr(provider_service, "fetch_remote_models", wrapped_fetch)
+
+    err_res = client.get(f"/api/v1/ai/providers/{pid}/remote-models", headers=headers)
+    assert err_res.status_code == 400
+    assert err_res.json()["error"]["code"] == "remote_models_failed"
+
