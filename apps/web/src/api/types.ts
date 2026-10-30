@@ -311,6 +311,25 @@ export interface AiDefaultBindingPayload {
   model_profile_id: number;
 }
 
+// 对外开放接口（局域网跨机调用）
+export interface OpenApiModelInfo {
+  id: number;
+  name: string;
+  model_id: string;
+  provider_name: string;
+  capabilities: string[];
+}
+
+export interface OpenApiInfo {
+  product: string;
+  version: string;
+  open_api_prefix: string;
+  open_base_urls: string[];
+  default_ai_folder: string;
+  default_models: Record<"image_generate" | "image_edit", { model_profile_id: number | null; name: string | null }>;
+  models: OpenApiModelInfo[];
+}
+
 // V2 Reverse Templates & Requests
 export interface AiReverseTemplate {
   id: number;

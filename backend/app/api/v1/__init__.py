@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from backend.app.api.v1 import assets, bulk, external, folders, imports, projects, settings, tags, trash
+from backend.app.api.v1 import open as open_api
 from backend.app.api.v1.ai.providers import router as ai_providers_router
 from backend.app.api.v1.ai.models import router as ai_models_router
 from backend.app.api.v1.ai.reverse import router as ai_reverse_router
@@ -24,3 +25,4 @@ api_router.include_router(ai_reverse_router)
 api_router.include_router(ai_tasks_router)
 api_router.include_router(ai_results_router)
 api_router.include_router(ai_presets_router)
+api_router.include_router(open_api.router)

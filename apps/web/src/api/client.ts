@@ -1,6 +1,7 @@
 import type {
   AiDefaultBinding,
   AiDefaultBindingPayload,
+  OpenApiInfo,
   AiModelProfile,
   AiModelProfileCreatePayload,
   AiModelProfileUpdatePayload,
@@ -322,6 +323,9 @@ export const api = {
   listDefaultBindings: () => request<AiDefaultBinding[]>("/api/v1/ai/defaults"),
   setDefaultBinding: (payload: AiDefaultBindingPayload) =>
     request<AiDefaultBinding>("/api/v1/ai/defaults", { method: "POST", json: payload }),
+
+  // 对外开放接口（局域网跨机调用，免鉴权）
+  getOpenApiInfo: () => request<OpenApiInfo>("/api/v1/open/info"),
 
   // V2 Reverse Templates & API
   listReverseTemplates: (enabledOnly = false) =>

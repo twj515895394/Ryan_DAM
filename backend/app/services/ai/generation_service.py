@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from backend.app.core.errors import ApiError
 from backend.app.models.ai.model_config import AiDefaultBinding, AiModelProfile
 from backend.app.models.ai.provider import AiProviderInstance
-from backend.app.models.ai.task import AiTask, AiTaskReference
+from backend.app.models.ai.task import AiResult, AiTask, AiTaskReference
 from backend.app.models.asset import Asset
 from backend.app.services.ai.adapters.openai_compatible import OpenAICompatibleAdapter
 from backend.app.services.ai.credentials import CredentialManager
@@ -24,6 +24,7 @@ from backend.app.services.ai.storage_service import (
     check_storage_space,
     commit_generated_result,
     get_ai_history_layout,
+    import_result_to_asset,
     save_input_snapshot,
 )
 from backend.app.services.ai.task_scheduler import get_task_scheduler
@@ -46,12 +47,18 @@ def resolve_generation_model(
             raise ApiError(code="model_disabled", message=f"模型 {profile.name} 已被禁用", status_code=400)
         return profile
 
-    # 查询默认绑定 capability
-    binding = (
+    # 查询默认绑定 capability：设置界面写入的绑定 scene 为 "global"，
+    # 历史数据可能存在 "general" 脏值，两者兼容且以 "global" 优先。
+    bindings = (
         db.query(AiDefaultBinding)
-        .filter(AiDefaultBinding.capability == capability, AiDefaultBinding.scene == "general")
-        .first()
+        .filter(
+            AiDefaultBinding.capability == capability,
+            AiDefaultBinding.scene.in_(("global", "general")),
+        )
+        .all()
     )
+    by_scene = {b.scene: b for b in bindings}
+    binding = by_scene.get("global") or by_scene.get("general")
     if binding and binding.model_profile and binding.model_profile.enabled:
         return binding.model_profile
 
@@ -160,6 +167,34 @@ def submit_image_generation(
     # 分发至调度器异步执行
     scheduler.dispatch(task.id, _make_generation_runner(scheduler.session_factory))
     return task
+
+
+def auto_import_task_results(
+    session_factory: sessionmaker,
+    task_id: str,
+    target_folder_id: int | None = None,
+) -> list[dict[str, Any]]:
+    """把任务的全部成功生成结果自动入库为托管资产（开放接口 auto_import 语义）。
+
+    target_folder_id 为空时由存储层兜底落『AI 生成』默认目录。单条失败只记日志，
+    不影响其余结果——生成历史已永久落盘，用户仍可在工作台手动补入库。
+    """
+    imported: list[dict[str, Any]] = []
+    with session_factory() as db:
+        results = (
+            db.query(AiResult)
+            .filter(AiResult.task_id == task_id, AiResult.is_deleted.is_(False))
+            .order_by(AiResult.created_at, AiResult.idx)
+            .all()
+        )
+        for res in results:
+            try:
+                asset, _is_new = import_result_to_asset(db, res.id, target_folder_id=target_folder_id)
+                imported.append({"result_id": res.id, "asset_id": asset.id})
+            except Exception as exc:
+                logger.warning(f"auto_import 结果 {res.id}（任务 {task_id}）入库失败: {exc}")
+                db.rollback()
+    return imported
 
 
 def _make_generation_runner(session_factory: sessionmaker):
@@ -292,6 +327,14 @@ def _make_generation_runner(session_factory: sessionmaker):
                     )
 
             scheduler.update_task_status(task_id, "succeeded", progress_pct=100)
+
+            # 外部开放接口的自动入库语义：成功后把结果导入目标目录（缺省「AI 生成」）
+            if params.get("auto_import"):
+                auto_import_task_results(
+                    session_factory,
+                    task_id,
+                    target_folder_id=params.get("target_folder_id"),
+                )
 
         except asyncio.CancelledError:
             logger.info(f"Task {task_id} canceled during execution")

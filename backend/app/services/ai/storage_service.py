@@ -245,6 +245,9 @@ def stage_upload_file(db: Session, file_content: bytes, filename: str) -> dict[s
     }
 
 
+DEFAULT_AI_FOLDER_NAME = "AI 生成"
+
+
 def get_or_create_default_ai_folder(db: Session) -> Folder:
     """获取或自动创建通用资产库中的顶层默认『AI 生成』目录。"""
     folder = (
@@ -252,13 +255,13 @@ def get_or_create_default_ai_folder(db: Session) -> Folder:
         .filter(
             Folder.scope_type == "general",
             Folder.parent_id.is_(None),
-            Folder.name == "AI 生成",
+            Folder.name == DEFAULT_AI_FOLDER_NAME,
         )
         .first()
     )
     if not folder:
         folder = Folder(
-            name="AI 生成",
+            name=DEFAULT_AI_FOLDER_NAME,
             scope_type="general",
             project_id=None,
             parent_id=None,

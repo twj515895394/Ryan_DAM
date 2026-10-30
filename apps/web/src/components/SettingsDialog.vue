@@ -4,6 +4,7 @@ import SidebarIcon from "./SidebarIcon.vue";
 import AiProviderSettings from "./AiProviderSettings.vue";
 import AiModelSettings from "./AiModelSettings.vue";
 import AiTemplateSettings from "./AiTemplateSettings.vue";
+import OpenApiSettings from "./OpenApiSettings.vue";
 import { library } from "../stores/library";
 import type { AiProviderInstance } from "../api/types";
 import type { ConfirmRequest } from "../composables/useConfirmDialog";
@@ -19,13 +20,13 @@ const emit = defineEmits<{
   (e: "open-stage0"): void;
 }>();
 
-type SettingsTab = "general" | "providers" | "models" | "templates";
+type SettingsTab = "general" | "providers" | "models" | "templates" | "openapi";
 
 interface NavItem {
   id: SettingsTab;
   label: string;
   sublabel: string;
-  icon: "settings" | "external" | "star" | "edit";
+  icon: "settings" | "external" | "star" | "edit" | "globe";
   title: string;
   description: string;
 }
@@ -62,6 +63,14 @@ const navItems: NavItem[] = [
     icon: "edit",
     title: "提示词模板与创作风格预设 (Templates)",
     description: "自定义配置与调优视觉反推 System Prompt 模板及工作台生图风格预设"
+  },
+  {
+    id: "openapi",
+    label: "外部接口",
+    sublabel: "局域网 Open API",
+    icon: "globe",
+    title: "局域网开放接口 (Open API)",
+    description: "查看供局域网其他项目调用的 AI 生图开放接口地址、默认模型与调用示例"
   }
 ];
 
@@ -261,6 +270,11 @@ onUnmounted(() => {
               <AiTemplateSettings
                 :on-ask-confirm="onAskConfirm"
               />
+            </div>
+
+            <!-- Tab 5: 局域网开放接口 -->
+            <div v-else-if="activeTab === 'openapi'">
+              <OpenApiSettings />
             </div>
           </div>
         </main>

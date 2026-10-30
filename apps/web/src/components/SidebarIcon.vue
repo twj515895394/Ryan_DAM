@@ -24,7 +24,8 @@ defineProps<{
     | "star"
     | "clock"
     | "image"
-    | "task";
+    | "task"
+    | "globe";
 }>();
 </script>
 
@@ -188,6 +189,13 @@ defineProps<{
     <template v-else-if="name === 'task'">
       <path d="m9 11 3 3L22 4" />
       <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </template>
+
+    <!-- 局域网 / 网络 -->
+    <template v-else-if="name === 'globe'">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17" />
+      <path d="M12 3.5a13 13 0 0 1 3.2 8.5A13 13 0 0 1 12 20.5a13 13 0 0 1-3.2-8.5A13 13 0 0 1 12 3.5z" />
     </template>
   </svg>
 </template>
