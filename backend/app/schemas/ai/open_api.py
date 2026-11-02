@@ -81,6 +81,7 @@ class OpenResultOut(BaseModel):
     height: int | None = None
     size_bytes: int
     content_path: str
+    content_url: str | None = None
     imported_asset_id: int | None = None
 
 

@@ -57,12 +57,18 @@ def _default_binding(db: Session, capability: str) -> AiDefaultBinding | None:
     return by_scene.get("global") or by_scene.get("general")
 
 
+def _is_cap_supported(cap_val: Any) -> bool:
+    if isinstance(cap_val, dict):
+        return bool(cap_val.get("supported", False))
+    return bool(cap_val)
+
+
 @router.get("/info", response_model=OpenInfoOut)
 def open_info(request: Request, db: Annotated[Session, Depends(get_db)]) -> OpenInfoOut:
     models_info: list[OpenModelInfo] = []
     profiles = db.query(AiModelProfile).filter(AiModelProfile.enabled.is_(True)).all()
     for p in profiles:
-        caps = [key for key in CAPABILITY_KEYS if p.capabilities.get(key)]
+        caps = [key for key in CAPABILITY_KEYS if _is_cap_supported(p.capabilities.get(key))]
         if not caps:
             continue
         models_info.append(
@@ -135,13 +141,14 @@ def _build_params(payload: OpenGeneratePayload) -> dict[str, Any]:
     return params
 
 
-def _task_out(db: Session, task: AiTask) -> OpenTaskOut:
+def _task_out(db: Session, task: AiTask, request: Request | None = None) -> OpenTaskOut:
     results = (
         db.query(AiResult)
         .filter(AiResult.task_id == task.id, AiResult.is_deleted.is_(False))
         .order_by(AiResult.created_at, AiResult.idx)
         .all()
     )
+    base_url = str(request.base_url).rstrip("/") if request else None
     return OpenTaskOut(
         task_id=task.id,
         task_type=task.task_type,
@@ -161,6 +168,7 @@ def _task_out(db: Session, task: AiTask) -> OpenTaskOut:
                 height=r.height,
                 size_bytes=r.size_bytes,
                 content_path=f"{OPEN_PATH_PREFIX}/images/results/{r.id}/content",
+                content_url=f"{base_url}{OPEN_PATH_PREFIX}/images/results/{r.id}/content" if base_url else None,
                 imported_asset_id=r.imported_asset_id,
             )
             for r in results
@@ -178,7 +186,7 @@ async def _wait_task_out(request: Request, task_id: str, timeout_s: int) -> Open
             task = db.get(AiTask, task_id)
             if not task:
                 raise ApiError(code="task_not_found", message=f"任务 {task_id} 不存在", status_code=404)
-            out = _task_out(db, task)
+            out = _task_out(db, task, request=request)
         if out.status in TERMINAL_STATUSES or waited >= timeout_s:
             return out
         await asyncio.sleep(0.5)
@@ -207,18 +215,24 @@ async def open_generate_image(
     )
     if payload.wait:
         return await _wait_task_out(request, task.id, payload.wait_timeout_s)
-    return _task_out(db, task)
+    return _task_out(db, task, request=request)
 
 
 @router.get("/images/tasks/{task_id}", response_model=OpenTaskOut)
-def open_task_detail(task_id: str, db: Annotated[Session, Depends(get_db)]) -> OpenTaskOut:
+def open_task_detail(
+    task_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    request: Request,
+) -> OpenTaskOut:
     task = db.get(AiTask, task_id)
     if not task:
         raise ApiError(code="task_not_found", message=f"任务 {task_id} 不存在", status_code=404)
-    return _task_out(db, task)
+    return _task_out(db, task, request=request)
 
 
 @router.get("/images/results/{result_id}/content")
+@router.get("/open/images/results/{result_id}/content")
+@router.get("/api/v1/open/images/results/{result_id}/content")
 def open_result_content(result_id: str, db: Annotated[Session, Depends(get_db)]) -> FileResponse:
     result = db.get(AiResult, result_id)
     if not result or result.is_deleted:

@@ -68,6 +68,7 @@
       "mime_type": "image/png",
       "width": 1024, "height": 1024, "size_bytes": 1483921,
       "content_path": "/api/v1/open/images/results/aires_ab12.../content",
+      "content_url": "http://192.168.1.10:8765/api/v1/open/images/results/aires_ab12.../content",
       "imported_asset_id": 517
     }
   ]
@@ -75,6 +76,7 @@
 ```
 
 `status` 终态取值：`succeeded / partial_failed / failed / canceled`。`imported_asset_id` 非空即已自动入库。
+`content_url` 为直接可用的完整 GET 地址（推荐直接请求该地址，无需手动拼接）。
 
 ## 示例
 
@@ -109,6 +111,7 @@ TASK=$(curl -s -X POST http://192.168.1.10:8765/api/v1/open/images/generations \
 
 curl -s http://192.168.1.10:8765/api/v1/open/images/tasks/$TASK | jq '.status, .results'
 
+# 直接请求返回中的 content_url，或拼接 content_path
 curl -s -o out.png http://192.168.1.10:8765/api/v1/open/images/results/<result_id>/content
 ```
 
@@ -124,7 +127,8 @@ task = requests.post(f"{BASE}/images/generations", json={
 }, timeout=320).json()
 
 for r in task["results"]:
-    img = requests.get(BASE + r["content_path"]).content
+    # 推荐直接使用返回的 content_url，免去手动拼接
+    img = requests.get(r["content_url"] or (BASE + r["content_path"])).content
     print(r["result_id"], r["imported_asset_id"], len(img))
 ```
 
