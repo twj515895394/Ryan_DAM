@@ -2,17 +2,31 @@
 
 > **必读：** 这是 Ryan_DAM 项目根目录 `.handoff/current.md` 的详细交接文档。接手者应先读本文件，再读 `docs/` 下的需求与设计；不要依赖聊天记录来判断实际代码状态。
 >
-> **最近核实时间：** 2026-10-26（ZCode 会话）  
-> **交接版本：** Handoff v21（优化：批量选择外部链接素材时新增「转为系统托管」批量操作项；承 v20 第一版 V1 完结交付与票 21 正式资产拖出、v19 RD 品牌图标全套接线、v18 外部关联目录「全部刷新」、v17 侧栏目录树双击逐层展开/收起）  
+> **最近核实时间：** 2026-11-05（ZCode 会话）  
+> **最新会话交接：** [`.handoff/handoff-20261105-190000.md`](./handoff-20261105-190000.md)（接手者必读）  
+> **交接版本：** Phase 2 AI 创作工作台完结 + 局域网免鉴权开放接口交付（承 Handoff v21 批量转托管、二期工作台就地流体生成、画幅适配、提示词润色、批量栏 Teleport 修复）  
 > **目标仓库：** https://github.com/twj515895394/Ryan_DAM  
-> **主分支：** `main`  
-> **当前阶段：** **第一版 V1 优化迭代**。最新交付：**批量选择外部链接素材时新增「转为系统托管」操作**（后端新增 `POST /api/v1/assets/bulk-convert-to-managed` 接口，支持批量就地转托管并返回 `BulkResult`；前端 `BatchActionBar.vue` 在检测到选中有外部链接素材时自动呈现「转为系统托管」操作按钮；配合 Apple HIG `ConfirmDialog` 确认弹窗，转托管后自动刷新画廊、外部来源与逻辑树）。所有 144 项 pytest 单元测试、Vite 生产构建、TypeScript 类型检查全部 100% 绿灯通过，`App.vue` 仅 714 行持续严格守卫 800 行上限。
+> **当前分支：** `feat/phase2-ai-workbench`  
+> **当前阶段：** **第二阶段 AI 创作工作台完结交付与局域网 Open API**。最新交付：
+> 1. **局域网免鉴权开放接口 (Open API)**：支持同局域网跨设备调用 AI 生图/图生图，自动绑定默认模型与「AI 生成」目录入库，集成服务发现 `endpoint.json` 与设置面板。
+> 2. **画廊批量操作栏 Teleport 修复**：解决批量栏横向滚动容器裁切上弹浮层导致无法点选目录缺陷。
+> 所有 200 项 pytest 单元测试、Vite 生产构建、TypeScript 类型检查全部 100% 绿灯通过。
 
 ---
 
 ## 0. Codex 启动必读与执行原则
 
-### 0.0 最新迭代摘要（2026-10-26，ZCode 会话 · 批量转为系统托管小优化）
+### 0.0 最新迭代摘要（2026-11-05，ZCode 会话 · 局域网免鉴权开放接口与批量栏修复）
+
+- **Git：** `feat/phase2-ai-workbench`，连同前续 25+ 提交准备统一推送。
+- **本票：**
+  1. **需求**：对外开放 AI 图片生成/编辑 API，供局域网内其他项目跨机调用，模型跟随项目默认模型，生成结果默认自动入库「AI 生成」目录；修复批量移动到…弹窗不可点击。
+  2. **后端实现**：监听 `0.0.0.0:8765`（支持 `RYAN_DAM_LAN_PORT` 覆盖，被占回退随机）；写 `~/.ryan_dam/data/endpoint.json` 服务发现；守卫仅对 `/api/v1/open` 路由免 Host/Origin/Token 白名单；新增 `/api/v1/open`（`GET /info`, `POST /images/generations`, `GET /images/tasks/{id}`, `GET /images/results/{id}/content`）；调度器在成功后触发 `auto_import_task_results` 入库；修复默认模型 `global`/`general` scene 不一致。
+  3. **前端实现**：设置窗口新增「外部接口」页面（展示调用地址、默认模型、一键复制 curl 示例）；批量栏 `BatchActionBar.vue` 上弹面板改用 `<Teleport to="body">` 与 `fixed` 锚定。
+  4. **取图与直连优化**：`OpenResultOut` 新增直连 `content_url` 绝对地址；路由挂载别名兼容，杜绝客户端错误拼接前缀导致的 404。
+- **验证：** typecheck ✅ / build:web ✅ / **200 pytest** 全绿；端到端局域网生图实测通过并生成高品质海边灯塔图，自动入库验证通过。
+
+### 0.0.0 上一迭代摘要（2026-10-26，ZCode 会话 · 批量转为系统托管小优化）
 
 - **Git：** `main`，本票 1 代码提交 + docs 提交。
 - **本票：**

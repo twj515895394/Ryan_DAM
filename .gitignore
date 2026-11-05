@@ -1,28 +1,52 @@
+# 依赖与环境
 node_modules/
-apps/web/dist/
-release/
-dist/
-*.log
 .venv/
 venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# 构建与打包产物
+apps/web/dist/
+release/
+dist/
 backend/build/
 backend/dist/
 ffmpeg-bin/
-.ui-test-data/
-.ui-thumb-samples/
+ryan-dam-api.spec
 
+# 二进制可执行与大文件兜底（防止任何意外提交）
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin
+*.zip
+*.7z
+*.tar.gz
+
+# 数据库与存储
 *.db
 *.sqlite
 *.sqlite3
-.DS_Store
-Thumbs.db
+*.sqlite3-wal
+*.sqlite3-shm
+
+# 本地 IDE / 编辑器 / Agent 运行时
+.zcode/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 日志与测试临时目录
+*.log
 .env
+.env.local
+.ui-test-data/
+.ui-thumb-samples/
 .e2e-data/
-.smoke-data/
-ryan-dam-api.spec
+.smoke*
 .ui-doc-samples/
 .ui-media-samples/
 .ui-preview-samples/
@@ -33,3 +57,7 @@ ryan-dam-api.spec
 .pyinstaller.log
 .frozen-test-data/
 frozen-out.log
+
+# 系统临时文件
+.DS_Store
+Thumbs.db
