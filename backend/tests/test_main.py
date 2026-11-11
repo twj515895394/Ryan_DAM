@@ -17,7 +17,7 @@ def test_health_returns_version_for_valid_local_request() -> None:
     with make_client() as client:
         response = client.get("/health", headers=local_headers())
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": "0.1.0"}
+    assert response.json() == {"status": "ok", "version": "1.0.0"}
 
 
 def test_api_rejects_missing_token() -> None:

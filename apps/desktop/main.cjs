@@ -149,7 +149,7 @@ function startBackend() {
       if (line.startsWith(readyPrefix)) {
         try {
           const ready = JSON.parse(line.slice(readyPrefix.length));
-          backendInfo = { baseUrl: `http://127.0.0.1:${ready.port}`, token, version: ready.version || "0.1.0" };
+          backendInfo = { baseUrl: `http://127.0.0.1:${ready.port}`, token, version: ready.version || "1.0.0" };
           if (!settled) {
             settled = true;
             clearTimeout(timeout);

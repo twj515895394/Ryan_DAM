@@ -64,7 +64,7 @@ def main() -> None:
     try:
         with httpx.Client(base_url=base, headers=headers, timeout=10) as client:
             health = client.get("/health").json()
-            check("health", health == {"status": "ok", "version": "0.1.0"}, str(health))
+            check("health", health == {"status": "ok", "version": "1.0.0"}, str(health))
 
             settings = client.get("/api/v1/settings").json()
             check("default managed root", settings["managed_root"] == "D:\\Ryan_DAM\\assets", str(settings))
